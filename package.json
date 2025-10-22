@@ -28,6 +28,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "chrome-devtools-mcp": "^0.8.1",
     "shadcn": "^3.4.2",
     "supabase": "^2.51.0",
     "tailwindcss": "^4",
