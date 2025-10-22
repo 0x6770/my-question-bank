@@ -52,19 +52,7 @@ export function ConsoleShell({ adminRole, children }: ConsoleShellProps) {
   return (
     <div className="flex flex-1 min-h-0 bg-slate-100 text-slate-900">
       <aside className="flex w-72 flex-col border-r border-slate-200 bg-white">
-        <div className="flex items-center gap-3 px-6 py-7">
-          <span className="flex size-11 items-center justify-center rounded-xl bg-slate-900 text-white">
-            <LayoutDashboard className="size-5" />
-          </span>
-          <div>
-            <div className="text-base font-semibold tracking-tight">
-              Question Bank
-            </div>
-            <div className="text-xs text-slate-500">Admin Panel</div>
-          </div>
-        </div>
-
-        <nav className="px-3">
+        <nav className="px-3 py-3">
           <ul className="space-y-1">
             {visibleNavItems.map(({ href, icon: Icon, label }) => {
               const isActive =
