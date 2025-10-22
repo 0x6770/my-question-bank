@@ -3,22 +3,17 @@
 import {
   BookOpen,
   FileQuestion,
-  Image as ImageIcon,
   LayoutDashboard,
-  Plus,
-  SquarePen,
   Tag,
-  Trash2,
   Users,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ComponentType, SVGProps } from "react";
+import type { ComponentType, ReactNode, SVGProps } from "react";
 import { useMemo } from "react";
 
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { AdminRole } from "./page";
+import type { AdminRole } from "./types";
 
 type NavItem = {
   href: string;
@@ -41,11 +36,10 @@ const navItems: NavItem[] = [
 
 type ConsoleShellProps = {
   adminRole: AdminRole;
-  userEmail: string | null;
-  userName: string | null;
+  children: ReactNode;
 };
 
-export function ConsoleShell({ adminRole }: ConsoleShellProps) {
+export function ConsoleShell({ adminRole, children }: ConsoleShellProps) {
   const pathname = usePathname();
   const visibleNavItems = useMemo(
     () =>
@@ -74,9 +68,7 @@ export function ConsoleShell({ adminRole }: ConsoleShellProps) {
           <ul className="space-y-1">
             {visibleNavItems.map(({ href, icon: Icon, label }) => {
               const isActive =
-                pathname === href ||
-                (pathname?.startsWith(href) && href !== "/console") ||
-                (href === "/console/questions" && pathname === "/console");
+                pathname === href || pathname.startsWith(`${href}/`);
               return (
                 <li key={href}>
                   <Link
@@ -100,62 +92,7 @@ export function ConsoleShell({ adminRole }: ConsoleShellProps) {
 
       <section className="flex flex-1 flex-col overflow-hidden">
         <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-8 py-10">
-          <header className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight">
-                Question Management
-              </h1>
-              <p className="text-sm text-slate-500">
-                管理题库内容、标签与科目。
-              </p>
-            </div>
-            <Button
-              asChild
-              className="bg-slate-900 text-white hover:bg-slate-800"
-            >
-              <Link href="/console/questions/new">
-                <Plus className="size-4" />
-                New Question
-              </Link>
-            </Button>
-          </header>
-
-          <div className="flex flex-1 flex-col gap-6">
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex flex-col gap-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h2 className="text-lg font-semibold text-slate-900">
-                      hello
-                    </h2>
-                    <span className="mt-2 inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-                      aaa
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="text-slate-500 hover:text-slate-900"
-                    >
-                      <SquarePen className="size-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="text-red-500 hover:text-red-600"
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 text-sm text-slate-500">
-                  <ImageIcon className="size-4" />1 image
-                </div>
-              </div>
-            </div>
-          </div>
+          {children}
         </div>
       </section>
     </div>
