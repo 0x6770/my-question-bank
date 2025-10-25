@@ -90,14 +90,11 @@ export function AppNavbarClient({
         </Link>
 
         <div className="flex items-center gap-3">
-          {roleMeta ? (
+          {user ? (
             <>
-              <Button asChild size="sm" variant="ghost">
-                <Link href="/">Question Bank</Link>
-              </Button>
-              <Button asChild size="sm" variant="ghost">
-                <Link href="/console">
-                  {`Console`}
+              <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                <span>{user.email ?? "已登录"}</span>
+                {roleMeta ? (
                   <span
                     className={cn(
                       "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium",
@@ -106,15 +103,7 @@ export function AppNavbarClient({
                   >
                     {roleMeta.badge}
                   </span>
-                </Link>
-              </Button>
-            </>
-          ) : null}
-
-          {user ? (
-            <>
-              <span className="text-sm text-muted-foreground">
-                {user.email ?? "已登录"}
+                ) : null}
               </span>
               <LogoutButton size="sm" variant="outline" className="gap-2">
                 <LogOut className="size-4" aria-hidden="true" />

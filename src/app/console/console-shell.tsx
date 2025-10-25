@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  BookOpen,
-  FileQuestion,
-  LayoutDashboard,
-  Tag,
-  Users,
-} from "lucide-react";
+import { BookOpen, FileQuestion, Tag, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType, ReactNode, SVGProps } from "react";
