@@ -1,18 +1,18 @@
-export default function ConsoleTagsPage() {
-  return (
-    <div className="flex flex-1 flex-col gap-6">
-      <header className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Tag Management
-        </h1>
-        <p className="text-sm text-slate-500">
-          用于维护标签与分类的界面，目前仅展示占位信息。
-        </p>
-      </header>
+import { createClient } from "@/lib/supabase/server";
 
-      <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
-        标签管理工具将很快出现在这里。
-      </div>
-    </div>
+import { TagManagement } from "./tag-management-client";
+
+export default async function ConsoleTagsPage() {
+  const supabase = await createClient();
+  const { data: tags, error } = await supabase
+    .from("tags")
+    .select("id, name, parent_id, created_at")
+    .order("name", { ascending: true });
+
+  return (
+    <TagManagement
+      initialTags={tags ?? []}
+      loadError={error ? "无法加载标签列表，请稍后重试。" : null}
+    />
   );
 }

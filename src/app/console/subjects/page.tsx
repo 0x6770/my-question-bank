@@ -1,18 +1,31 @@
-export default function ConsoleSubjectsPage() {
-  return (
-    <div className="flex flex-1 flex-col gap-6">
-      <header className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Subject Management
-        </h1>
-        <p className="text-sm text-slate-500">
-          这里将用于配置学科、章节以及与题目的关联关系。
-        </p>
-      </header>
+import { createClient } from "@/lib/supabase/server";
 
-      <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
-        学科相关的管理功能敬请期待。
-      </div>
-    </div>
+import { SubjectManagement } from "./subject-management-client";
+
+export default async function ConsoleSubjectsPage() {
+  const supabase = await createClient();
+
+  const [examBoardsResult, subjectsResult] = await Promise.all([
+    supabase
+      .from("exam_boards")
+      .select("id, name, created_at")
+      .order("name", { ascending: true }),
+    supabase
+      .from("subjects")
+      .select("id, name, exam_board_id, created_at")
+      .order("name", { ascending: true }),
+  ]);
+
+  const loadError =
+    examBoardsResult.error || subjectsResult.error
+      ? "无法加载考试局或学科数据，请稍后重试。"
+      : null;
+
+  return (
+    <SubjectManagement
+      initialExamBoards={examBoardsResult.data ?? []}
+      initialSubjects={subjectsResult.data ?? []}
+      loadError={loadError}
+    />
   );
 }
