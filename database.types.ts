@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      chapters: {
+        Row: {
+          created_at: string
+          id: number
+          name: string
+          parent_chapter_id: number | null
+          position: number
+          subject_id: number
+        }
+        Insert: {
+          created_at?: string
+          id: number
+          name: string
+          parent_chapter_id?: number | null
+          position: number
+          subject_id: number
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          name?: string
+          parent_chapter_id?: number | null
+          position?: number
+          subject_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chapters_parent_chapter_id_fkey"
+            columns: ["parent_chapter_id"]
+            isOneToOne: false
+            referencedRelation: "chapters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chapters_subject_id_fkey"
+            columns: ["subject_id"]
+            isOneToOne: false
+            referencedRelation: "subjects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       exam_boards: {
         Row: {
           created_at: string
@@ -322,4 +364,3 @@ export const Constants = {
     },
   },
 } as const
-Done in 5.97s.
