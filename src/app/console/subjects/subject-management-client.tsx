@@ -124,7 +124,9 @@ export function SubjectManagement({
   const [newSubjectNames, setNewSubjectNames] = useState<
     Record<number, string>
   >({});
-  const [newChapterNames, setNewChapterNames] = useState<Record<string, string>>({});
+  const [newChapterNames, setNewChapterNames] = useState<
+    Record<string, string>
+  >({});
   const [listFeedback, setListFeedback] = useState<Feedback | null>(
     loadError
       ? {
@@ -138,13 +140,10 @@ export function SubjectManagement({
   const [creatingSubjectBoardId, setCreatingSubjectBoardId] = useState<
     number | null
   >(null);
-  const [creatingChapterTarget, setCreatingChapterTarget] = useState<
-    | {
-        subjectId: number;
-        parentChapterId: number | null;
-      }
-    | null
-  >(null);
+  const [creatingChapterTarget, setCreatingChapterTarget] = useState<{
+    subjectId: number;
+    parentChapterId: number | null;
+  } | null>(null);
   const [busyExamBoardId, setBusyExamBoardId] = useState<number | null>(null);
   const [busySubjectId, setBusySubjectId] = useState<number | null>(null);
   const [busyChapterId, setBusyChapterId] = useState<number | null>(null);
@@ -540,7 +539,10 @@ export function SubjectManagement({
     if (editingSubject?.exam_board_id === board.id) {
       cancelEditingSubject();
     }
-    if (editingChapter && relatedSubjectIds.includes(editingChapter.subject_id)) {
+    if (
+      editingChapter &&
+      relatedSubjectIds.includes(editingChapter.subject_id)
+    ) {
       setEditingChapterId(null);
       setEditingChapterName("");
     }
@@ -821,9 +823,7 @@ export function SubjectManagement({
         parent_chapter_id: parentChapterId,
         position: nextPosition,
       })
-      .select(
-        "id, name, subject_id, parent_chapter_id, position, created_at",
-      )
+      .select("id, name, subject_id, parent_chapter_id, position, created_at")
       .single();
     setCreatingChapterTarget(null);
 
@@ -893,11 +893,7 @@ export function SubjectManagement({
                       aria-label={`Rename ${chapter.name}`}
                     />
                     <div className="flex items-center gap-1.5">
-                      <Button
-                        type="submit"
-                        size="sm"
-                        disabled={isChapterBusy}
-                      >
+                      <Button type="submit" size="sm" disabled={isChapterBusy}>
                         {isChapterBusy ? (
                           <Loader2 className="size-4 animate-spin" />
                         ) : (
@@ -977,7 +973,11 @@ export function SubjectManagement({
                   value={childDraftValue}
                   disabled={isChapterBusy}
                   onChange={(event) =>
-                    setChapterDraftValue(subjectId, chapter.id, event.target.value)
+                    setChapterDraftValue(
+                      subjectId,
+                      chapter.id,
+                      event.target.value,
+                    )
                   }
                 />
                 <Button type="submit" disabled={isChapterBusy}>
@@ -1305,7 +1305,11 @@ export function SubjectManagement({
                                   <form
                                     className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2"
                                     onSubmit={(event) =>
-                                      handleCreateChapter(event, subject.id, null)
+                                      handleCreateChapter(
+                                        event,
+                                        subject.id,
+                                        null,
+                                      )
                                     }
                                   >
                                     <Label
@@ -1334,7 +1338,10 @@ export function SubjectManagement({
                                       {isCreatingRootChapter ? (
                                         <Loader2 className="size-4 animate-spin" />
                                       ) : (
-                                        <Plus className="size-4" aria-hidden="true" />
+                                        <Plus
+                                          className="size-4"
+                                          aria-hidden="true"
+                                        />
                                       )}
                                       添加章节
                                     </Button>

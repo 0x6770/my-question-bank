@@ -16,9 +16,7 @@ export default async function ConsoleSubjectsPage() {
       .order("name", { ascending: true }),
     supabase
       .from("chapters")
-      .select(
-        "id, name, subject_id, parent_chapter_id, position, created_at",
-      )
+      .select("id, name, subject_id, parent_chapter_id, position, created_at")
       .order("subject_id", { ascending: true })
       .order("position", { ascending: true })
       .order("name", { ascending: true }),
