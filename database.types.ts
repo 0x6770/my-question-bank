@@ -7,10 +7,30 @@ export type Json =
   | Json[];
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "13.0.5";
+  graphql_public: {
+    Tables: {
+      [_ in never]: never;
+    };
+    Views: {
+      [_ in never]: never;
+    };
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json;
+          operationName?: string;
+          query?: string;
+          variables?: Json;
+        };
+        Returns: Json;
+      };
+    };
+    Enums: {
+      [_ in never]: never;
+    };
+    CompositeTypes: {
+      [_ in never]: never;
+    };
   };
   public: {
     Tables: {
@@ -25,7 +45,7 @@ export type Database = {
         };
         Insert: {
           created_at?: string;
-          id: number;
+          id?: number;
           name: string;
           parent_chapter_id?: number | null;
           position: number;
@@ -130,34 +150,34 @@ export type Database = {
       questions: {
         Row: {
           calculator: boolean;
-          complete: boolean;
+          chapter_id: number;
           created_at: string;
+          difficulty: number;
           id: number;
-          level: number;
-          subject_id: number;
+          marks: number;
         };
         Insert: {
           calculator?: boolean;
-          complete?: boolean;
+          chapter_id: number;
           created_at?: string;
+          difficulty?: number;
           id?: number;
-          level?: number;
-          subject_id: number;
+          marks: number;
         };
         Update: {
           calculator?: boolean;
-          complete?: boolean;
+          chapter_id?: number;
           created_at?: string;
+          difficulty?: number;
           id?: number;
-          level?: number;
-          subject_id?: number;
+          marks?: number;
         };
         Relationships: [
           {
-            foreignKeyName: "questions_subject_id_fkey";
-            columns: ["subject_id"];
+            foreignKeyName: "questions_chapter_id_fkey";
+            columns: ["chapter_id"];
             isOneToOne: false;
-            referencedRelation: "subjects";
+            referencedRelation: "chapters";
             referencedColumns: ["id"];
           },
         ];
@@ -216,6 +236,44 @@ export type Database = {
             columns: ["parent_id"];
             isOneToOne: false;
             referencedRelation: "tags";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      user_questions: {
+        Row: {
+          completed_at: string | null;
+          created_at: string;
+          id: number;
+          is_bookmarked: boolean;
+          last_viewed_at: string | null;
+          question_id: number | null;
+          user_id: string;
+        };
+        Insert: {
+          completed_at?: string | null;
+          created_at?: string;
+          id?: number;
+          is_bookmarked?: boolean;
+          last_viewed_at?: string | null;
+          question_id?: number | null;
+          user_id: string;
+        };
+        Update: {
+          completed_at?: string | null;
+          created_at?: string;
+          id?: number;
+          is_bookmarked?: boolean;
+          last_viewed_at?: string | null;
+          question_id?: number | null;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "user_questions_question_id_fkey";
+            columns: ["question_id"];
+            isOneToOne: false;
+            referencedRelation: "questions";
             referencedColumns: ["id"];
           },
         ];
@@ -361,6 +419,9 @@ export type CompositeTypes<
     : never;
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       user_role: ["super_admin", "admin", "user"],
