@@ -2,73 +2,101 @@ import { createClient } from "@/lib/supabase/server";
 import type { Tables } from "../../../../database.types";
 import { QuestionManagement } from "./question-management-client";
 
-type TagRow = Tables<"tags">;
+type SubjectRow = Tables<"subjects">;
+type ChapterRow = Pick<
+  Tables<"chapters">,
+  "id" | "name" | "subject_id" | "parent_chapter_id" | "position"
+> & {
+  subject?: Pick<SubjectRow, "id" | "name"> | null;
+};
 
 type QuestionSummary = {
   id: number;
-  subjectId: number | null;
+  chapterId: number | null;
+  chapterName: string | null;
   subjectName: string | null;
   createdAt: string;
+  difficulty: number;
+  calculator: boolean;
+  marks: number;
   images: {
     id: number;
     storage_path: string;
     position: number;
   }[];
-  tags: TagRow[];
 };
 
 export default async function ConsoleQuestionsPage() {
   const supabase = await createClient();
 
   const [
-    { data: tags, error: tagsError },
+    { data: chapters, error: chaptersError },
     { data: questions, error: questionsError },
   ] = await Promise.all([
     supabase
-      .from("tags")
-      .select("id, name, parent_id, created_at")
-      .order("name", { ascending: true }),
+      .from("chapters")
+      .select(
+        `
+          id,
+          name,
+          subject_id,
+          parent_chapter_id,
+          position,
+          subject:subject_id (
+            id,
+            name
+          )
+        `,
+      )
+      .order("subject_id", { ascending: true })
+      .order("position", { ascending: true }),
     supabase
       .from("questions")
       .select(
         `
           id,
-          subject_id,
+          chapter_id,
+          difficulty,
+          calculator,
+          marks,
           created_at,
-          subject:subject_id (
+          chapter:chapter_id (
             id,
             name,
-            parent_id
+            parent_chapter_id,
+            subject_id,
+            subject:subject_id (
+              id,
+              name
+            )
           ),
           question_images (
             id,
             storage_path,
             position
-          ),
-          question_tags (
-            tag:tag_id (
-              id,
-              name,
-              parent_id,
-              created_at
-            )
           )
         `,
       )
       .order("created_at", { ascending: false }),
   ]);
 
-  const tagById = new Map((tags ?? []).map((tag) => [tag.id, tag]));
-
   const questionSummaries: QuestionSummary[] = (questions ?? []).map(
     (question) => {
       const rawQuestion = question as unknown as {
         id: number;
-        subject_id: number | null;
+        chapter_id: number | null;
         created_at: string;
-        subject: TagRow | null;
+        difficulty: number;
+        calculator: boolean;
+        marks: number;
+        chapter: {
+          id: number;
+          name: string;
+          parent_chapter_id: number | null;
+          subject_id: number;
+          subject: { id: number; name: string } | null;
+        } | null;
         question_images: QuestionSummary["images"] | null;
-        question_tags: { tag: TagRow | null }[] | null;
       };
 
       const images = (rawQuestion.question_images ?? [])
@@ -77,34 +105,53 @@ export default async function ConsoleQuestionsPage() {
           return a.position - b.position;
         });
 
-      const resolvedTags: TagRow[] = [];
-      (rawQuestion.question_tags ?? []).forEach((entry) => {
-        if (entry?.tag) {
-          resolvedTags.push(entry.tag);
-        }
-      });
-
-      const subject = rawQuestion.subject_id
-        ? (tagById.get(rawQuestion.subject_id) ?? rawQuestion.subject ?? null)
-        : null;
+      const chapter = rawQuestion.chapter ?? null;
 
       return {
         id: rawQuestion.id,
-        subjectId: rawQuestion.subject_id,
-        subjectName: subject?.name ?? null,
+        chapterId: rawQuestion.chapter_id,
+        chapterName: chapter?.name ?? null,
+        subjectName: chapter?.subject?.name ?? null,
         createdAt: rawQuestion.created_at,
+        difficulty: rawQuestion.difficulty,
+        calculator: rawQuestion.calculator,
+        marks: rawQuestion.marks,
         images,
-        tags: resolvedTags,
       };
     },
   );
 
+  type RawChapterRow = Tables<"chapters"> & {
+    subject?:
+      | Pick<SubjectRow, "id" | "name">
+      | Pick<SubjectRow, "id" | "name">[]
+      | null;
+  };
+
+  const chapterSummaries: ChapterRow[] = (chapters ?? []).map((chapter) => {
+    const rawChapter = chapter as RawChapterRow;
+    const subject = Array.isArray(rawChapter.subject)
+      ? (rawChapter.subject[0] ?? null)
+      : (rawChapter.subject ?? null);
+
+    return {
+      id: rawChapter.id,
+      name: rawChapter.name,
+      subject_id: rawChapter.subject_id,
+      parent_chapter_id: rawChapter.parent_chapter_id,
+      position: rawChapter.position,
+      subject,
+    };
+  });
+
   return (
     <QuestionManagement
-      initialTags={tags ?? []}
+      initialChapters={chapterSummaries}
       initialQuestions={questionSummaries}
       loadError={
-        tagsError || questionsError ? "无法加载题目数据，请稍后重试。" : null
+        chaptersError || questionsError
+          ? "无法加载题目数据，请稍后重试。"
+          : null
       }
     />
   );

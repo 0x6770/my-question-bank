@@ -28,19 +28,28 @@ import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Tables } from "../../../../database.types";
 
-type TagRow = Tables<"tags">;
+type SubjectRow = Tables<"subjects">;
+type ChapterRow = Pick<
+  Tables<"chapters">,
+  "id" | "name" | "subject_id" | "parent_chapter_id" | "position"
+> & {
+  subject?: Pick<SubjectRow, "id" | "name"> | null;
+};
 
 type QuestionSummary = {
   id: number;
-  subjectId: number | null;
+  chapterId: number | null;
+  chapterName: string | null;
   subjectName: string | null;
   createdAt: string;
+  difficulty: number;
+  calculator: boolean;
+  marks: number;
   images: {
     id: number;
     storage_path: string;
     position: number;
   }[];
-  tags: TagRow[];
 };
 
 type Feedback =
@@ -48,46 +57,47 @@ type Feedback =
   | { type: "error"; message: string };
 
 type QuestionManagementProps = {
-  initialTags: TagRow[];
+  initialChapters: ChapterRow[];
   initialQuestions: QuestionSummary[];
   loadError: string | null;
 };
-
-type TagNode = TagRow & { children: TagNode[] };
 
 type FormImage = {
   id: string;
   url: string;
 };
 
-function buildTagTree(tags: TagRow[]): TagNode[] {
-  const nodes = new Map<number, TagNode>();
-  const roots: TagNode[] = [];
+function buildChapterLabelMap(chapters: ChapterRow[]) {
+  const chapterMap = new Map(chapters.map((chapter) => [chapter.id, chapter]));
+  const memo = new Map<number, string>();
+  const fallbackSubjectName = "未分配学科";
 
-  tags.forEach((tag) => {
-    nodes.set(tag.id, { ...tag, children: [] });
-  });
-
-  nodes.forEach((node) => {
-    if (node.parent_id != null) {
-      const parent = nodes.get(node.parent_id);
-      if (parent) {
-        parent.children.push(node);
-        return;
+  const computeLabel = (chapter: ChapterRow): string => {
+    if (memo.has(chapter.id)) {
+      const cachedLabel = memo.get(chapter.id);
+      if (cachedLabel != null) {
+        return cachedLabel;
       }
     }
-    roots.push(node);
-  });
 
-  const sortNodes = (items: TagNode[]) => {
-    items.sort((a, b) => a.name.localeCompare(b.name));
-    for (const child of items) {
-      sortNodes(child.children);
-    }
+    const parent =
+      chapter.parent_chapter_id != null
+        ? chapterMap.get(chapter.parent_chapter_id)
+        : null;
+    const parentLabel = parent
+      ? computeLabel(parent)
+      : (chapter.subject?.name ?? fallbackSubjectName);
+
+    const label = `${parentLabel} > ${chapter.name}`;
+    memo.set(chapter.id, label);
+    return label;
   };
 
-  sortNodes(roots);
-  return roots;
+  const labelMap = new Map<number, string>();
+  for (const chapter of chapters) {
+    labelMap.set(chapter.id, computeLabel(chapter));
+  }
+  return labelMap;
 }
 
 function formatDateTime(value: string) {
@@ -99,34 +109,38 @@ function formatDateTime(value: string) {
 }
 
 export function QuestionManagement({
-  initialTags,
+  initialChapters,
   initialQuestions,
   loadError,
 }: QuestionManagementProps) {
   const supabase = useMemo(() => createClient(), []);
 
-  const tagById = useMemo(
-    () => new Map(initialTags.map((tag) => [tag.id, tag])),
-    [initialTags],
+  const chapterMap = useMemo(
+    () => new Map(initialChapters.map((chapter) => [chapter.id, chapter])),
+    [initialChapters],
   );
 
-  const subjectOptions = useMemo(
+  const chapterLabelById = useMemo(
+    () => buildChapterLabelMap(initialChapters),
+    [initialChapters],
+  );
+
+  const chapterOptions = useMemo(
     () =>
-      initialTags
-        .filter((tag) => tag.parent_id == null)
-        .slice()
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [initialTags],
+      Array.from(chapterLabelById.entries())
+        .map(([id, label]) => ({ id, label }))
+        .sort((a, b) => a.label.localeCompare(b.label, "zh-CN")),
+    [chapterLabelById],
   );
-
-  const tagTree = useMemo(() => buildTagTree(initialTags), [initialTags]);
 
   const [questions, setQuestions] =
     useState<QuestionSummary[]>(initialQuestions);
-  const [subjectId, setSubjectId] = useState<string>("");
+  const [chapterId, setChapterId] = useState<string>("");
+  const [marks, setMarks] = useState<string>("");
+  const [difficulty, setDifficulty] = useState<string>("2");
+  const [calculatorAllowed, setCalculatorAllowed] = useState(false);
   const [imageUrl, setImageUrl] = useState("");
   const [images, setImages] = useState<FormImage[]>([]);
-  const [selectedTagIds, setSelectedTagIds] = useState<Set<number>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(
     loadError
@@ -139,15 +153,17 @@ export function QuestionManagement({
   const [busyQuestionId, setBusyQuestionId] = useState<number | null>(null);
 
   const formRef = useRef<HTMLFormElement>(null);
-  const subjectSelectRef = useRef<HTMLSelectElement>(null);
+  const chapterSelectRef = useRef<HTMLSelectElement>(null);
   const imageIdRef = useRef(0);
 
   const resetForm = () => {
-    setSubjectId("");
+    setChapterId("");
+    setMarks("");
+    setDifficulty("2");
+    setCalculatorAllowed(false);
     setImageUrl("");
     setImages([]);
-    setSelectedTagIds(new Set());
-    subjectSelectRef.current?.focus();
+    chapterSelectRef.current?.focus();
   };
 
   const handleAddImage = () => {
@@ -186,28 +202,41 @@ export function QuestionManagement({
     });
   };
 
-  const toggleTagSelection = (tagId: number) => {
-    setSelectedTagIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(tagId)) {
-        next.delete(tagId);
-      } else {
-        next.add(tagId);
-      }
-      return next;
-    });
-  };
-
   const handleCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const chosenSubjectId =
-      subjectId === "" ? null : Number.parseInt(subjectId, 10);
+    const chosenChapterId =
+      chapterId === "" ? null : Number.parseInt(chapterId, 10);
+    const trimmedMarks = marks.trim();
+    const parsedMarks =
+      trimmedMarks === "" ? Number.NaN : Number.parseInt(trimmedMarks, 10);
+    const parsedDifficulty =
+      difficulty === "" ? Number.NaN : Number.parseInt(difficulty, 10);
 
-    if (!chosenSubjectId) {
+    if (!chosenChapterId) {
       setFeedback({
         type: "error",
-        message: "请选择所属学科。",
+        message: "请选择所属章节。",
+      });
+      return;
+    }
+
+    if (
+      !Number.isFinite(parsedDifficulty) ||
+      parsedDifficulty < 1 ||
+      parsedDifficulty > 4
+    ) {
+      setFeedback({
+        type: "error",
+        message: "请选择正确的难度（1 至 4）。",
+      });
+      return;
+    }
+
+    if (!Number.isFinite(parsedMarks) || parsedMarks <= 0) {
+      setFeedback({
+        type: "error",
+        message: "请填写大于 0 的分值。",
       });
       return;
     }
@@ -218,9 +247,12 @@ export function QuestionManagement({
     const { data: question, error: insertError } = await supabase
       .from("questions")
       .insert({
-        subject_id: chosenSubjectId,
+        chapter_id: chosenChapterId,
+        difficulty: parsedDifficulty,
+        calculator: calculatorAllowed,
+        marks: parsedMarks,
       })
-      .select("id, subject_id, created_at")
+      .select("id, chapter_id, created_at, marks, difficulty, calculator")
       .single();
 
     if (insertError || !question) {
@@ -262,39 +294,20 @@ export function QuestionManagement({
       });
     }
 
-    if (selectedTagIds.size > 0) {
-      const payload = Array.from(selectedTagIds, (tagId) => ({
-        question_id: createdQuestionId,
-        tag_id: tagId,
-      }));
-      const { error: tagError } = await supabase
-        .from("question_tags")
-        .insert(payload);
-      if (tagError) {
-        await supabase.from("questions").delete().eq("id", createdQuestionId);
-        setIsSubmitting(false);
-        setFeedback({
-          type: "error",
-          message: tagError.message ?? "保存标签失败，请稍后重试。",
-        });
-        return;
-      }
-    }
-
-    const subject = chosenSubjectId
-      ? (tagById.get(chosenSubjectId) ?? null)
+    const chapter = chosenChapterId
+      ? (chapterMap.get(chosenChapterId) ?? null)
       : null;
-    const resolvedTags: TagRow[] = Array.from(selectedTagIds)
-      .map((tagId) => tagById.get(tagId) ?? null)
-      .filter((tag): tag is TagRow => tag != null);
 
     const newQuestion: QuestionSummary = {
       id: createdQuestionId,
-      subjectId: question.subject_id,
-      subjectName: subject?.name ?? null,
+      chapterId: question.chapter_id,
+      chapterName: chapter?.name ?? null,
+      subjectName: chapter?.subject?.name ?? null,
       createdAt: question.created_at,
+      difficulty: question.difficulty,
+      calculator: question.calculator,
+      marks: question.marks,
       images: insertedImages ?? [],
-      tags: resolvedTags,
     };
 
     setQuestions((prev) => [newQuestion, ...prev]);
@@ -344,7 +357,21 @@ export function QuestionManagement({
 
   const scrollToForm = () => {
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    subjectSelectRef.current?.focus();
+    chapterSelectRef.current?.focus();
+  };
+
+  const getChapterLabel = (question: QuestionSummary) => {
+    if (!question.chapterId) {
+      return null;
+    }
+    const label = chapterLabelById.get(question.chapterId);
+    if (label) {
+      return label;
+    }
+    if (question.subjectName && question.chapterName) {
+      return `${question.subjectName} > ${question.chapterName}`;
+    }
+    return question.chapterName ?? null;
   };
 
   return (
@@ -355,7 +382,7 @@ export function QuestionManagement({
             Question Management
           </h1>
           <p className="text-sm text-slate-500">
-            创建题目、上传图片以及勾选标签来构建题库。
+            创建题目、上传图片并关联章节来构建题库。
           </p>
         </div>
         <Button onClick={scrollToForm} className="gap-2">
@@ -380,34 +407,75 @@ export function QuestionManagement({
       <Card>
         <CardHeader>
           <CardTitle>创建新题目</CardTitle>
-          <CardDescription>
-            选择学科，上传按顺序展示的图片，并关联对应标签。
-          </CardDescription>
-          <CardAction>
-            <span className="text-xs uppercase tracking-wide text-slate-400">
-              Step 1
-            </span>
-          </CardAction>
+          <CardDescription>选择章节并上传按顺序展示的图片。</CardDescription>
         </CardHeader>
 
         <form ref={formRef} onSubmit={handleCreate} className="space-y-6">
           <CardContent className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="question-subject">Subject</Label>
+              <Label htmlFor="question-chapter">Chapter</Label>
               <select
-                id="question-subject"
-                ref={subjectSelectRef}
-                value={subjectId}
-                onChange={(event) => setSubjectId(event.target.value)}
+                id="question-chapter"
+                ref={chapterSelectRef}
+                value={chapterId}
+                onChange={(event) => setChapterId(event.target.value)}
                 className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200"
               >
-                <option value="">Select a subject</option>
-                {subjectOptions.map((subject) => (
-                  <option key={subject.id} value={subject.id}>
-                    {subject.name}
+                <option value="">Select a chapter</option>
+                {chapterOptions.map((chapterOption) => (
+                  <option key={chapterOption.id} value={chapterOption.id}>
+                    {chapterOption.label}
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="question-marks">Marks</Label>
+                <Input
+                  id="question-marks"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={marks}
+                  onChange={(event) => setMarks(event.target.value)}
+                  placeholder="请输入分值（正整数）"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="question-difficulty">Difficulty</Label>
+                <select
+                  id="question-difficulty"
+                  value={difficulty}
+                  onChange={(event) => setDifficulty(event.target.value)}
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200"
+                >
+                  <option value="1">较易 (1)</option>
+                  <option value="2">中等 (2)</option>
+                  <option value="3">较难 (3)</option>
+                  <option value="4">挑战 (4)</option>
+                </select>
+              </div>
+            </div>
+            <div className="space-y-4">
+              <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
+                <input
+                  type="checkbox"
+                  checked={calculatorAllowed}
+                  onChange={(event) =>
+                    setCalculatorAllowed(event.target.checked)
+                  }
+                  className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                />
+                <div className="flex flex-col">
+                  <span className="font-medium text-slate-800">
+                    允许使用计算器
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    勾选表示此题可以使用计算器。
+                  </span>
+                </div>
+              </label>
             </div>
 
             <div className="space-y-3">
@@ -490,32 +558,6 @@ export function QuestionManagement({
                 </ul>
               ) : null}
             </div>
-
-            <div className="space-y-3">
-              <Label>Tags</Label>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                {tagTree.length === 0 ? (
-                  <p className="text-sm text-slate-500">
-                    暂无标签，请先在 Tags 页面创建。
-                  </p>
-                ) : (
-                  <div className="space-y-1">
-                    {tagTree.map((node) => (
-                      <TagCheckboxTree
-                        key={node.id}
-                        node={node}
-                        depth={0}
-                        selectedTagIds={selectedTagIds}
-                        onToggle={toggleTagSelection}
-                        disabledTagId={
-                          subjectId ? Number.parseInt(subjectId, 10) : null
-                        }
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
           </CardContent>
           <CardFooter className="gap-3 border-t border-slate-200">
             <Button type="submit" disabled={isSubmitting} className="gap-2">
@@ -555,15 +597,32 @@ export function QuestionManagement({
                   </CardTitle>
                   <CardDescription className="flex flex-wrap items-center gap-3 text-xs">
                     <span>创建于：{formatDateTime(question.createdAt)}</span>
-                    {question.subjectName ? (
-                      <Badge variant="outline">{question.subjectName}</Badge>
-                    ) : (
-                      <Badge variant="secondary">未设置学科</Badge>
-                    )}
+                    {(() => {
+                      const chapterLabel = getChapterLabel(question);
+                      return chapterLabel ? (
+                        <Badge variant="outline">{chapterLabel}</Badge>
+                      ) : (
+                        <Badge variant="secondary">未设置章节</Badge>
+                      );
+                    })()}
+                    <Badge
+                      variant={question.calculator ? "outline" : "secondary"}
+                    >
+                      {question.calculator ? "可用计算器" : "禁用计算器"}
+                    </Badge>
+                    <span className="flex items-center gap-1 text-slate-500">
+                      <ScrollText className="size-4" />
+                      难度 {question.difficulty}
+                    </span>
+                    <span className="flex items-center gap-1 text-slate-500">
+                      <ScrollText className="size-4" />
+                      {question.marks} 分
+                    </span>
                     <span className="flex items-center gap-1 text-slate-500">
                       <ImageIcon className="size-4" />
-                      {question.images.length} image
-                      {question.images.length === 1 ? "" : "s"}
+                      {`${question.images.length} image${
+                        question.images.length === 1 ? "" : "s"
+                      }`}
                     </span>
                   </CardDescription>
                   <CardAction className="flex items-center gap-2">
@@ -583,74 +642,11 @@ export function QuestionManagement({
                     </Button>
                   </CardAction>
                 </CardHeader>
-                {question.tags.length > 0 ? (
-                  <CardContent className="flex flex-wrap gap-2 text-sm">
-                    {question.tags.map((tag) => (
-                      <Badge key={tag.id} variant="secondary">
-                        {tag.name}
-                      </Badge>
-                    ))}
-                  </CardContent>
-                ) : null}
               </Card>
             ))}
           </div>
         )}
       </section>
-    </div>
-  );
-}
-
-type TagCheckboxTreeProps = {
-  node: TagNode;
-  depth: number;
-  selectedTagIds: Set<number>;
-  onToggle: (tagId: number) => void;
-  disabledTagId: number | null;
-};
-
-function TagCheckboxTree({
-  node,
-  depth,
-  selectedTagIds,
-  onToggle,
-  disabledTagId,
-}: TagCheckboxTreeProps) {
-  const isDisabled = node.id === disabledTagId;
-  const isChecked = selectedTagIds.has(node.id);
-
-  return (
-    <div className="space-y-1">
-      <label
-        htmlFor={`tag-checkbox-${node.id}`}
-        className={cn(
-          "flex items-center gap-3 rounded-md px-2 py-1 text-sm transition hover:bg-white",
-          isDisabled && "cursor-not-allowed text-slate-400",
-        )}
-        style={{ marginLeft: depth * 16 }}
-      >
-        <input
-          id={`tag-checkbox-${node.id}`}
-          type="checkbox"
-          className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
-          checked={isChecked}
-          disabled={isDisabled}
-          onChange={() => onToggle(node.id)}
-        />
-        <span className="truncate text-slate-700">{node.name}</span>
-      </label>
-      {node.children.length > 0
-        ? node.children.map((child) => (
-            <TagCheckboxTree
-              key={child.id}
-              node={child}
-              depth={depth + 1}
-              selectedTagIds={selectedTagIds}
-              onToggle={onToggle}
-              disabledTagId={disabledTagId}
-            />
-          ))
-        : null}
     </div>
   );
 }
