@@ -5,6 +5,7 @@ import {
   ArrowUp,
   ImageIcon,
   Loader2,
+  Pencil,
   Plus,
   ScrollText,
   Trash2,
@@ -151,10 +152,21 @@ export function QuestionManagement({
       : null,
   );
   const [busyQuestionId, setBusyQuestionId] = useState<number | null>(null);
+  const [editingQuestionId, setEditingQuestionId] = useState<number | null>(
+    null,
+  );
+  const [editChapterId, setEditChapterId] = useState<string>("");
+  const [editMarks, setEditMarks] = useState<string>("");
+  const [editDifficulty, setEditDifficulty] = useState<string>("2");
+  const [editCalculatorAllowed, setEditCalculatorAllowed] = useState(false);
+  const [editImageUrl, setEditImageUrl] = useState("");
+  const [editImages, setEditImages] = useState<FormImage[]>([]);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const formRef = useRef<HTMLFormElement>(null);
   const chapterSelectRef = useRef<HTMLSelectElement>(null);
   const imageIdRef = useRef(0);
+  const editImageIdRef = useRef(0);
 
   const resetForm = () => {
     setChapterId("");
@@ -353,6 +365,206 @@ export function QuestionManagement({
       type: "success",
       message: "题目已删除。",
     });
+  };
+
+  const beginEdit = (question: QuestionSummary) => {
+    setFeedback(null);
+    setEditingQuestionId(question.id);
+    setEditChapterId(question.chapterId ? String(question.chapterId) : "");
+    setEditMarks(String(question.marks));
+    setEditDifficulty(String(question.difficulty));
+    setEditCalculatorAllowed(question.calculator);
+    setEditImageUrl("");
+    editImageIdRef.current = 0;
+    const sortedImages = question.images
+      .slice()
+      .sort((a, b) => a.position - b.position);
+    setEditImages(
+      sortedImages.map((image) => ({
+        id: `existing-${image.id}`,
+        url: image.storage_path,
+      })),
+    );
+  };
+
+  const cancelEdit = () => {
+    setEditingQuestionId(null);
+    setEditImages([]);
+    setEditImageUrl("");
+    setIsUpdating(false);
+  };
+
+  const handleEditAddImage = () => {
+    const trimmed = editImageUrl.trim();
+    if (!trimmed) {
+      setFeedback({
+        type: "error",
+        message: "请输入图片链接。",
+      });
+      return;
+    }
+    setFeedback(null);
+    setEditImages((prev) => [
+      ...prev,
+      {
+        id: `edit-${editImageIdRef.current++}`,
+        url: trimmed,
+      },
+    ]);
+    setEditImageUrl("");
+  };
+
+  const handleEditRemoveImage = (index: number) => {
+    setEditImages((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const moveEditImage = (index: number, direction: "up" | "down") => {
+    setEditImages((prev) => {
+      const next = [...prev];
+      const targetIndex = direction === "up" ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= next.length) {
+        return prev;
+      }
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      return next;
+    });
+  };
+
+  const handleUpdate = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingQuestionId) {
+      return;
+    }
+
+    const chosenChapterId =
+      editChapterId === "" ? null : Number.parseInt(editChapterId, 10);
+    const trimmedMarks = editMarks.trim();
+    const parsedMarks =
+      trimmedMarks === "" ? Number.NaN : Number.parseInt(trimmedMarks, 10);
+    const parsedDifficulty =
+      editDifficulty === "" ? Number.NaN : Number.parseInt(editDifficulty, 10);
+
+    if (!chosenChapterId) {
+      setFeedback({
+        type: "error",
+        message: "请选择所属章节。",
+      });
+      return;
+    }
+
+    if (
+      !Number.isFinite(parsedDifficulty) ||
+      parsedDifficulty < 1 ||
+      parsedDifficulty > 4
+    ) {
+      setFeedback({
+        type: "error",
+        message: "请选择正确的难度（1 至 4）。",
+      });
+      return;
+    }
+
+    if (!Number.isFinite(parsedMarks) || parsedMarks <= 0) {
+      setFeedback({
+        type: "error",
+        message: "请填写大于 0 的分值。",
+      });
+      return;
+    }
+
+    setFeedback(null);
+    setIsUpdating(true);
+
+    const { data: questionRow, error: updateError } = await supabase
+      .from("questions")
+      .update({
+        chapter_id: chosenChapterId,
+        difficulty: parsedDifficulty,
+        calculator: editCalculatorAllowed,
+        marks: parsedMarks,
+      })
+      .eq("id", editingQuestionId)
+      .select("id, chapter_id, created_at, marks, difficulty, calculator")
+      .single();
+
+    if (updateError || !questionRow) {
+      setIsUpdating(false);
+      setFeedback({
+        type: "error",
+        message: updateError?.message ?? "更新题目时出现问题。",
+      });
+      return;
+    }
+
+    const { error: deleteImagesError } = await supabase
+      .from("question_images")
+      .delete()
+      .eq("question_id", editingQuestionId);
+
+    if (deleteImagesError) {
+      setIsUpdating(false);
+      setFeedback({
+        type: "error",
+        message: deleteImagesError.message ?? "更新图片列表失败。",
+      });
+      return;
+    }
+
+    let nextImages: QuestionSummary["images"] = [];
+
+    if (editImages.length > 0) {
+      const { data: newImages, error: insertImagesError } = await supabase
+        .from("question_images")
+        .insert(
+          editImages.map((image, index) => ({
+            question_id: editingQuestionId,
+            storage_path: image.url,
+            position: index + 1,
+          })),
+        )
+        .select("id, storage_path, position");
+
+      if (insertImagesError) {
+        setIsUpdating(false);
+        setFeedback({
+          type: "error",
+          message: insertImagesError.message ?? "保存图片列表失败，稍后重试。",
+        });
+        return;
+      }
+
+      nextImages = (newImages ?? []).slice().sort((a, b) => {
+        return a.position - b.position;
+      });
+    }
+
+    const chapter = chosenChapterId
+      ? (chapterMap.get(chosenChapterId) ?? null)
+      : null;
+
+    setQuestions((prev) =>
+      prev.map((item) =>
+        item.id === editingQuestionId
+          ? {
+              ...item,
+              chapterId: questionRow.chapter_id,
+              chapterName: chapter?.name ?? null,
+              subjectName: chapter?.subject?.name ?? null,
+              difficulty: questionRow.difficulty,
+              calculator: questionRow.calculator,
+              marks: questionRow.marks,
+              images: nextImages,
+            }
+          : item,
+      ),
+    );
+
+    setFeedback({
+      type: "success",
+      message: "题目已更新。",
+    });
+    setIsUpdating(false);
+    cancelEdit();
   };
 
   const scrollToForm = () => {
@@ -630,6 +842,20 @@ export function QuestionManagement({
                       type="button"
                       variant="outline"
                       size="icon-sm"
+                      title="Edit question"
+                      onClick={() => beginEdit(question)}
+                      disabled={isUpdating && editingQuestionId === question.id}
+                    >
+                      {isUpdating && editingQuestionId === question.id ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Pencil className="size-4" />
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon-sm"
                       title="Delete question"
                       onClick={() => handleDelete(question.id)}
                       disabled={busyQuestionId === question.id}
@@ -642,6 +868,185 @@ export function QuestionManagement({
                     </Button>
                   </CardAction>
                 </CardHeader>
+                {editingQuestionId === question.id ? (
+                  <form onSubmit={handleUpdate} className="space-y-4 p-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-chapter">Chapter</Label>
+                        <select
+                          id="edit-chapter"
+                          value={editChapterId}
+                          onChange={(event) =>
+                            setEditChapterId(event.target.value)
+                          }
+                          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200"
+                        >
+                          <option value="">Select a chapter</option>
+                          {chapterOptions.map((chapterOption) => (
+                            <option
+                              key={chapterOption.id}
+                              value={chapterOption.id}
+                            >
+                              {chapterOption.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-marks">Marks</Label>
+                        <Input
+                          id="edit-marks"
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={editMarks}
+                          onChange={(event) => setEditMarks(event.target.value)}
+                          placeholder="请输入分值（正整数）"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-difficulty">Difficulty</Label>
+                        <select
+                          id="edit-difficulty"
+                          value={editDifficulty}
+                          onChange={(event) =>
+                            setEditDifficulty(event.target.value)
+                          }
+                          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200"
+                        >
+                          <option value="1">较易 (1)</option>
+                          <option value="2">中等 (2)</option>
+                          <option value="3">较难 (3)</option>
+                          <option value="4">挑战 (4)</option>
+                        </select>
+                      </div>
+                      <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
+                        <input
+                          type="checkbox"
+                          checked={editCalculatorAllowed}
+                          onChange={(event) =>
+                            setEditCalculatorAllowed(event.target.checked)
+                          }
+                          className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                        />
+                        <div className="flex flex-col">
+                          <span className="font-medium text-slate-800">
+                            允许使用计算器
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            勾选表示此题可以使用计算器。
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div>
+                        <Label htmlFor="edit-image">
+                          Images (Vertical Stack)
+                        </Label>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Input
+                            id="edit-image"
+                            value={editImageUrl}
+                            onChange={(event) =>
+                              setEditImageUrl(event.target.value)
+                            }
+                            placeholder="Enter image URL"
+                            className="max-w-xl flex-1"
+                          />
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={handleEditAddImage}
+                            className="gap-2"
+                          >
+                            <Plus className="size-4" />
+                            Add
+                          </Button>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500">
+                          图片将按顺序从上到下显示，可上下调整顺序。
+                        </p>
+                      </div>
+
+                      {editImages.length > 0 ? (
+                        <ul className="space-y-2 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
+                          {editImages.map((image, index) => (
+                            <li
+                              key={image.id}
+                              className="flex items-center gap-3 rounded-lg bg-white px-3 py-2 shadow-sm"
+                            >
+                              <span className="flex size-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500">
+                                {index + 1}
+                              </span>
+                              <div className="flex flex-1 flex-col">
+                                <span className="truncate font-medium text-slate-700">
+                                  {image.url}
+                                </span>
+                                <span className="text-xs text-slate-400">
+                                  将作为第 {index + 1} 张图片显示
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  onClick={() => moveEditImage(index, "up")}
+                                  disabled={index === 0}
+                                  aria-label="Move image up"
+                                >
+                                  <ArrowUp className="size-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  onClick={() => moveEditImage(index, "down")}
+                                  disabled={index === editImages.length - 1}
+                                  aria-label="Move image down"
+                                >
+                                  <ArrowDown className="size-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  onClick={() => handleEditRemoveImage(index)}
+                                  aria-label="Remove image"
+                                >
+                                  <Trash2 className="size-4 text-red-500" />
+                                </Button>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+
+                    <div className="flex items-center gap-3 border-t border-slate-200 pt-4">
+                      <Button
+                        type="submit"
+                        disabled={isUpdating}
+                        className="gap-2"
+                      >
+                        {isUpdating ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : null}
+                        Save changes
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={cancelEdit}
+                        disabled={isUpdating}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </form>
+                ) : null}
               </Card>
             ))}
           </div>
