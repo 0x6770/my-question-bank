@@ -66,6 +66,7 @@ type QuestionManagementProps = {
 type FormImage = {
   id: string;
   url: string;
+  file?: File;
 };
 
 function buildChapterLabelMap(chapters: ChapterRow[]) {
@@ -140,7 +141,6 @@ export function QuestionManagement({
   const [marks, setMarks] = useState<string>("");
   const [difficulty, setDifficulty] = useState<string>("2");
   const [calculatorAllowed, setCalculatorAllowed] = useState(false);
-  const [imageUrl, setImageUrl] = useState("");
   const [images, setImages] = useState<FormImage[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(
@@ -159,7 +159,6 @@ export function QuestionManagement({
   const [editMarks, setEditMarks] = useState<string>("");
   const [editDifficulty, setEditDifficulty] = useState<string>("2");
   const [editCalculatorAllowed, setEditCalculatorAllowed] = useState(false);
-  const [editImageUrl, setEditImageUrl] = useState("");
   const [editImages, setEditImages] = useState<FormImage[]>([]);
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -168,34 +167,68 @@ export function QuestionManagement({
   const imageIdRef = useRef(0);
   const editImageIdRef = useRef(0);
 
+  const uploadImageToStorage = async (file: File) => {
+    const safeName = file.name.replace(/\s+/g, "-").toLowerCase();
+    const path = `questions/${crypto.randomUUID()}-${Date.now()}-${safeName}`;
+    const { data, error } = await supabase.storage
+      .from("question_images")
+      .upload(path, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+    if (error || !data?.path) {
+      throw new Error(error?.message ?? "上传图片失败，请稍后重试。");
+    }
+    const { data: publicUrlData } = supabase.storage
+      .from("question_images")
+      .getPublicUrl(data.path);
+    if (!publicUrlData?.publicUrl) {
+      throw new Error("无法获取图片访问链接。");
+    }
+    return {
+      publicUrl: publicUrlData.publicUrl,
+      path: data.path,
+    };
+  };
+
+  const uploadImagesIfNeeded = async (list: FormImage[]) => {
+    const results: FormImage[] = [];
+    for (const image of list) {
+      if (image.file) {
+        const { publicUrl } = await uploadImageToStorage(image.file);
+        results.push({
+          ...image,
+          url: publicUrl,
+          file: undefined,
+        });
+      } else {
+        results.push(image);
+      }
+    }
+    return results;
+  };
+
   const resetForm = () => {
     setChapterId("");
     setMarks("");
     setDifficulty("2");
     setCalculatorAllowed(false);
-    setImageUrl("");
     setImages([]);
     chapterSelectRef.current?.focus();
   };
 
-  const handleAddImage = () => {
-    const trimmed = imageUrl.trim();
-    if (!trimmed) {
-      setFeedback({
-        type: "error",
-        message: "请输入图片链接。",
-      });
-      return;
-    }
-    setFeedback(null);
-    setImages((prev) => [
-      ...prev,
-      {
-        id: `local-${imageIdRef.current++}`,
-        url: trimmed,
-      },
-    ]);
-    setImageUrl("");
+  const handleAddImageFiles = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const files = event.target.files;
+    if (!files) return;
+    const next: FormImage[] = Array.from(files).map((file) => ({
+      id: `local-${imageIdRef.current++}`,
+      url: URL.createObjectURL(file),
+      file,
+    }));
+    setImages((prev) => [...prev, ...next]);
+    event.target.value = "";
   };
 
   const handleRemoveImage = (index: number) => {
@@ -256,6 +289,19 @@ export function QuestionManagement({
     setFeedback(null);
     setIsSubmitting(true);
 
+    let readyImages: FormImage[] = [];
+    try {
+      readyImages = await uploadImagesIfNeeded(images);
+    } catch (error) {
+      setIsSubmitting(false);
+      setFeedback({
+        type: "error",
+        message:
+          error instanceof Error ? error.message : "上传图片时出现问题。",
+      });
+      return;
+    }
+
     const { data: question, error: insertError } = await supabase
       .from("questions")
       .insert({
@@ -279,11 +325,11 @@ export function QuestionManagement({
     const createdQuestionId = question.id;
     let insertedImages: QuestionSummary["images"] | null = null;
 
-    if (images.length > 0) {
+    if (readyImages.length > 0) {
       const { data: imageRows, error: imageError } = await supabase
         .from("question_images")
         .insert(
-          images.map((image, index) => ({
+          readyImages.map((image, index) => ({
             question_id: createdQuestionId,
             storage_path: image.url,
             position: index + 1,
@@ -374,7 +420,6 @@ export function QuestionManagement({
     setEditMarks(String(question.marks));
     setEditDifficulty(String(question.difficulty));
     setEditCalculatorAllowed(question.calculator);
-    setEditImageUrl("");
     editImageIdRef.current = 0;
     const sortedImages = question.images
       .slice()
@@ -390,28 +435,21 @@ export function QuestionManagement({
   const cancelEdit = () => {
     setEditingQuestionId(null);
     setEditImages([]);
-    setEditImageUrl("");
     setIsUpdating(false);
   };
 
-  const handleEditAddImage = () => {
-    const trimmed = editImageUrl.trim();
-    if (!trimmed) {
-      setFeedback({
-        type: "error",
-        message: "请输入图片链接。",
-      });
-      return;
-    }
-    setFeedback(null);
-    setEditImages((prev) => [
-      ...prev,
-      {
-        id: `edit-${editImageIdRef.current++}`,
-        url: trimmed,
-      },
-    ]);
-    setEditImageUrl("");
+  const handleEditAddImageFiles = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const files = event.target.files;
+    if (!files) return;
+    const next: FormImage[] = Array.from(files).map((file) => ({
+      id: `edit-${editImageIdRef.current++}`,
+      url: URL.createObjectURL(file),
+      file,
+    }));
+    setEditImages((prev) => [...prev, ...next]);
+    event.target.value = "";
   };
 
   const handleEditRemoveImage = (index: number) => {
@@ -475,6 +513,19 @@ export function QuestionManagement({
     setFeedback(null);
     setIsUpdating(true);
 
+    let readyImages: FormImage[] = [];
+    try {
+      readyImages = await uploadImagesIfNeeded(editImages);
+    } catch (error) {
+      setIsUpdating(false);
+      setFeedback({
+        type: "error",
+        message:
+          error instanceof Error ? error.message : "上传图片时出现问题。",
+      });
+      return;
+    }
+
     const { data: questionRow, error: updateError } = await supabase
       .from("questions")
       .update({
@@ -512,11 +563,11 @@ export function QuestionManagement({
 
     let nextImages: QuestionSummary["images"] = [];
 
-    if (editImages.length > 0) {
+    if (readyImages.length > 0) {
       const { data: newImages, error: insertImagesError } = await supabase
         .from("question_images")
         .insert(
-          editImages.map((image, index) => ({
+          readyImages.map((image, index) => ({
             question_id: editingQuestionId,
             storage_path: image.url,
             position: index + 1,
@@ -696,23 +747,15 @@ export function QuestionManagement({
                 <div className="mt-2 flex flex-wrap gap-2">
                   <Input
                     id="question-image"
-                    value={imageUrl}
-                    onChange={(event) => setImageUrl(event.target.value)}
-                    placeholder="Enter image URL"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleAddImageFiles}
                     className="max-w-xl flex-1"
                   />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={handleAddImage}
-                    className="gap-2"
-                  >
-                    <Plus className="size-4" />
-                    Add
-                  </Button>
                 </div>
                 <p className="mt-1 text-xs text-slate-500">
-                  图片将按顺序从上到下显示，可上下调整顺序。
+                  选择一张或多张图片上传，按列表顺序显示，可上下调整顺序。
                 </p>
               </div>
 
@@ -728,7 +771,7 @@ export function QuestionManagement({
                       </span>
                       <div className="flex flex-1 flex-col">
                         <span className="truncate font-medium text-slate-700">
-                          {image.url}
+                          {image.file ? image.file.name : image.url}
                         </span>
                         <span className="text-xs text-slate-400">
                           将作为第 {index + 1} 张图片显示
@@ -948,25 +991,15 @@ export function QuestionManagement({
                         <div className="mt-2 flex flex-wrap gap-2">
                           <Input
                             id="edit-image"
-                            value={editImageUrl}
-                            onChange={(event) =>
-                              setEditImageUrl(event.target.value)
-                            }
-                            placeholder="Enter image URL"
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={handleEditAddImageFiles}
                             className="max-w-xl flex-1"
                           />
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={handleEditAddImage}
-                            className="gap-2"
-                          >
-                            <Plus className="size-4" />
-                            Add
-                          </Button>
                         </div>
                         <p className="mt-1 text-xs text-slate-500">
-                          图片将按顺序从上到下显示，可上下调整顺序。
+                          选择一张或多张图片上传，按列表顺序显示，可上下调整顺序。
                         </p>
                       </div>
 
@@ -982,7 +1015,7 @@ export function QuestionManagement({
                               </span>
                               <div className="flex flex-1 flex-col">
                                 <span className="truncate font-medium text-slate-700">
-                                  {image.url}
+                                  {image.file ? image.file.name : image.url}
                                 </span>
                                 <span className="text-xs text-slate-400">
                                   将作为第 {index + 1} 张图片显示
