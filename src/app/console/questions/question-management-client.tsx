@@ -763,12 +763,12 @@ export function QuestionManagement({
                   {images.map((image, index) => (
                     <li
                       key={image.id}
-                      className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:items-center sm:gap-3"
+                      className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:gap-3"
                     >
-                      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500 self-start">
                         {index + 1}
                       </span>
-                      <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                      <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
                         <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
                           <Image
                             src={image.url}
@@ -781,7 +781,7 @@ export function QuestionManagement({
                           />
                         </div>
                       </div>
-                      <div className="ml-auto flex items-center gap-1 sm:ml-0">
+                      <div className="ml-auto flex items-start gap-1 pt-1 sm:ml-0">
                         <Button
                           type="button"
                           variant="ghost"
@@ -1036,12 +1036,12 @@ export function QuestionManagement({
                           {editImages.map((image, index) => (
                             <li
                               key={image.id}
-                              className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:items-center sm:gap-3"
+                              className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:gap-3"
                             >
-                              <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500">
+                              <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500 self-start">
                                 {index + 1}
                               </span>
-                              <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                              <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
                                 <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
                                   <Image
                                     src={image.url}
@@ -1054,7 +1054,7 @@ export function QuestionManagement({
                                   />
                                 </div>
                               </div>
-                              <div className="ml-auto flex items-center gap-1 sm:ml-0">
+                              <div className="ml-auto flex items-start gap-1 pt-1 sm:ml-0">
                                 <Button
                                   type="button"
                                   variant="ghost"

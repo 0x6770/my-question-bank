@@ -27,14 +27,6 @@ const difficultyMeta: Record<
   4: { label: "Challenge", level: 4, accent: "text-rose-600" },
 };
 
-function formatDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleString();
-}
-
 export function QuestionCard({ question }: QuestionCardProps) {
   const meta = difficultyMeta[question.difficulty] ?? {
     label: "Unknown",
@@ -44,7 +36,7 @@ export function QuestionCard({ question }: QuestionCardProps) {
 
   return (
     <article className="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-4 py-2 pt-4">
         <div className="flex items-center gap-3">
           <span
             className={`rounded px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${question.calculator ? "bg-sky-50 text-sky-700" : "bg-slate-100 text-slate-500"}`}
@@ -68,14 +60,14 @@ export function QuestionCard({ question }: QuestionCardProps) {
         </div>
       </div>
 
-      <div className="px-4 py-4">
+      <div className="px-4 py-3">
         <p className="text-sm font-medium text-slate-600">
           [Maximum mark: {question.marks}]
         </p>
       </div>
 
       {question.images.length > 0 ? (
-        <div className="px-4 pb-0">
+        <div className="px-4 pb-4">
           <div className="flex flex-col space-y-0">
             {question.images.map((image) => (
               <Image
@@ -92,13 +84,8 @@ export function QuestionCard({ question }: QuestionCardProps) {
           </div>
         </div>
       ) : (
-        <div className="px-4 py-4 text-sm text-slate-500">暂无图片内容。</div>
+        <div className="px-4 pb-6 text-sm text-slate-500">暂无图片内容。</div>
       )}
-
-      <div className="flex flex-wrap gap-3 border-t border-slate-100 px-4 py-3 text-sm text-slate-500">
-        <span>创建于：{formatDate(question.createdAt)}</span>
-        <span>难度等级：{question.difficulty}</span>
-      </div>
     </article>
   );
 }
