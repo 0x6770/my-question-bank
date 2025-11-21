@@ -53,15 +53,9 @@ export default async function Home() {
     <main className="min-h-screen bg-slate-50 px-4 py-12 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-5xl flex-col gap-6">
         <header className="space-y-2">
-          <p className="text-sm uppercase tracking-wide text-slate-500">
-            Question Bank
-          </p>
           <h1 className="text-3xl font-semibold text-slate-900">
             查看全部题目
           </h1>
-          <p className="text-slate-600">
-            这里展示数据库中的所有题目图片、分值及其他元信息。
-          </p>
           {error ? (
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               无法加载题目：{error.message}

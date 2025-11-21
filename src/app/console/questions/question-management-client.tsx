@@ -10,6 +10,7 @@ import {
   ScrollText,
   Trash2,
 } from "lucide-react";
+import Image from "next/image";
 import { useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -68,6 +69,20 @@ type FormImage = {
   url: string;
   file?: File;
 };
+
+function getImageLabel(image: FormImage) {
+  if (image.file) {
+    return image.file.name;
+  }
+  try {
+    const url = new URL(image.url);
+    const segments = url.pathname.split("/").filter(Boolean);
+    return segments.at(-1) ?? image.url;
+  } catch {
+    const segments = image.url.split("/").filter(Boolean);
+    return segments.at(-1) ?? image.url;
+  }
+}
 
 function buildChapterLabelMap(chapters: ChapterRow[]) {
   const chapterMap = new Map(chapters.map((chapter) => [chapter.id, chapter]));
@@ -217,9 +232,7 @@ export function QuestionManagement({
     chapterSelectRef.current?.focus();
   };
 
-  const handleAddImageFiles = (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
+  const handleAddImageFiles = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files) return;
     const next: FormImage[] = Array.from(files).map((file) => ({
@@ -764,20 +777,33 @@ export function QuestionManagement({
                   {images.map((image, index) => (
                     <li
                       key={image.id}
-                      className="flex items-center gap-3 rounded-lg bg-white px-3 py-2 shadow-sm"
+                      className="flex flex-col gap-2 rounded-lg bg-white p-3 shadow-sm"
                     >
-                      <span className="flex size-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500">
-                        {index + 1}
-                      </span>
-                      <div className="flex flex-1 flex-col">
+                      <div className="flex items-center gap-3">
+                        <span className="flex size-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500">
+                          {index + 1}
+                        </span>
+                        <div className="flex h-20 w-32 flex-shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+                          <Image
+                            src={image.url}
+                            alt={`预览 ${index + 1}`}
+                            width={200}
+                            height={140}
+                            className="h-full w-full object-contain"
+                            sizes="160px"
+                            unoptimized
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-1 flex-col gap-1 pl-12">
                         <span className="truncate font-medium text-slate-700">
-                          {image.file ? image.file.name : image.url}
+                          {getImageLabel(image)}
                         </span>
                         <span className="text-xs text-slate-400">
                           将作为第 {index + 1} 张图片显示
                         </span>
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center justify-end gap-1">
                         <Button
                           type="button"
                           variant="ghost"
@@ -911,6 +937,30 @@ export function QuestionManagement({
                     </Button>
                   </CardAction>
                 </CardHeader>
+                {question.images.length > 0 &&
+                editingQuestionId !== question.id ? (
+                  <div className="border-t border-slate-100 bg-slate-50/60">
+                    <div className="flex gap-3 overflow-x-auto px-4 py-3">
+                      {question.images.map((image) => (
+                        <div
+                          key={image.id}
+                          className="flex h-32 min-w-[160px] max-w-[220px] flex-1 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+                          title={`Image ${image.position}`}
+                        >
+                          <Image
+                            src={image.storage_path}
+                            alt={`Question ${question.id} image ${image.position}`}
+                            width={320}
+                            height={320}
+                            className="h-full w-full object-contain"
+                            sizes="(max-width: 768px) 60vw, 320px"
+                            unoptimized
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 {editingQuestionId === question.id ? (
                   <form onSubmit={handleUpdate} className="space-y-4 p-4">
                     <div className="grid gap-4 sm:grid-cols-2">
@@ -1008,20 +1058,33 @@ export function QuestionManagement({
                           {editImages.map((image, index) => (
                             <li
                               key={image.id}
-                              className="flex items-center gap-3 rounded-lg bg-white px-3 py-2 shadow-sm"
+                              className="flex flex-col gap-2 rounded-lg bg-white p-3 shadow-sm"
                             >
-                              <span className="flex size-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500">
-                                {index + 1}
-                              </span>
-                              <div className="flex flex-1 flex-col">
+                              <div className="flex items-center gap-3">
+                                <span className="flex size-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500">
+                                  {index + 1}
+                                </span>
+                                <div className="flex h-20 w-32 flex-shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+                                  <Image
+                                    src={image.url}
+                                    alt={`预览 ${index + 1}`}
+                                    width={200}
+                                    height={140}
+                                    className="h-full w-full object-contain"
+                                    sizes="160px"
+                                    unoptimized
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex flex-1 flex-col gap-1 pl-12">
                                 <span className="truncate font-medium text-slate-700">
-                                  {image.file ? image.file.name : image.url}
+                                  {getImageLabel(image)}
                                 </span>
                                 <span className="text-xs text-slate-400">
                                   将作为第 {index + 1} 张图片显示
                                 </span>
                               </div>
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center justify-end gap-1">
                                 <Button
                                   type="button"
                                   variant="ghost"
