@@ -70,20 +70,6 @@ type FormImage = {
   file?: File;
 };
 
-function getImageLabel(image: FormImage) {
-  if (image.file) {
-    return image.file.name;
-  }
-  try {
-    const url = new URL(image.url);
-    const segments = url.pathname.split("/").filter(Boolean);
-    return segments.at(-1) ?? image.url;
-  } catch {
-    const segments = image.url.split("/").filter(Boolean);
-    return segments.at(-1) ?? image.url;
-  }
-}
-
 function buildChapterLabelMap(chapters: ChapterRow[]) {
   const chapterMap = new Map(chapters.map((chapter) => [chapter.id, chapter]));
   const memo = new Map<number, string>();
@@ -795,14 +781,6 @@ export function QuestionManagement({
                           />
                         </div>
                       </div>
-                      <div className="flex flex-1 flex-col gap-1 pl-12">
-                        <span className="truncate font-medium text-slate-700">
-                          {getImageLabel(image)}
-                        </span>
-                        <span className="text-xs text-slate-400">
-                          将作为第 {index + 1} 张图片显示
-                        </span>
-                      </div>
                       <div className="flex items-center justify-end gap-1">
                         <Button
                           type="button"
@@ -1075,14 +1053,6 @@ export function QuestionManagement({
                                     unoptimized
                                   />
                                 </div>
-                              </div>
-                              <div className="flex flex-1 flex-col gap-1 pl-12">
-                                <span className="truncate font-medium text-slate-700">
-                                  {getImageLabel(image)}
-                                </span>
-                                <span className="text-xs text-slate-400">
-                                  将作为第 {index + 1} 张图片显示
-                                </span>
                               </div>
                               <div className="flex items-center justify-end gap-1">
                                 <Button
