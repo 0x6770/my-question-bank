@@ -759,29 +759,29 @@ export function QuestionManagement({
               </div>
 
               {images.length > 0 ? (
-                <ul className="space-y-2 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
+                <ul className="space-y-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
                   {images.map((image, index) => (
                     <li
                       key={image.id}
-                      className="flex flex-col gap-2 rounded-lg bg-white p-3 shadow-sm"
+                      className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:items-center sm:gap-3"
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="flex size-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500">
-                          {index + 1}
-                        </span>
-                        <div className="flex h-20 w-32 flex-shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500">
+                        {index + 1}
+                      </span>
+                      <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                        <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
                           <Image
                             src={image.url}
                             alt={`预览 ${index + 1}`}
-                            width={200}
-                            height={140}
+                            width={1200}
+                            height={675}
                             className="h-full w-full object-contain"
-                            sizes="160px"
+                            sizes="(max-width: 768px) 100vw, 640px"
                             unoptimized
                           />
                         </div>
                       </div>
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="ml-auto flex items-center gap-1 sm:ml-0">
                         <Button
                           type="button"
                           variant="ghost"
@@ -1032,29 +1032,29 @@ export function QuestionManagement({
                       </div>
 
                       {editImages.length > 0 ? (
-                        <ul className="space-y-2 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
+                        <ul className="space-y-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
                           {editImages.map((image, index) => (
                             <li
                               key={image.id}
-                              className="flex flex-col gap-2 rounded-lg bg-white p-3 shadow-sm"
+                              className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:items-center sm:gap-3"
                             >
-                              <div className="flex items-center gap-3">
-                                <span className="flex size-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500">
-                                  {index + 1}
-                                </span>
-                                <div className="flex h-20 w-32 flex-shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+                              <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500">
+                                {index + 1}
+                              </span>
+                              <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                                <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
                                   <Image
                                     src={image.url}
                                     alt={`预览 ${index + 1}`}
-                                    width={200}
-                                    height={140}
+                                    width={1200}
+                                    height={675}
                                     className="h-full w-full object-contain"
-                                    sizes="160px"
+                                    sizes="(max-width: 768px) 100vw, 640px"
                                     unoptimized
                                   />
                                 </div>
                               </div>
-                              <div className="flex items-center justify-end gap-1">
+                              <div className="ml-auto flex items-center gap-1 sm:ml-0">
                                 <Button
                                   type="button"
                                   variant="ghost"
