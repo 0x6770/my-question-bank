@@ -1,3 +1,4 @@
+import { BackToTopButton } from "@/components/back-to-top-button";
 import { QuestionCard } from "@/components/question-card";
 import { createClient } from "@/lib/supabase/server";
 import type { Tables } from "../../database.types";
@@ -74,6 +75,7 @@ export default async function Home() {
           </div>
         )}
       </div>
+      <BackToTopButton />
     </main>
   );
 }
