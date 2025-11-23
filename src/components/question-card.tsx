@@ -4,6 +4,7 @@ type QuestionImage = {
   id: number;
   storage_path: string;
   position: number;
+  signedUrl: string | null;
 };
 
 type QuestionCardProps = {
@@ -72,7 +73,7 @@ export function QuestionCard({ question }: QuestionCardProps) {
             {question.images.map((image) => (
               <Image
                 key={image.id}
-                src={image.storage_path}
+                src={image.signedUrl ?? image.storage_path}
                 alt={`Question ${question.id} image`}
                 width={1600}
                 height={1200}

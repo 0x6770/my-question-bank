@@ -11,7 +11,7 @@ import {
   Trash2,
 } from "lucide-react";
 import Image from "next/image";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,6 +67,7 @@ type QuestionManagementProps = {
 type FormImage = {
   id: string;
   url: string;
+  storagePath?: string;
   file?: File;
 };
 
@@ -111,12 +112,19 @@ function formatDateTime(value: string) {
   return date.toLocaleString();
 }
 
+function isBlobUrl(value: string) {
+  return value.startsWith("blob:");
+}
+
 export function QuestionManagement({
   initialChapters,
   initialQuestions,
   loadError,
 }: QuestionManagementProps) {
   const supabase = useMemo(() => createClient(), []);
+  const [signedUrlCache, setSignedUrlCache] = useState<Record<string, string>>(
+    {},
+  );
 
   const chapterMap = useMemo(
     () => new Map(initialChapters.map((chapter) => [chapter.id, chapter])),
@@ -168,6 +176,53 @@ export function QuestionManagement({
   const imageIdRef = useRef(0);
   const editImageIdRef = useRef(0);
 
+  const resolveImageSrc = (storagePath: string) => {
+    if (isBlobUrl(storagePath)) {
+      return storagePath;
+    }
+    return signedUrlCache[storagePath];
+  };
+
+  useEffect(() => {
+    const missingPaths = new Set<string>();
+    for (const question of questions) {
+      for (const image of question.images) {
+        if (isBlobUrl(image.storage_path)) {
+          continue;
+        }
+        if (!signedUrlCache[image.storage_path]) {
+          missingPaths.add(image.storage_path);
+        }
+      }
+    }
+    if (missingPaths.size === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    const fetchSignedUrls = async () => {
+      const { data, error } = await supabase.storage
+        .from("question_images")
+        .createSignedUrls(Array.from(missingPaths), 3600);
+      if (cancelled || error || !data) return;
+      setSignedUrlCache((prev) => {
+        const next = { ...prev };
+        for (const item of data) {
+          if (item.path && item.signedUrl) {
+            next[item.path] = item.signedUrl;
+          }
+        }
+        return next;
+      });
+    };
+
+    void fetchSignedUrls();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [questions, supabase, signedUrlCache]);
+
   const uploadImageToStorage = async (file: File) => {
     const safeName = file.name.replace(/\s+/g, "-").toLowerCase();
     const path = `questions/${crypto.randomUUID()}-${Date.now()}-${safeName}`;
@@ -180,14 +235,7 @@ export function QuestionManagement({
     if (error || !data?.path) {
       throw new Error(error?.message ?? "上传图片失败，请稍后重试。");
     }
-    const { data: publicUrlData } = supabase.storage
-      .from("question_images")
-      .getPublicUrl(data.path);
-    if (!publicUrlData?.publicUrl) {
-      throw new Error("无法获取图片访问链接。");
-    }
     return {
-      publicUrl: publicUrlData.publicUrl,
       path: data.path,
     };
   };
@@ -196,10 +244,10 @@ export function QuestionManagement({
     const results: FormImage[] = [];
     for (const image of list) {
       if (image.file) {
-        const { publicUrl } = await uploadImageToStorage(image.file);
+        const { path } = await uploadImageToStorage(image.file);
         results.push({
           ...image,
-          url: publicUrl,
+          storagePath: path,
           file: undefined,
         });
       } else {
@@ -330,7 +378,7 @@ export function QuestionManagement({
         .insert(
           readyImages.map((image, index) => ({
             question_id: createdQuestionId,
-            storage_path: image.url,
+            storage_path: image.storagePath ?? image.url,
             position: index + 1,
           })),
         )
@@ -427,6 +475,7 @@ export function QuestionManagement({
       sortedImages.map((image) => ({
         id: `existing-${image.id}`,
         url: image.storage_path,
+        storagePath: image.storage_path,
       })),
     );
   };
@@ -568,7 +617,7 @@ export function QuestionManagement({
         .insert(
           readyImages.map((image, index) => ({
             question_id: editingQuestionId,
-            storage_path: image.url,
+            storage_path: image.storagePath ?? image.url,
             position: index + 1,
           })),
         )
@@ -771,7 +820,10 @@ export function QuestionManagement({
                       <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
                         <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
                           <Image
-                            src={image.url}
+                            src={
+                              resolveImageSrc(image.storagePath ?? image.url) ??
+                              image.url
+                            }
                             alt={`预览 ${index + 1}`}
                             width={1200}
                             height={675}
@@ -926,7 +978,10 @@ export function QuestionManagement({
                           title={`Image ${image.position}`}
                         >
                           <Image
-                            src={image.storage_path}
+                            src={
+                              resolveImageSrc(image.storage_path) ??
+                              image.storage_path
+                            }
                             alt={`Question ${question.id} image ${image.position}`}
                             width={320}
                             height={320}
@@ -1044,7 +1099,11 @@ export function QuestionManagement({
                               <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
                                 <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
                                   <Image
-                                    src={image.url}
+                                    src={
+                                      resolveImageSrc(
+                                        image.storagePath ?? image.url,
+                                      ) ?? image.url
+                                    }
                                     alt={`预览 ${index + 1}`}
                                     width={1200}
                                     height={675}

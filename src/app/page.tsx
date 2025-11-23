@@ -9,6 +9,7 @@ type QuestionWithImages = Tables<"questions"> & {
         id: number;
         storage_path: string;
         position: number;
+        signedUrl?: string | null;
       }[]
     | null;
 };
@@ -34,11 +35,15 @@ export default async function Home() {
     )
     .order("created_at", { ascending: false });
 
+  const imagePaths = new Set<string>();
   const normalized = (questions ?? []).map((question) => {
     const rawQuestion = question as unknown as QuestionWithImages;
     const sortedImages = (rawQuestion.question_images ?? [])
       .slice()
       .sort((a, b) => a.position - b.position);
+    for (const image of sortedImages) {
+      imagePaths.add(image.storage_path);
+    }
 
     return {
       id: rawQuestion.id,
@@ -49,6 +54,31 @@ export default async function Home() {
       images: sortedImages,
     };
   });
+
+  const paths = Array.from(imagePaths);
+  const signedUrlMap: Record<string, string> = {};
+
+  if (paths.length > 0) {
+    const { data: signedUrls, error: signedError } = await supabase.storage
+      .from("question_images")
+      .createSignedUrls(paths, 3600);
+
+    if (!signedError && signedUrls) {
+      for (const item of signedUrls) {
+        if (item.path && item.signedUrl) {
+          signedUrlMap[item.path] = item.signedUrl;
+        }
+      }
+    }
+  }
+
+  const normalizedWithSigned = normalized.map((question) => ({
+    ...question,
+    images: question.images.map((image) => ({
+      ...image,
+      signedUrl: signedUrlMap[image.storage_path] ?? null,
+    })),
+  }));
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-12 sm:px-6 lg:px-8">
@@ -69,7 +99,7 @@ export default async function Home() {
           </div>
         ) : (
           <div className="space-y-6">
-            {normalized.map((question) => (
+            {normalizedWithSigned.map((question) => (
               <QuestionCard key={question.id} question={question} />
             ))}
           </div>
