@@ -24,6 +24,11 @@ type QuestionSummary = {
     storage_path: string;
     position: number;
   }[];
+  answerImages: {
+    id: number;
+    storage_path: string;
+    position: number;
+  }[];
 };
 
 export default async function ConsoleQuestionsPage() {
@@ -59,23 +64,28 @@ export default async function ConsoleQuestionsPage() {
           difficulty,
           calculator,
           marks,
-          created_at,
-          chapter:chapter_id (
+        created_at,
+        chapter:chapter_id (
+          id,
+          name,
+          parent_chapter_id,
+          subject_id,
+          subject:subject_id (
             id,
-            name,
-            parent_chapter_id,
-            subject_id,
-            subject:subject_id (
-              id,
-              name
-            )
-          ),
-          question_images (
-            id,
-            storage_path,
-            position
+            name
           )
-        `,
+        ),
+        question_images (
+          id,
+          storage_path,
+          position
+        ),
+        answer_images (
+          id,
+          storage_path,
+          position
+        )
+      `,
       )
       .order("created_at", { ascending: false }),
   ]);
@@ -97,9 +107,16 @@ export default async function ConsoleQuestionsPage() {
           subject: { id: number; name: string } | null;
         } | null;
         question_images: QuestionSummary["images"] | null;
+        answer_images: QuestionSummary["answerImages"] | null;
       };
 
       const images = (rawQuestion.question_images ?? [])
+        .slice()
+        .sort((a, b) => {
+          return a.position - b.position;
+        });
+
+      const answerImages = (rawQuestion.answer_images ?? [])
         .slice()
         .sort((a, b) => {
           return a.position - b.position;
@@ -117,6 +134,7 @@ export default async function ConsoleQuestionsPage() {
         calculator: rawQuestion.calculator,
         marks: rawQuestion.marks,
         images,
+        answerImages,
       };
     },
   );

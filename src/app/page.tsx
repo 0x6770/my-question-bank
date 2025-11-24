@@ -12,6 +12,14 @@ type QuestionWithImages = Tables<"questions"> & {
         signedUrl?: string | null;
       }[]
     | null;
+  answer_images?:
+    | {
+        id: number;
+        storage_path: string;
+        position: number;
+        signedUrl?: string | null;
+      }[]
+    | null;
 };
 
 export default async function Home() {
@@ -30,19 +38,32 @@ export default async function Home() {
           id,
           storage_path,
           position
+        ),
+        answer_images (
+          id,
+          storage_path,
+          position
         )
       `,
     )
     .order("created_at", { ascending: false });
 
-  const imagePaths = new Set<string>();
+  const questionImagePaths = new Set<string>();
+  const answerImagePaths = new Set<string>();
   const normalized = (questions ?? []).map((question) => {
     const rawQuestion = question as unknown as QuestionWithImages;
     const sortedImages = (rawQuestion.question_images ?? [])
       .slice()
       .sort((a, b) => a.position - b.position);
     for (const image of sortedImages) {
-      imagePaths.add(image.storage_path);
+      questionImagePaths.add(image.storage_path);
+    }
+
+    const sortedAnswerImages = (rawQuestion.answer_images ?? [])
+      .slice()
+      .sort((a, b) => a.position - b.position);
+    for (const image of sortedAnswerImages) {
+      answerImagePaths.add(image.storage_path);
     }
 
     return {
@@ -52,21 +73,38 @@ export default async function Home() {
       calculator: rawQuestion.calculator,
       createdAt: rawQuestion.created_at,
       images: sortedImages,
+      answerImages: sortedAnswerImages,
     };
   });
 
-  const paths = Array.from(imagePaths);
-  const signedUrlMap: Record<string, string> = {};
+  const questionPaths = Array.from(questionImagePaths);
+  const answerPaths = Array.from(answerImagePaths);
+  const questionSignedUrlMap: Record<string, string> = {};
+  const answerSignedUrlMap: Record<string, string> = {};
 
-  if (paths.length > 0) {
+  if (questionPaths.length > 0) {
     const { data: signedUrls, error: signedError } = await supabase.storage
       .from("question_images")
-      .createSignedUrls(paths, 3600);
+      .createSignedUrls(questionPaths, 3600);
 
     if (!signedError && signedUrls) {
       for (const item of signedUrls) {
         if (item.path && item.signedUrl) {
-          signedUrlMap[item.path] = item.signedUrl;
+          questionSignedUrlMap[item.path] = item.signedUrl;
+        }
+      }
+    }
+  }
+
+  if (answerPaths.length > 0) {
+    const { data: signedUrls, error: signedError } = await supabase.storage
+      .from("answer_images")
+      .createSignedUrls(answerPaths, 3600);
+
+    if (!signedError && signedUrls) {
+      for (const item of signedUrls) {
+        if (item.path && item.signedUrl) {
+          answerSignedUrlMap[item.path] = item.signedUrl;
         }
       }
     }
@@ -76,7 +114,11 @@ export default async function Home() {
     ...question,
     images: question.images.map((image) => ({
       ...image,
-      signedUrl: signedUrlMap[image.storage_path] ?? null,
+      signedUrl: questionSignedUrlMap[image.storage_path] ?? null,
+    })),
+    answerImages: question.answerImages.map((image) => ({
+      ...image,
+      signedUrl: answerSignedUrlMap[image.storage_path] ?? null,
     })),
   }));
 

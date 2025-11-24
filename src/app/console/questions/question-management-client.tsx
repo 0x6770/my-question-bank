@@ -52,6 +52,11 @@ type QuestionSummary = {
     storage_path: string;
     position: number;
   }[];
+  answerImages: {
+    id: number;
+    storage_path: string;
+    position: number;
+  }[];
 };
 
 type Feedback =
@@ -151,6 +156,7 @@ export function QuestionManagement({
   const [difficulty, setDifficulty] = useState<string>("2");
   const [calculatorAllowed, setCalculatorAllowed] = useState(false);
   const [images, setImages] = useState<FormImage[]>([]);
+  const [answerImages, setAnswerImages] = useState<FormImage[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(
     loadError
@@ -169,12 +175,15 @@ export function QuestionManagement({
   const [editDifficulty, setEditDifficulty] = useState<string>("2");
   const [editCalculatorAllowed, setEditCalculatorAllowed] = useState(false);
   const [editImages, setEditImages] = useState<FormImage[]>([]);
+  const [editAnswerImages, setEditAnswerImages] = useState<FormImage[]>([]);
   const [isUpdating, setIsUpdating] = useState(false);
 
   const formRef = useRef<HTMLFormElement>(null);
   const chapterSelectRef = useRef<HTMLSelectElement>(null);
   const imageIdRef = useRef(0);
   const editImageIdRef = useRef(0);
+  const answerImageIdRef = useRef(0);
+  const editAnswerImageIdRef = useRef(0);
 
   const resolveImageSrc = (storagePath: string) => {
     if (isBlobUrl(storagePath)) {
@@ -184,36 +193,63 @@ export function QuestionManagement({
   };
 
   useEffect(() => {
-    const missingPaths = new Set<string>();
+    const questionPaths = new Set<string>();
+    const answerPaths = new Set<string>();
     for (const question of questions) {
       for (const image of question.images) {
         if (isBlobUrl(image.storage_path)) {
           continue;
         }
         if (!signedUrlCache[image.storage_path]) {
-          missingPaths.add(image.storage_path);
+          questionPaths.add(image.storage_path);
+        }
+      }
+      for (const image of question.answerImages) {
+        if (isBlobUrl(image.storage_path)) {
+          continue;
+        }
+        if (!signedUrlCache[image.storage_path]) {
+          answerPaths.add(image.storage_path);
         }
       }
     }
-    if (missingPaths.size === 0) {
+    if (questionPaths.size === 0 && answerPaths.size === 0) {
       return;
     }
 
     let cancelled = false;
     const fetchSignedUrls = async () => {
-      const { data, error } = await supabase.storage
-        .from("question_images")
-        .createSignedUrls(Array.from(missingPaths), 3600);
-      if (cancelled || error || !data) return;
-      setSignedUrlCache((prev) => {
-        const next = { ...prev };
-        for (const item of data) {
-          if (item.path && item.signedUrl) {
-            next[item.path] = item.signedUrl;
+      const nextCache: Record<string, string> = {};
+
+      if (questionPaths.size > 0) {
+        const { data, error } = await supabase.storage
+          .from("question_images")
+          .createSignedUrls(Array.from(questionPaths), 3600);
+        if (!cancelled && !error && data) {
+          for (const item of data) {
+            if (item.path && item.signedUrl) {
+              nextCache[item.path] = item.signedUrl;
+            }
           }
         }
-        return next;
-      });
+      }
+
+      if (answerPaths.size > 0) {
+        const { data, error } = await supabase.storage
+          .from("answer_images")
+          .createSignedUrls(Array.from(answerPaths), 3600);
+        if (!cancelled && !error && data) {
+          for (const item of data) {
+            if (item.path && item.signedUrl) {
+              nextCache[item.path] = item.signedUrl;
+            }
+          }
+        }
+      }
+
+      if (cancelled) return;
+      if (Object.keys(nextCache).length === 0) return;
+      setSignedUrlCache((prev) => ({ ...prev, ...nextCache }));
     };
 
     void fetchSignedUrls();
@@ -223,11 +259,11 @@ export function QuestionManagement({
     };
   }, [questions, supabase, signedUrlCache]);
 
-  const uploadImageToStorage = async (file: File) => {
+  const uploadImageToStorage = async (file: File, bucket: string) => {
     const safeName = file.name.replace(/\s+/g, "-").toLowerCase();
     const path = `questions/${crypto.randomUUID()}-${Date.now()}-${safeName}`;
     const { data, error } = await supabase.storage
-      .from("question_images")
+      .from(bucket)
       .upload(path, file, {
         cacheControl: "3600",
         upsert: false,
@@ -240,11 +276,11 @@ export function QuestionManagement({
     };
   };
 
-  const uploadImagesIfNeeded = async (list: FormImage[]) => {
+  const uploadImagesIfNeeded = async (list: FormImage[], bucket: string) => {
     const results: FormImage[] = [];
     for (const image of list) {
       if (image.file) {
-        const { path } = await uploadImageToStorage(image.file);
+        const { path } = await uploadImageToStorage(image.file, bucket);
         results.push({
           ...image,
           storagePath: path,
@@ -263,6 +299,7 @@ export function QuestionManagement({
     setDifficulty("2");
     setCalculatorAllowed(false);
     setImages([]);
+    setAnswerImages([]);
     chapterSelectRef.current?.focus();
   };
 
@@ -284,6 +321,36 @@ export function QuestionManagement({
 
   const moveImage = (index: number, direction: "up" | "down") => {
     setImages((prev) => {
+      const next = [...prev];
+      const targetIndex = direction === "up" ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= next.length) {
+        return prev;
+      }
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      return next;
+    });
+  };
+
+  const handleAddAnswerImageFiles = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const files = event.target.files;
+    if (!files) return;
+    const next: FormImage[] = Array.from(files).map((file) => ({
+      id: `local-answer-${answerImageIdRef.current++}`,
+      url: URL.createObjectURL(file),
+      file,
+    }));
+    setAnswerImages((prev) => [...prev, ...next]);
+    event.target.value = "";
+  };
+
+  const handleRemoveAnswerImage = (index: number) => {
+    setAnswerImages((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const moveAnswerImage = (index: number, direction: "up" | "down") => {
+    setAnswerImages((prev) => {
       const next = [...prev];
       const targetIndex = direction === "up" ? index - 1 : index + 1;
       if (targetIndex < 0 || targetIndex >= next.length) {
@@ -337,8 +404,13 @@ export function QuestionManagement({
     setIsSubmitting(true);
 
     let readyImages: FormImage[] = [];
+    let readyAnswerImages: FormImage[] = [];
     try {
-      readyImages = await uploadImagesIfNeeded(images);
+      readyImages = await uploadImagesIfNeeded(images, "question_images");
+      readyAnswerImages = await uploadImagesIfNeeded(
+        answerImages,
+        "answer_images",
+      );
     } catch (error) {
       setIsSubmitting(false);
       setFeedback({
@@ -371,6 +443,7 @@ export function QuestionManagement({
 
     const createdQuestionId = question.id;
     let insertedImages: QuestionSummary["images"] | null = null;
+    let insertedAnswerImages: QuestionSummary["answerImages"] | null = null;
 
     if (readyImages.length > 0) {
       const { data: imageRows, error: imageError } = await supabase
@@ -399,6 +472,33 @@ export function QuestionManagement({
       });
     }
 
+    if (readyAnswerImages.length > 0) {
+      const { data: answerRows, error: answerError } = await supabase
+        .from("answer_images")
+        .insert(
+          readyAnswerImages.map((image, index) => ({
+            question_id: createdQuestionId,
+            storage_path: image.storagePath ?? image.url,
+            position: index + 1,
+          })),
+        )
+        .select("id, storage_path, position");
+
+      if (answerError) {
+        await supabase.from("questions").delete().eq("id", createdQuestionId);
+        setIsSubmitting(false);
+        setFeedback({
+          type: "error",
+          message: answerError.message ?? "保存答案图片失败，稍后重试。",
+        });
+        return;
+      }
+
+      insertedAnswerImages = (answerRows ?? []).slice().sort((a, b) => {
+        return a.position - b.position;
+      });
+    }
+
     const chapter = chosenChapterId
       ? (chapterMap.get(chosenChapterId) ?? null)
       : null;
@@ -413,6 +513,7 @@ export function QuestionManagement({
       calculator: question.calculator,
       marks: question.marks,
       images: insertedImages ?? [],
+      answerImages: insertedAnswerImages ?? [],
     };
 
     setQuestions((prev) => [newQuestion, ...prev]);
@@ -468,6 +569,7 @@ export function QuestionManagement({
     setEditDifficulty(String(question.difficulty));
     setEditCalculatorAllowed(question.calculator);
     editImageIdRef.current = 0;
+    editAnswerImageIdRef.current = 0;
     const sortedImages = question.images
       .slice()
       .sort((a, b) => a.position - b.position);
@@ -478,11 +580,23 @@ export function QuestionManagement({
         storagePath: image.storage_path,
       })),
     );
+
+    const sortedAnswerImages = question.answerImages
+      .slice()
+      .sort((a, b) => a.position - b.position);
+    setEditAnswerImages(
+      sortedAnswerImages.map((image) => ({
+        id: `existing-answer-${image.id}`,
+        url: image.storage_path,
+        storagePath: image.storage_path,
+      })),
+    );
   };
 
   const cancelEdit = () => {
     setEditingQuestionId(null);
     setEditImages([]);
+    setEditAnswerImages([]);
     setIsUpdating(false);
   };
 
@@ -506,6 +620,36 @@ export function QuestionManagement({
 
   const moveEditImage = (index: number, direction: "up" | "down") => {
     setEditImages((prev) => {
+      const next = [...prev];
+      const targetIndex = direction === "up" ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= next.length) {
+        return prev;
+      }
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      return next;
+    });
+  };
+
+  const handleEditAddAnswerImageFiles = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const files = event.target.files;
+    if (!files) return;
+    const next: FormImage[] = Array.from(files).map((file) => ({
+      id: `edit-answer-${editAnswerImageIdRef.current++}`,
+      url: URL.createObjectURL(file),
+      file,
+    }));
+    setEditAnswerImages((prev) => [...prev, ...next]);
+    event.target.value = "";
+  };
+
+  const handleEditRemoveAnswerImage = (index: number) => {
+    setEditAnswerImages((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const moveEditAnswerImage = (index: number, direction: "up" | "down") => {
+    setEditAnswerImages((prev) => {
       const next = [...prev];
       const targetIndex = direction === "up" ? index - 1 : index + 1;
       if (targetIndex < 0 || targetIndex >= next.length) {
@@ -562,8 +706,13 @@ export function QuestionManagement({
     setIsUpdating(true);
 
     let readyImages: FormImage[] = [];
+    let readyAnswerImages: FormImage[] = [];
     try {
-      readyImages = await uploadImagesIfNeeded(editImages);
+      readyImages = await uploadImagesIfNeeded(editImages, "question_images");
+      readyAnswerImages = await uploadImagesIfNeeded(
+        editAnswerImages,
+        "answer_images",
+      );
     } catch (error) {
       setIsUpdating(false);
       setFeedback({
@@ -600,16 +749,25 @@ export function QuestionManagement({
       .delete()
       .eq("question_id", editingQuestionId);
 
-    if (deleteImagesError) {
+    const { error: deleteAnswerImagesError } = await supabase
+      .from("answer_images")
+      .delete()
+      .eq("question_id", editingQuestionId);
+
+    if (deleteImagesError || deleteAnswerImagesError) {
       setIsUpdating(false);
       setFeedback({
         type: "error",
-        message: deleteImagesError.message ?? "更新图片列表失败。",
+        message:
+          deleteImagesError?.message ??
+          deleteAnswerImagesError?.message ??
+          "更新图片列表失败。",
       });
       return;
     }
 
     let nextImages: QuestionSummary["images"] = [];
+    let nextAnswerImages: QuestionSummary["answerImages"] = [];
 
     if (readyImages.length > 0) {
       const { data: newImages, error: insertImagesError } = await supabase
@@ -637,6 +795,34 @@ export function QuestionManagement({
       });
     }
 
+    if (readyAnswerImages.length > 0) {
+      const { data: newAnswerImages, error: insertAnswerImagesError } =
+        await supabase
+          .from("answer_images")
+          .insert(
+            readyAnswerImages.map((image, index) => ({
+              question_id: editingQuestionId,
+              storage_path: image.storagePath ?? image.url,
+              position: index + 1,
+            })),
+          )
+          .select("id, storage_path, position");
+
+      if (insertAnswerImagesError) {
+        setIsUpdating(false);
+        setFeedback({
+          type: "error",
+          message:
+            insertAnswerImagesError.message ?? "保存答案图片失败，稍后重试。",
+        });
+        return;
+      }
+
+      nextAnswerImages = (newAnswerImages ?? []).slice().sort((a, b) => {
+        return a.position - b.position;
+      });
+    }
+
     const chapter = chosenChapterId
       ? (chapterMap.get(chosenChapterId) ?? null)
       : null;
@@ -653,6 +839,7 @@ export function QuestionManagement({
               calculator: questionRow.calculator,
               marks: questionRow.marks,
               images: nextImages,
+              answerImages: nextAnswerImages,
             }
           : item,
       ),
@@ -791,7 +978,7 @@ export function QuestionManagement({
 
             <div className="space-y-3">
               <div>
-                <Label htmlFor="question-image">Images (Vertical Stack)</Label>
+                <Label htmlFor="question-image">Question Images</Label>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <Input
                     id="question-image"
@@ -860,6 +1047,84 @@ export function QuestionManagement({
                           size="icon-sm"
                           onClick={() => handleRemoveImage(index)}
                           aria-label="Remove image"
+                        >
+                          <Trash2 className="size-4 text-red-500" />
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="answer-image">Answer Images</Label>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Input
+                    id="answer-image"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleAddAnswerImageFiles}
+                    className="max-w-xl flex-1"
+                  />
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  上传答案图片，按列表顺序显示，可上下调整顺序。
+                </p>
+              </div>
+
+              {answerImages.length > 0 ? (
+                <ul className="space-y-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
+                  {answerImages.map((image, index) => (
+                    <li
+                      key={image.id}
+                      className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:gap-3"
+                    >
+                      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500 self-start">
+                        {index + 1}
+                      </span>
+                      <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
+                        <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
+                          <Image
+                            src={image.storagePath ?? image.url}
+                            alt={`答案预览 ${index + 1}`}
+                            width={1200}
+                            height={675}
+                            className="h-full w-full object-contain"
+                            sizes="(max-width: 768px) 100vw, 640px"
+                            unoptimized
+                          />
+                        </div>
+                      </div>
+                      <div className="ml-auto flex items-start gap-1 pt-1 sm:ml-0">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => moveAnswerImage(index, "up")}
+                          disabled={index === 0}
+                          aria-label="Move answer image up"
+                        >
+                          <ArrowUp className="size-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => moveAnswerImage(index, "down")}
+                          disabled={index === answerImages.length - 1}
+                          aria-label="Move answer image down"
+                        >
+                          <ArrowDown className="size-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => handleRemoveAnswerImage(index)}
+                          aria-label="Remove answer image"
                         >
                           <Trash2 className="size-4 text-red-500" />
                         </Button>
@@ -983,6 +1248,36 @@ export function QuestionManagement({
                               image.storage_path
                             }
                             alt={`Question ${question.id} image ${image.position}`}
+                            width={320}
+                            height={320}
+                            className="h-full w-full object-contain"
+                            sizes="(max-width: 768px) 60vw, 320px"
+                            unoptimized
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {question.answerImages.length > 0 &&
+                editingQuestionId !== question.id ? (
+                  <div className="border-t border-slate-100 bg-slate-50/60">
+                    <div className="px-4 pt-3 text-xs font-semibold text-slate-500">
+                      Answer Images
+                    </div>
+                    <div className="flex gap-3 overflow-x-auto px-4 py-3">
+                      {question.answerImages.map((image) => (
+                        <div
+                          key={image.id}
+                          className="flex h-32 min-w-[160px] max-w-[220px] flex-1 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+                          title={`Answer Image ${image.position}`}
+                        >
+                          <Image
+                            src={
+                              resolveImageSrc(image.storage_path) ??
+                              image.storage_path
+                            }
+                            alt={`Answer image for question ${question.id} position ${image.position}`}
                             width={320}
                             height={320}
                             className="h-full w-full object-contain"
@@ -1140,6 +1435,96 @@ export function QuestionManagement({
                                   size="icon-sm"
                                   onClick={() => handleEditRemoveImage(index)}
                                   aria-label="Remove image"
+                                >
+                                  <Trash2 className="size-4 text-red-500" />
+                                </Button>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+
+                    <div className="space-y-3">
+                      <div>
+                        <Label htmlFor="edit-answer-image">Answer Images</Label>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Input
+                            id="edit-answer-image"
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={handleEditAddAnswerImageFiles}
+                            className="max-w-xl flex-1"
+                          />
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500">
+                          上传答案图片，按列表顺序显示，可上下调整顺序。
+                        </p>
+                      </div>
+
+                      {editAnswerImages.length > 0 ? (
+                        <ul className="space-y-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
+                          {editAnswerImages.map((image, index) => (
+                            <li
+                              key={image.id}
+                              className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:gap-3"
+                            >
+                              <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500 self-start">
+                                {index + 1}
+                              </span>
+                              <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
+                                <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
+                                  <Image
+                                    src={
+                                      resolveImageSrc(
+                                        image.storagePath ?? image.url,
+                                      ) ?? image.url
+                                    }
+                                    alt={`答案预览 ${index + 1}`}
+                                    width={1200}
+                                    height={675}
+                                    className="h-full w-full object-contain"
+                                    sizes="(max-width: 768px) 100vw, 640px"
+                                    unoptimized
+                                  />
+                                </div>
+                              </div>
+                              <div className="ml-auto flex items-start gap-1 pt-1 sm:ml-0">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  onClick={() =>
+                                    moveEditAnswerImage(index, "up")
+                                  }
+                                  disabled={index === 0}
+                                  aria-label="Move answer image up"
+                                >
+                                  <ArrowUp className="size-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  onClick={() =>
+                                    moveEditAnswerImage(index, "down")
+                                  }
+                                  disabled={
+                                    index === editAnswerImages.length - 1
+                                  }
+                                  aria-label="Move answer image down"
+                                >
+                                  <ArrowDown className="size-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  onClick={() =>
+                                    handleEditRemoveAnswerImage(index)
+                                  }
+                                  aria-label="Remove answer image"
                                 >
                                   <Trash2 className="size-4 text-red-500" />
                                 </Button>

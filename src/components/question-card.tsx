@@ -15,6 +15,7 @@ type QuestionCardProps = {
     calculator: boolean;
     createdAt: string;
     images: QuestionImage[];
+    answerImages: QuestionImage[];
   };
 };
 
@@ -84,9 +85,33 @@ export function QuestionCard({ question }: QuestionCardProps) {
             ))}
           </div>
         </div>
-      ) : (
+      ) : null}
+
+      {question.answerImages.length > 0 ? (
+        <div className="px-4 pb-4">
+          <p className="mb-2 text-sm font-semibold text-slate-700">
+            Answer Images
+          </p>
+          <div className="flex flex-col space-y-0">
+            {question.answerImages.map((image) => (
+              <Image
+                key={image.id}
+                src={image.signedUrl ?? image.storage_path}
+                alt={`Answer for question ${question.id}`}
+                width={1600}
+                height={1200}
+                className="block h-auto w-full object-contain"
+                sizes="(max-width: 900px) 100vw, 900px"
+                unoptimized
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {question.images.length === 0 && question.answerImages.length === 0 ? (
         <div className="px-4 pb-6 text-sm text-slate-500">暂无图片内容。</div>
-      )}
+      ) : null}
     </article>
   );
 }
