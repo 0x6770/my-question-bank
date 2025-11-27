@@ -1,5 +1,5 @@
 import { BackToTopButton } from "@/components/back-to-top-button";
-import { QuestionCard } from "@/components/question-card";
+import { QuestionBrowser } from "@/components/question-browser";
 import { createClient } from "@/lib/supabase/server";
 import type { Tables } from "../../database.types";
 
@@ -30,6 +30,7 @@ export default async function Home() {
     .select(
       `
         id,
+        chapter_id,
         marks,
         difficulty,
         calculator,
@@ -48,8 +49,21 @@ export default async function Home() {
     )
     .order("created_at", { ascending: false });
 
+  const { data: subjects } = await supabase
+    .from("subjects")
+    .select("id, name")
+    .order("name", { ascending: true });
+
+  const { data: chapters } = await supabase
+    .from("chapters")
+    .select("id, name, subject_id, parent_chapter_id, position")
+    .order("position", { ascending: true });
+
   const questionImagePaths = new Set<string>();
   const answerImagePaths = new Set<string>();
+  const chapterMap = new Map(
+    (chapters ?? []).map((chapter) => [chapter.id, chapter]),
+  );
   const normalized = (questions ?? []).map((question) => {
     const rawQuestion = question as unknown as QuestionWithImages;
     const sortedImages = (rawQuestion.question_images ?? [])
@@ -72,6 +86,9 @@ export default async function Home() {
       difficulty: rawQuestion.difficulty,
       calculator: rawQuestion.calculator,
       createdAt: rawQuestion.created_at,
+      chapterId: rawQuestion.chapter_id ?? null,
+      subjectId:
+        chapterMap.get(rawQuestion.chapter_id ?? 0)?.subject_id ?? null,
       images: sortedImages,
       answerImages: sortedAnswerImages,
     };
@@ -137,14 +154,21 @@ export default async function Home() {
         </header>
         {normalized.length === 0 && !error ? (
           <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center text-slate-500">
-            暂无题目，请先在 Console / Questions 中创建。
+            暂无题目
           </div>
         ) : (
-          <div className="space-y-6">
-            {normalizedWithSigned.map((question) => (
-              <QuestionCard key={question.id} question={question} />
-            ))}
-          </div>
+          <QuestionBrowser
+            questions={normalizedWithSigned}
+            subjects={subjects ?? []}
+            chapters={
+              chapters?.map((chapter) => ({
+                id: chapter.id,
+                name: chapter.name,
+                subjectId: chapter.subject_id ?? null,
+                parentChapterId: chapter.parent_chapter_id ?? null,
+              })) ?? []
+            }
+          />
         )}
       </div>
       <BackToTopButton />
