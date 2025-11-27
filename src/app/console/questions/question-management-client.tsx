@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { QuestionCard } from "@/components/question-card";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Tables } from "../../../../database.types";
@@ -858,6 +859,28 @@ export function QuestionManagement({
     chapterSelectRef.current?.focus();
   };
 
+  const buildQuestionCardData = (question: QuestionSummary) => ({
+    id: question.id,
+    marks: question.marks,
+    difficulty: question.difficulty,
+    calculator: question.calculator,
+    createdAt: question.createdAt,
+    images: question.images
+      .slice()
+      .sort((a, b) => a.position - b.position)
+      .map((image) => ({
+        ...image,
+        signedUrl: resolveImageSrc(image.storage_path) ?? null,
+      })),
+    answerImages: question.answerImages
+      .slice()
+      .sort((a, b) => a.position - b.position)
+      .map((image) => ({
+        ...image,
+        signedUrl: resolveImageSrc(image.storage_path) ?? null,
+      })),
+  });
+
   const getChapterLabel = (question: QuestionSummary) => {
     if (!question.chapterId) {
       return null;
@@ -1165,8 +1188,10 @@ export function QuestionManagement({
           </div>
         ) : (
           <div className="space-y-4">
-            {questions.map((question) => (
-              <Card key={question.id} className="border-slate-200">
+            {questions.map((question) => {
+              const questionCardData = buildQuestionCardData(question);
+              return (
+                <Card key={question.id} className="border-slate-200">
                 <CardHeader className="border-b border-slate-100">
                   <CardTitle className="text-base font-semibold text-slate-800">
                     Question #{question.id}
@@ -1232,60 +1257,10 @@ export function QuestionManagement({
                     </Button>
                   </CardAction>
                 </CardHeader>
-                {question.images.length > 0 &&
-                editingQuestionId !== question.id ? (
+                {editingQuestionId !== question.id ? (
                   <div className="border-t border-slate-100 bg-slate-50/60">
-                    <div className="flex gap-3 overflow-x-auto px-4 py-3">
-                      {question.images.map((image) => (
-                        <div
-                          key={image.id}
-                          className="flex h-32 min-w-[160px] max-w-[220px] flex-1 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
-                          title={`Image ${image.position}`}
-                        >
-                          <Image
-                            src={
-                              resolveImageSrc(image.storage_path) ??
-                              image.storage_path
-                            }
-                            alt={`Question ${question.id} image ${image.position}`}
-                            width={320}
-                            height={320}
-                            className="h-full w-full object-contain"
-                            sizes="(max-width: 768px) 60vw, 320px"
-                            unoptimized
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                {question.answerImages.length > 0 &&
-                editingQuestionId !== question.id ? (
-                  <div className="border-t border-slate-100 bg-slate-50/60">
-                    <div className="px-4 pt-3 text-xs font-semibold text-slate-500">
-                      Answer Images
-                    </div>
-                    <div className="flex gap-3 overflow-x-auto px-4 py-3">
-                      {question.answerImages.map((image) => (
-                        <div
-                          key={image.id}
-                          className="flex h-32 min-w-[160px] max-w-[220px] flex-1 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
-                          title={`Answer Image ${image.position}`}
-                        >
-                          <Image
-                            src={
-                              resolveImageSrc(image.storage_path) ??
-                              image.storage_path
-                            }
-                            alt={`Answer image for question ${question.id} position ${image.position}`}
-                            width={320}
-                            height={320}
-                            className="h-full w-full object-contain"
-                            sizes="(max-width: 768px) 60vw, 320px"
-                            unoptimized
-                          />
-                        </div>
-                      ))}
+                    <div className="px-4 py-4">
+                      <QuestionCard question={questionCardData} />
                     </div>
                   </div>
                 ) : null}
@@ -1558,7 +1533,8 @@ export function QuestionManagement({
                   </form>
                 ) : null}
               </Card>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
