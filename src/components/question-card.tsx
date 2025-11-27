@@ -1,9 +1,9 @@
 /* eslint-disable react/jsx-no-useless-fragment */
 "use client";
 
+import { Maximize2, X } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
-import { Maximize2, X } from "lucide-react";
 import { Button } from "./ui/button";
 
 type QuestionImage = {
@@ -139,7 +139,9 @@ export function QuestionCard({ question }: QuestionCardProps) {
                     ))}
                   </div>
                 </div>
-                <span className="text-xs text-slate-500">Marks: {question.marks}</span>
+                <span className="text-xs text-slate-500">
+                  Marks: {question.marks}
+                </span>
               </div>
               <Button
                 variant="ghost"
