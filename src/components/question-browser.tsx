@@ -6,6 +6,16 @@ import { QuestionCard } from "@/components/question-card";
 import { Button } from "@/components/ui/button";
 
 type QuestionBrowserProps = {
+  subjects: { id: number; name: string }[];
+  chapters: {
+    id: number;
+    name: string;
+    subjectId: number | null;
+    parentChapterId: number | null;
+  }[];
+};
+
+type QuestionResult = {
   questions: Array<{
     id: number;
     marks: number;
@@ -27,13 +37,6 @@ type QuestionBrowserProps = {
     chapterId: number | null;
     subjectId: number | null;
   }>;
-  subjects: { id: number; name: string }[];
-  chapters: {
-    id: number;
-    name: string;
-    subjectId: number | null;
-    parentChapterId: number | null;
-  }[];
 };
 
 const difficultyOptions = [
@@ -43,40 +46,20 @@ const difficultyOptions = [
   { value: 4, label: "Challenge" },
 ];
 
-export function QuestionBrowser({
-  questions,
-  subjects,
-  chapters,
-}: QuestionBrowserProps) {
+export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
   const [hierarchySelection, setHierarchySelection] = useState<string>("all");
   const [difficultySelections, setDifficultySelections] = useState<Set<number>>(
     new Set(),
   );
+  const [questions, setQuestions] = useState<QuestionResult["questions"]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [hierarchyOpen, setHierarchyOpen] = useState(false);
   const [activeSubjectId, setActiveSubjectId] = useState<number | null>(null);
   const [activeParentChapterId, setActiveParentChapterId] = useState<
     number | null
   >(null);
   const hierarchyRef = useRef<HTMLDivElement>(null);
-
-  const chapterSubjectMap = useMemo(() => {
-    const map = new Map<number, number | null>();
-    for (const chapter of chapters) {
-      map.set(chapter.id, chapter.subjectId);
-    }
-    return map;
-  }, [chapters]);
-
-  const childChapterMap = useMemo(() => {
-    const map = new Map<number, number[]>();
-    for (const chapter of chapters) {
-      if (chapter.parentChapterId == null) continue;
-      const list = map.get(chapter.parentChapterId) ?? [];
-      list.push(chapter.id);
-      map.set(chapter.parentChapterId, list);
-    }
-    return map;
-  }, [chapters]);
 
   const toggleDifficulty = (value: number) => {
     setDifficultySelections((prev) => {
@@ -139,68 +122,50 @@ export function QuestionBrowser({
     }
   }, [chapters, hierarchySelection]);
 
-  const filtered = useMemo(() => {
-    const selection = (() => {
-      if (hierarchySelection === "all") return { type: "all" } as const;
-      const [kind, rawId] = hierarchySelection.split(":");
-      const numericId = Number.parseInt(rawId, 10);
-      if (!Number.isFinite(numericId)) return { type: "all" } as const;
-      if (kind === "subject") {
-        return { type: "subject", subjectId: numericId } as const;
-      }
-      if (kind === "chapter") {
-        const subjectId = chapterSubjectMap.get(numericId) ?? null;
-        return {
-          type: "chapter",
-          chapterId: numericId,
-          subjectId,
-        } as const;
-      }
-      return { type: "all" } as const;
-    })();
-
-    const isDescendant = (parentId: number, targetId: number) => {
-      const visited = new Set<number>();
-      const stack = [...(childChapterMap.get(parentId) ?? [])];
-      while (stack.length > 0) {
-        const current = stack.pop();
-        if (current == null || visited.has(current)) continue;
-        if (current === targetId) return true;
-        visited.add(current);
-        const children = childChapterMap.get(current);
-        if (children) {
-          stack.push(...children);
+  useEffect(() => {
+    const controller = new AbortController();
+    const load = async () => {
+      setIsLoading(true);
+      setFetchError(null);
+      try {
+        const params = new URLSearchParams();
+        if (hierarchySelection.startsWith("subject:")) {
+          const [, id] = hierarchySelection.split(":");
+          params.set("subjectId", id);
+        } else if (hierarchySelection.startsWith("chapter:")) {
+          const [, id] = hierarchySelection.split(":");
+          params.set("chapterId", id);
         }
+        if (difficultySelections.size > 0) {
+          params.set(
+            "difficulties",
+            Array.from(difficultySelections).join(","),
+          );
+        }
+        const response = await fetch(`/api/questions?${params.toString()}`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error("加载题目失败");
+        }
+        const data: QuestionResult = await response.json();
+        setQuestions(data.questions);
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          setFetchError(
+            error instanceof Error
+              ? error.message
+              : "加载题目失败，请稍后重试。",
+          );
+        }
+      } finally {
+        setIsLoading(false);
       }
-      return false;
     };
 
-    return questions.filter((question) => {
-      if (selection.type === "subject") {
-        if (question.subjectId !== selection.subjectId) return false;
-      } else if (selection.type === "chapter") {
-        const chapterId = question.chapterId;
-        const matchesChapter =
-          chapterId === selection.chapterId ||
-          (chapterId != null && isDescendant(selection.chapterId, chapterId));
-        if (!matchesChapter) return false;
-      }
-      if (
-        difficultySelections.size > 0 &&
-        !difficultySelections.has(question.difficulty)
-      ) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [
-    hierarchySelection,
-    difficultySelections,
-    questions,
-    chapterSubjectMap,
-    childChapterMap,
-  ]);
+    void load();
+    return () => controller.abort();
+  }, [difficultySelections, hierarchySelection]);
 
   const currentLabel = useMemo(() => {
     if (hierarchySelection === "all") return "All Subjects / Chapters";
@@ -421,7 +386,11 @@ export function QuestionBrowser({
 
           <div className="flex flex-col justify-between gap-3 md:items-end md:justify-center">
             <div className="text-sm font-semibold text-slate-700">
-              当前共 {filtered.length} 条结果
+              {isLoading
+                ? "正在加载..."
+                : `当前共 ${questions.length} 条结果${
+                    fetchError ? "（加载出错）" : ""
+                  }`}
             </div>
             <Button
               variant="outline"
@@ -435,15 +404,26 @@ export function QuestionBrowser({
         </div>
       </div>
 
+      {fetchError ? (
+        <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {fetchError}
+        </div>
+      ) : null}
+
       <div className="space-y-6">
-        {filtered.map((question) => (
-          <QuestionCard key={question.id} question={question} />
-        ))}
-        {filtered.length === 0 ? (
+        {isLoading ? (
+          <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center text-slate-500">
+            正在加载题目...
+          </div>
+        ) : questions.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center text-slate-500">
             没有符合筛选条件的题目。
           </div>
-        ) : null}
+        ) : (
+          questions.map((question) => (
+            <QuestionCard key={question.id} question={question} />
+          ))
+        )}
       </div>
     </div>
   );
