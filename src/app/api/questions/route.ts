@@ -27,8 +27,13 @@ export async function GET(request: Request) {
     .from("chapters")
     .select("id, name, subject_id, parent_chapter_id");
 
+  const { data: subjects } = await supabase.from("subjects").select("id, name");
+
   const chapterMap = new Map(
     (chapters ?? []).map((chapter) => [chapter.id, chapter]),
+  );
+  const subjectMap = new Map(
+    (subjects ?? []).map((subject) => [subject.id, subject.name]),
   );
 
   const childChapterMap = new Map<number, number[]>();
@@ -157,6 +162,7 @@ export async function GET(request: Request) {
     const chapter = row.chapter_id
       ? (chapterMap.get(row.chapter_id) ?? null)
       : null;
+    const subjectIdFromChapter = chapter?.subject_id ?? null;
 
     return {
       id: row.id,
@@ -165,7 +171,12 @@ export async function GET(request: Request) {
       calculator: row.calculator,
       createdAt: row.created_at,
       chapterId: row.chapter_id ?? null,
-      subjectId: chapter?.subject_id ?? null,
+      chapterName: chapter?.name ?? null,
+      subjectId: subjectIdFromChapter,
+      subjectName:
+        subjectIdFromChapter != null
+          ? (subjectMap.get(subjectIdFromChapter) ?? null)
+          : null,
       images: sortedImages,
       answerImages: sortedAnswerImages,
     };

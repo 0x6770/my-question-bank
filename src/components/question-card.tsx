@@ -20,6 +20,10 @@ type QuestionCardProps = {
     difficulty: number;
     calculator: boolean;
     createdAt: string;
+    subjectId?: number | null;
+    subjectName?: string | null;
+    chapterId?: number | null;
+    chapterName?: string | null;
     images: QuestionImage[];
     answerImages: QuestionImage[];
   };
@@ -41,6 +45,16 @@ export function QuestionCard({ question }: QuestionCardProps) {
     level: 0,
     accent: "text-slate-500",
   };
+  const subjectLabel =
+    question.subjectName ??
+    (question.subjectId != null
+      ? `Subject #${question.subjectId}`
+      : "Subject N/A");
+  const chapterLabel =
+    question.chapterName ??
+    (question.chapterId != null
+      ? `Chapter #${question.chapterId}`
+      : "Chapter N/A");
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
   const hasImages =
     (question.images?.length ?? 0) > 0 ||
@@ -59,6 +73,9 @@ export function QuestionCard({ question }: QuestionCardProps) {
             <p className="text-xs uppercase tracking-wide text-slate-400">
               Question #{question.id}
             </p>
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
+              {subjectLabel} {chapterLabel ? ` > ${chapterLabel}` : ""}
+            </span>
           </div>
           <div className="flex items-center gap-3 text-sm">
             <span className={`font-semibold ${meta.accent}`}>{meta.label}</span>
@@ -142,6 +159,15 @@ export function QuestionCard({ question }: QuestionCardProps) {
                 <span className="text-xs text-slate-500">
                   Marks: {question.marks}
                 </span>
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <span className="truncate max-w-[220px]">
+                    Subject: {subjectLabel}
+                  </span>
+                  <span className="text-slate-300">|</span>
+                  <span className="truncate max-w-[240px]">
+                    Chapter: {chapterLabel}
+                  </span>
+                </div>
               </div>
               <Button
                 variant="ghost"
