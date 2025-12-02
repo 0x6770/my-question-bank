@@ -79,28 +79,26 @@ export async function GET(request: Request) {
     return NextResponse.json({ questions: [] });
   }
 
-  let query = supabase
-    .from("questions")
-    .select<`${"id" | "chapter_id" | "marks" | "difficulty" | "calculator" | "created_at"}, question_images(id, storage_path, position), answer_images(id, storage_path, position)`>(
-      `
-      id,
-      chapter_id,
-      marks,
-      difficulty,
-      calculator,
-      created_at,
-      question_images (
+  let query = supabase.from("questions").select(
+    `
         id,
-        storage_path,
-        position
-      ),
-      answer_images (
-        id,
-        storage_path,
-        position
-      )
-    `,
-    );
+        chapter_id,
+        marks,
+        difficulty,
+        calculator,
+        created_at,
+        question_images (
+          id,
+          storage_path,
+          position
+        ),
+        answer_images (
+          id,
+          storage_path,
+          position
+        )
+      `,
+  );
 
   if (allowedChapterIds) {
     query = query.in("chapter_id", allowedChapterIds);
