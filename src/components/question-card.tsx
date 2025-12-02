@@ -143,31 +143,25 @@ export function QuestionCard({ question }: QuestionCardProps) {
                 <p className="text-xs uppercase tracking-wide text-slate-500">
                   Question #{question.id}
                 </p>
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                  {subjectLabel} {chapterLabel ? ` > ${chapterLabel}` : ""}
+                </span>
                 <div className="flex items-center gap-2">
                   <span className={`font-semibold ${meta.accent}`}>
                     {meta.label}
                   </span>
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: 4 }).map((_, index) => (
-                      <span
-                        key={`full-${question.id}-difficulty-${index}`}
-                        className={`h-2.5 w-2.5 rounded-full ${index < meta.level ? "bg-amber-500" : "bg-slate-200"}`}
-                      />
-                    ))}
-                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: 4 }).map((_, index) => (
+                    <span
+                      key={`full-${question.id}-difficulty-${index}`}
+                      className={`h-2.5 w-2.5 rounded-full ${index < meta.level ? "bg-amber-500" : "bg-slate-200"}`}
+                    />
+                  ))}
                 </div>
                 <span className="text-xs text-slate-500">
                   Marks: {question.marks}
                 </span>
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <span className="truncate max-w-[220px]">
-                    Subject: {subjectLabel}
-                  </span>
-                  <span className="text-slate-300">|</span>
-                  <span className="truncate max-w-[240px]">
-                    Chapter: {chapterLabel}
-                  </span>
-                </div>
               </div>
               <Button
                 variant="ghost"
