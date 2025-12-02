@@ -209,6 +209,16 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
     );
   }, [activeParentChapterId, chapters]);
 
+  const chaptersWithChildren = useMemo(() => {
+    const parents = new Set<number>();
+    chapters.forEach((chapter) => {
+      if (chapter.parentChapterId != null) {
+        parents.add(chapter.parentChapterId);
+      }
+    });
+    return parents;
+  }, [chapters]);
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-slate-200 bg-slate-100/70 p-4 sm:p-5">
@@ -311,7 +321,9 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
                                 }}
                               >
                                 {chapter.name}
-                                <span className="text-slate-400">›</span>
+                                {chaptersWithChildren.has(chapter.id) ? (
+                                  <span className="text-slate-400">›</span>
+                                ) : null}
                               </button>
                             ))
                           )}
@@ -384,7 +396,7 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
             </div>
           </div>
 
-          <div className="flex flex-col justify-between gap-3 md:items-end md:justify-center">
+          <div className="ml-auto flex flex-col justify-between gap-3 md:items-end md:justify-center">
             <div className="text-sm font-semibold text-slate-700">
               {isLoading
                 ? "正在加载..."
