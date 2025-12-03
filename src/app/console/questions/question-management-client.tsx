@@ -3,7 +3,6 @@
 import {
   ArrowDown,
   ArrowUp,
-  ImageIcon,
   Loader2,
   Pencil,
   Plus,
@@ -13,7 +12,6 @@ import {
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { QuestionCard } from "@/components/question-card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -880,20 +878,6 @@ export function QuestionManagement({
       })),
   });
 
-  const getChapterLabel = (question: QuestionSummary) => {
-    if (!question.chapterId) {
-      return null;
-    }
-    const label = chapterLabelById.get(question.chapterId);
-    if (label) {
-      return label;
-    }
-    if (question.subjectName && question.chapterName) {
-      return `${question.subjectName} > ${question.chapterName}`;
-    }
-    return question.chapterName ?? null;
-  };
-
   return (
     <div className="flex flex-1 flex-col gap-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
@@ -1197,33 +1181,6 @@ export function QuestionManagement({
                     </CardTitle>
                     <CardDescription className="flex flex-wrap items-center gap-3 text-xs">
                       <span>创建于：{formatDateTime(question.createdAt)}</span>
-                      {(() => {
-                        const chapterLabel = getChapterLabel(question);
-                        return chapterLabel ? (
-                          <Badge variant="outline">{chapterLabel}</Badge>
-                        ) : (
-                          <Badge variant="secondary">未设置章节</Badge>
-                        );
-                      })()}
-                      <Badge
-                        variant={question.calculator ? "outline" : "secondary"}
-                      >
-                        {question.calculator ? "可用计算器" : "禁用计算器"}
-                      </Badge>
-                      <span className="flex items-center gap-1 text-slate-500">
-                        <ScrollText className="size-4" />
-                        难度 {question.difficulty}
-                      </span>
-                      <span className="flex items-center gap-1 text-slate-500">
-                        <ScrollText className="size-4" />
-                        {question.marks} 分
-                      </span>
-                      <span className="flex items-center gap-1 text-slate-500">
-                        <ImageIcon className="size-4" />
-                        {`${question.images.length} image${
-                          question.images.length === 1 ? "" : "s"
-                        }`}
-                      </span>
                     </CardDescription>
                     <CardAction className="flex items-center gap-2">
                       <Button
