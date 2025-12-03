@@ -37,6 +37,8 @@ type QuestionResult = {
     chapterId: number | null;
     subjectId: number | null;
   }>;
+  hasMore?: boolean;
+  page?: number;
 };
 
 const difficultyOptions = [
@@ -59,6 +61,8 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
   const [activeParentChapterId, setActiveParentChapterId] = useState<
     number | null
   >(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
   const hierarchyRef = useRef<HTMLDivElement>(null);
 
   const toggleDifficulty = (value: number) => {
@@ -123,6 +127,11 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
   }, [chapters, hierarchySelection]);
 
   useEffect(() => {
+    // Reset to first page when filters change
+    setPage(1);
+  }, [difficultySelections, hierarchySelection]);
+
+  useEffect(() => {
     const controller = new AbortController();
     const load = async () => {
       setIsLoading(true);
@@ -136,6 +145,7 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
           const [, id] = hierarchySelection.split(":");
           params.set("chapterId", id);
         }
+        params.set("page", String(page));
         if (difficultySelections.size > 0) {
           params.set(
             "difficulties",
@@ -150,6 +160,7 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
         }
         const data: QuestionResult = await response.json();
         setQuestions(data.questions);
+        setHasMore(Boolean(data.hasMore));
       } catch (error) {
         if (!(error instanceof DOMException && error.name === "AbortError")) {
           setFetchError(
@@ -165,7 +176,7 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
 
     void load();
     return () => controller.abort();
-  }, [difficultySelections, hierarchySelection]);
+  }, [difficultySelections, hierarchySelection, page]);
 
   const currentLabel = useMemo(() => {
     if (hierarchySelection === "all") return "All Subjects / Chapters";
@@ -218,6 +229,9 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
     });
     return parents;
   }, [chapters]);
+
+  const filtersActive =
+    hierarchySelection !== "all" || difficultySelections.size > 0;
 
   return (
     <div className="space-y-6">
@@ -397,18 +411,12 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
           </div>
 
           <div className="ml-auto flex flex-col justify-between gap-3 md:items-end md:justify-center">
-            <div className="text-sm font-semibold text-slate-700">
-              {isLoading
-                ? "正在加载..."
-                : `当前共 ${questions.length} 条结果${
-                    fetchError ? "（加载出错）" : ""
-                  }`}
-            </div>
             <Button
               variant="outline"
               size="sm"
               onClick={clearFilters}
               className="w-full max-w-xs md:w-auto"
+              disabled={!filtersActive}
             >
               清空筛选
             </Button>
@@ -432,9 +440,30 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
             没有符合筛选条件的题目。
           </div>
         ) : (
-          questions.map((question) => (
-            <QuestionCard key={question.id} question={question} />
-          ))
+          <>
+            {questions.map((question) => (
+              <QuestionCard key={question.id} question={question} />
+            ))}
+            <div className="flex items-center justify-end gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={page <= 1 || isLoading}
+              >
+                上一页
+              </Button>
+              <span className="text-sm text-slate-600">第 {page} 页</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((prev) => prev + 1)}
+                disabled={!hasMore || isLoading}
+              >
+                下一页
+              </Button>
+            </div>
+          </>
         )}
       </div>
     </div>

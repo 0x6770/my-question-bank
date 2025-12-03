@@ -10,6 +10,7 @@ export async function GET(request: Request) {
   const subjectIdParam = searchParams.get("subjectId");
   const chapterIdParam = searchParams.get("chapterId");
   const difficultiesParam = searchParams.get("difficulties");
+  const pageParam = searchParams.get("page");
 
   const subjectId = subjectIdParam ? Number.parseInt(subjectIdParam, 10) : null;
   const chapterId = chapterIdParam ? Number.parseInt(chapterIdParam, 10) : null;
@@ -22,6 +23,11 @@ export async function GET(request: Request) {
             .filter((value) => Number.isFinite(value)),
         )
       : null;
+  const page = pageParam ? Number.parseInt(pageParam, 10) : 1;
+  const safePage = Number.isFinite(page) && page > 0 ? page : 1;
+  const pageSize = 20;
+  const offset = (safePage - 1) * pageSize;
+  const fetchLimit = pageSize + 1; // +1 用于判定是否还有下一页
 
   const { data: chapters } = await supabase
     .from("chapters")
@@ -76,11 +82,13 @@ export async function GET(request: Request) {
   }
 
   if (allowedChapterIds && allowedChapterIds.length === 0) {
-    return NextResponse.json({ questions: [] });
+    return NextResponse.json({ questions: [], hasMore: false, page: safePage });
   }
 
-  let query = supabase.from("questions").select(
-    `
+  let query = supabase
+    .from("questions")
+    .select(
+      `
         id,
         chapter_id,
         marks,
@@ -98,7 +106,8 @@ export async function GET(request: Request) {
           position
         )
       `,
-  );
+    )
+    .range(offset, offset + fetchLimit - 1);
 
   if (allowedChapterIds) {
     query = query.in("chapter_id", allowedChapterIds);
@@ -141,7 +150,12 @@ export async function GET(request: Request) {
   const questionImagePaths = new Set<string>();
   const answerImagePaths = new Set<string>();
 
-  const normalized = (questions ?? []).map((question) => {
+  const hasMore = (questions?.length ?? 0) > pageSize;
+  const limitedQuestions = hasMore
+    ? (questions ?? []).slice(0, pageSize)
+    : (questions ?? []);
+
+  const normalized = limitedQuestions.map((question) => {
     const row = question as unknown as QuestionRow;
     const sortedImages = (row.question_images ?? [])
       .slice()
@@ -219,5 +233,5 @@ export async function GET(request: Request) {
     })),
   }));
 
-  return NextResponse.json({ questions: withSigned });
+  return NextResponse.json({ questions: withSigned, hasMore, page: safePage });
 }
