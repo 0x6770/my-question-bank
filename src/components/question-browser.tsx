@@ -75,12 +75,18 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
       }
       return next;
     });
+    setPage(1);
+  };
+
+  const selectHierarchy = (value: string) => {
+    setHierarchySelection(value);
+    setPage(1);
   };
 
   const clearFilters = () => {
-    setHierarchySelection("all");
     setDifficultySelections(new Set());
     setActiveSubjectId(null);
+    selectHierarchy("all");
   };
 
   useEffect(() => {
@@ -125,11 +131,6 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
       }
     }
   }, [chapters, hierarchySelection]);
-
-  useEffect(() => {
-    // Reset to first page when filters change
-    setPage(1);
-  }, [difficultySelections, hierarchySelection]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -258,7 +259,7 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
                         type="button"
                         className={`flex w-full items-center justify-between px-3 py-2 text-sm font-semibold ${hierarchySelection === "all" ? "bg-slate-50 text-slate-900" : "text-slate-700 hover:bg-slate-50"}`}
                         onClick={() => {
-                          setHierarchySelection("all");
+                          selectHierarchy("all");
                           setHierarchyOpen(false);
                           setActiveSubjectId(null);
                           setActiveParentChapterId(null);
@@ -279,7 +280,7 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
                             setActiveParentChapterId(null);
                           }}
                           onClick={() => {
-                            setHierarchySelection(`subject:${subject.id}`);
+                            selectHierarchy(`subject:${subject.id}`);
                             setHierarchyOpen(false);
                             setActiveParentChapterId(null);
                           }}
@@ -301,9 +302,7 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
                             type="button"
                             className={`flex w-full items-center justify-between px-3 py-2 text-sm font-medium ${hierarchySelection === `subject:${activeSubjectId}` ? "bg-white text-slate-900" : "text-slate-700 hover:bg-white"}`}
                             onClick={() => {
-                              setHierarchySelection(
-                                `subject:${activeSubjectId}`,
-                              );
+                              selectHierarchy(`subject:${activeSubjectId}`);
                               setHierarchyOpen(false);
                               setActiveParentChapterId(null);
                             }}
@@ -328,9 +327,7 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
                                 }
                                 onClick={() => {
                                   setActiveParentChapterId(chapter.id);
-                                  setHierarchySelection(
-                                    `chapter:${chapter.id}`,
-                                  );
+                                  selectHierarchy(`chapter:${chapter.id}`);
                                   setHierarchyOpen(false);
                                 }}
                               >
@@ -361,7 +358,7 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
                               type="button"
                               className={`flex w-full items-center justify-between px-3 py-2 text-sm font-medium ${hierarchySelection === `chapter:${chapter.id}` ? "bg-slate-50 text-slate-900" : "text-slate-700 hover:bg-slate-50"}`}
                               onClick={() => {
-                                setHierarchySelection(`chapter:${chapter.id}`);
+                                selectHierarchy(`chapter:${chapter.id}`);
                                 setHierarchyOpen(false);
                               }}
                             >
