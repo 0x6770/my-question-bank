@@ -862,6 +862,9 @@ export function QuestionManagement({
     difficulty: question.difficulty,
     calculator: question.calculator,
     createdAt: question.createdAt,
+    chapterId: question.chapterId,
+    chapterName: question.chapterName,
+    subjectName: question.subjectName,
     images: question.images
       .slice()
       .sort((a, b) => a.position - b.position)
