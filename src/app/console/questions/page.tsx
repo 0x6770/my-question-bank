@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import type { Tables } from "../../../../database.types";
 import { QuestionManagement } from "./question-management-client";
 
+const PAGE_SIZE = 20;
+
 type SubjectRow = Tables<"subjects">;
 type ChapterRow = Pick<
   Tables<"chapters">,
@@ -87,10 +89,16 @@ export default async function ConsoleQuestionsPage() {
         )
       `,
       )
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .range(0, PAGE_SIZE),
   ]);
 
-  const questionSummaries: QuestionSummary[] = (questions ?? []).map(
+  const hasMoreInitial = (questions?.length ?? 0) > PAGE_SIZE;
+  const limitedQuestions = hasMoreInitial
+    ? (questions ?? []).slice(0, PAGE_SIZE)
+    : (questions ?? []);
+
+  const questionSummaries: QuestionSummary[] = limitedQuestions.map(
     (question) => {
       const rawQuestion = question as unknown as {
         id: number;
@@ -166,6 +174,7 @@ export default async function ConsoleQuestionsPage() {
     <QuestionManagement
       initialChapters={chapterSummaries}
       initialQuestions={questionSummaries}
+      initialHasMore={hasMoreInitial}
       loadError={
         chaptersError || questionsError
           ? "无法加载题目数据，请稍后重试。"

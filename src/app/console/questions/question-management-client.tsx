@@ -10,7 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QuestionCard } from "@/components/question-card";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,11 +49,13 @@ type QuestionSummary = {
     id: number;
     storage_path: string;
     position: number;
+    signedUrl?: string | null;
   }[];
   answerImages: {
     id: number;
     storage_path: string;
     position: number;
+    signedUrl?: string | null;
   }[];
 };
 
@@ -64,6 +66,7 @@ type Feedback =
 type QuestionManagementProps = {
   initialChapters: ChapterRow[];
   initialQuestions: QuestionSummary[];
+  initialHasMore: boolean;
   loadError: string | null;
 };
 
@@ -72,6 +75,36 @@ type FormImage = {
   url: string;
   storagePath?: string;
   file?: File;
+};
+
+const PAGE_SIZE = 20;
+
+type QuestionApiResponse = {
+  questions: Array<{
+    id: number;
+    marks: number;
+    difficulty: number;
+    calculator: boolean;
+    createdAt: string;
+    chapterId: number | null;
+    chapterName?: string | null;
+    subjectName?: string | null;
+    subjectId?: number | null;
+    images: {
+      id: number;
+      storage_path: string;
+      position: number;
+      signedUrl?: string | null;
+    }[];
+    answerImages: {
+      id: number;
+      storage_path: string;
+      position: number;
+      signedUrl?: string | null;
+    }[];
+  }>;
+  hasMore?: boolean;
+  page?: number;
 };
 
 function buildChapterLabelMap(chapters: ChapterRow[]) {
@@ -122,6 +155,7 @@ function isBlobUrl(value: string) {
 export function QuestionManagement({
   initialChapters,
   initialQuestions,
+  initialHasMore,
   loadError,
 }: QuestionManagementProps) {
   const supabase = useMemo(() => createClient(), []);
@@ -149,6 +183,10 @@ export function QuestionManagement({
 
   const [questions, setQuestions] =
     useState<QuestionSummary[]>(initialQuestions);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(initialHasMore);
+  const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
   const [chapterId, setChapterId] = useState<string>("");
   const [marks, setMarks] = useState<string>("");
   const [difficulty, setDifficulty] = useState<string>("2");
@@ -190,6 +228,95 @@ export function QuestionManagement({
     return signedUrlCache[storagePath];
   };
 
+  const mapApiQuestions = useCallback(
+    (apiQuestions: QuestionApiResponse["questions"]): QuestionSummary[] =>
+      apiQuestions.map((item) => {
+        const chapter = item.chapterId
+          ? (chapterMap.get(item.chapterId) ?? null)
+          : null;
+        const resolvedChapterName = item.chapterName ?? chapter?.name ?? null;
+        const resolvedSubjectName =
+          item.subjectName ?? chapter?.subject?.name ?? null;
+
+        return {
+          id: item.id,
+          chapterId: item.chapterId,
+          chapterName: resolvedChapterName,
+          subjectName: resolvedSubjectName,
+          createdAt: item.createdAt,
+          difficulty: item.difficulty,
+          calculator: item.calculator,
+          marks: item.marks,
+          images: item.images.map((image) => ({
+            id: image.id,
+            storage_path: image.storage_path,
+            position: image.position,
+            signedUrl: image.signedUrl,
+          })),
+          answerImages: item.answerImages.map((image) => ({
+            id: image.id,
+            storage_path: image.storage_path,
+            position: image.position,
+            signedUrl: image.signedUrl,
+          })),
+        };
+      }),
+    [chapterMap],
+  );
+
+  const primeSignedUrlCache = useCallback((list: QuestionSummary[]) => {
+    const nextCache: Record<string, string> = {};
+    for (const question of list) {
+      for (const image of question.images) {
+        if (image.signedUrl) {
+          nextCache[image.storage_path] = image.signedUrl;
+        }
+      }
+      for (const image of question.answerImages) {
+        if (image.signedUrl) {
+          nextCache[image.storage_path] = image.signedUrl;
+        }
+      }
+    }
+    if (Object.keys(nextCache).length > 0) {
+      setSignedUrlCache((prev) => ({ ...prev, ...nextCache }));
+    }
+  }, []);
+
+  const loadQuestionsPage = useCallback(
+    async (targetPage: number) => {
+      const safePage = Math.max(1, targetPage);
+      setIsLoadingQuestions(true);
+      setListError(null);
+      try {
+        const response = await fetch(`/api/questions?page=${safePage}`);
+        if (!response.ok) {
+          throw new Error("加载题目列表失败，请稍后重试。");
+        }
+        const data = (await response.json()) as QuestionApiResponse;
+        const mapped = mapApiQuestions(data.questions ?? []);
+        setQuestions(mapped);
+        setHasMore(Boolean(data.hasMore));
+        setPage(data.page && data.page > 0 ? data.page : safePage);
+        setBusyQuestionId(null);
+        setEditingQuestionId(null);
+        setEditImages([]);
+        setEditAnswerImages([]);
+        setIsUpdating(false);
+        primeSignedUrlCache(mapped);
+      } catch (error) {
+        setListError(
+          error instanceof Error
+            ? error.message
+            : "加载题目列表失败，请稍后重试。",
+        );
+      } finally {
+        setIsLoadingQuestions(false);
+      }
+    },
+    [mapApiQuestions, primeSignedUrlCache],
+  );
+
   useEffect(() => {
     const questionPaths = new Set<string>();
     const answerPaths = new Set<string>();
@@ -198,12 +325,18 @@ export function QuestionManagement({
         if (isBlobUrl(image.storage_path)) {
           continue;
         }
+        if (image.signedUrl) {
+          continue;
+        }
         if (!signedUrlCache[image.storage_path]) {
           questionPaths.add(image.storage_path);
         }
       }
       for (const image of question.answerImages) {
         if (isBlobUrl(image.storage_path)) {
+          continue;
+        }
+        if (image.signedUrl) {
           continue;
         }
         if (!signedUrlCache[image.storage_path]) {
@@ -514,13 +647,19 @@ export function QuestionManagement({
       answerImages: insertedAnswerImages ?? [],
     };
 
-    setQuestions((prev) => [newQuestion, ...prev]);
     setFeedback({
       type: "success",
       message: "题目已创建成功。",
     });
     setIsSubmitting(false);
     resetForm();
+    setQuestions((prev) => {
+      const next = [newQuestion, ...prev];
+      setHasMore((prevHasMore) => prevHasMore || next.length > PAGE_SIZE);
+      return next.slice(0, PAGE_SIZE);
+    });
+    setPage(1);
+    void loadQuestionsPage(1);
   };
 
   const handleDelete = async (questionId: number) => {
@@ -552,11 +691,14 @@ export function QuestionManagement({
       return;
     }
 
+    const nextPage = questions.length <= 1 && page > 1 ? page - 1 : page;
     setQuestions((prev) => prev.filter((item) => item.id !== questionId));
     setFeedback({
       type: "success",
       message: "题目已删除。",
     });
+    setPage(nextPage);
+    void loadQuestionsPage(nextPage);
   };
 
   const beginEdit = (question: QuestionSummary) => {
@@ -851,6 +993,16 @@ export function QuestionManagement({
     cancelEdit();
   };
 
+  const handlePrevPage = () => {
+    if (page <= 1 || isLoadingQuestions) return;
+    void loadQuestionsPage(page - 1);
+  };
+
+  const handleNextPage = () => {
+    if (!hasMore || isLoadingQuestions) return;
+    void loadQuestionsPage(page + 1);
+  };
+
   const scrollToForm = () => {
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     chapterSelectRef.current?.focus();
@@ -870,14 +1022,18 @@ export function QuestionManagement({
       .sort((a, b) => a.position - b.position)
       .map((image) => ({
         ...image,
-        signedUrl: resolveImageSrc(image.storage_path) ?? null,
+        signedUrl: image.signedUrl
+          ? image.signedUrl
+          : (resolveImageSrc(image.storage_path) ?? null),
       })),
     answerImages: question.answerImages
       .slice()
       .sort((a, b) => a.position - b.position)
       .map((image) => ({
         ...image,
-        signedUrl: resolveImageSrc(image.storage_path) ?? null,
+        signedUrl: image.signedUrl
+          ? image.signedUrl
+          : (resolveImageSrc(image.storage_path) ?? null),
       })),
   });
 
@@ -1168,339 +1324,375 @@ export function QuestionManagement({
           <ScrollText className="size-4" />
           <span>题目列表</span>
         </div>
-        {questions.length === 0 ? (
+        {listError ? (
+          <div className="flex flex-1 items-center justify-center rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {listError}
+          </div>
+        ) : null}
+        {isLoadingQuestions ? (
+          <div className="flex flex-1 items-center justify-center rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
+            正在加载题目...
+          </div>
+        ) : questions.length === 0 ? (
           <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
             目前还没有题目，先在上方创建第一题吧。
           </div>
         ) : (
-          <div className="space-y-4">
-            {questions.map((question) => {
-              const questionCardData = buildQuestionCardData(question);
-              return (
-                <Card key={question.id} className="border-slate-200">
-                  <CardHeader className="border-b border-slate-100">
-                    <CardTitle className="text-base font-semibold text-slate-800">
-                      Question #{question.id}
-                    </CardTitle>
-                    <CardDescription className="flex flex-wrap items-center gap-3 text-xs">
-                      <span>创建于：{formatDateTime(question.createdAt)}</span>
-                    </CardDescription>
-                    <CardAction className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon-sm"
-                        title="Edit question"
-                        onClick={() => beginEdit(question)}
-                        disabled={
-                          isUpdating && editingQuestionId === question.id
-                        }
-                      >
-                        {isUpdating && editingQuestionId === question.id ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          <Pencil className="size-4" />
-                        )}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon-sm"
-                        title="Delete question"
-                        onClick={() => handleDelete(question.id)}
-                        disabled={busyQuestionId === question.id}
-                      >
-                        {busyQuestionId === question.id ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="size-4 text-red-500" />
-                        )}
-                      </Button>
-                    </CardAction>
-                  </CardHeader>
-                  {editingQuestionId !== question.id ? (
-                    <div className="border-t border-slate-100 bg-slate-50/60">
-                      <div className="px-4 py-4">
-                        <QuestionCard question={questionCardData} />
-                      </div>
-                    </div>
-                  ) : null}
-                  {editingQuestionId === question.id ? (
-                    <form onSubmit={handleUpdate} className="space-y-4 p-4">
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                          <Label htmlFor="edit-chapter">Chapter</Label>
-                          <select
-                            id="edit-chapter"
-                            value={editChapterId}
-                            onChange={(event) =>
-                              setEditChapterId(event.target.value)
-                            }
-                            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200"
-                          >
-                            <option value="">Select a chapter</option>
-                            {chapterOptions.map((chapterOption) => (
-                              <option
-                                key={chapterOption.id}
-                                value={chapterOption.id}
-                              >
-                                {chapterOption.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="edit-marks">Marks</Label>
-                          <Input
-                            id="edit-marks"
-                            type="number"
-                            min={1}
-                            step={1}
-                            value={editMarks}
-                            onChange={(event) =>
-                              setEditMarks(event.target.value)
-                            }
-                            placeholder="请输入分值（正整数）"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="edit-difficulty">Difficulty</Label>
-                          <select
-                            id="edit-difficulty"
-                            value={editDifficulty}
-                            onChange={(event) =>
-                              setEditDifficulty(event.target.value)
-                            }
-                            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200"
-                          >
-                            <option value="1">较易 (1)</option>
-                            <option value="2">中等 (2)</option>
-                            <option value="3">较难 (3)</option>
-                            <option value="4">挑战 (4)</option>
-                          </select>
-                        </div>
-                        <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
-                          <input
-                            type="checkbox"
-                            checked={editCalculatorAllowed}
-                            onChange={(event) =>
-                              setEditCalculatorAllowed(event.target.checked)
-                            }
-                            className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
-                          />
-                          <div className="flex flex-col">
-                            <span className="font-medium text-slate-800">
-                              允许使用计算器
-                            </span>
-                            <span className="text-xs text-slate-500">
-                              勾选表示此题可以使用计算器。
-                            </span>
-                          </div>
-                        </label>
-                      </div>
-
-                      <div className="space-y-3">
-                        <div>
-                          <Label htmlFor="edit-image">
-                            Images (Vertical Stack)
-                          </Label>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            <Input
-                              id="edit-image"
-                              type="file"
-                              accept="image/*"
-                              multiple
-                              onChange={handleEditAddImageFiles}
-                              className="max-w-xl flex-1"
-                            />
-                          </div>
-                          <p className="mt-1 text-xs text-slate-500">
-                            选择一张或多张图片上传，按列表顺序显示，可上下调整顺序。
-                          </p>
-                        </div>
-
-                        {editImages.length > 0 ? (
-                          <ul className="space-y-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
-                            {editImages.map((image, index) => (
-                              <li
-                                key={image.id}
-                                className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:gap-3"
-                              >
-                                <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500 self-start">
-                                  {index + 1}
-                                </span>
-                                <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
-                                  <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
-                                    <Image
-                                      src={
-                                        resolveImageSrc(
-                                          image.storagePath ?? image.url,
-                                        ) ?? image.url
-                                      }
-                                      alt={`预览 ${index + 1}`}
-                                      width={1200}
-                                      height={675}
-                                      className="h-full w-full object-contain"
-                                      sizes="(max-width: 768px) 100vw, 640px"
-                                      unoptimized
-                                    />
-                                  </div>
-                                </div>
-                                <div className="ml-auto flex items-start gap-1 pt-1 sm:ml-0">
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    onClick={() => moveEditImage(index, "up")}
-                                    disabled={index === 0}
-                                    aria-label="Move image up"
-                                  >
-                                    <ArrowUp className="size-4" />
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    onClick={() => moveEditImage(index, "down")}
-                                    disabled={index === editImages.length - 1}
-                                    aria-label="Move image down"
-                                  >
-                                    <ArrowDown className="size-4" />
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    onClick={() => handleEditRemoveImage(index)}
-                                    aria-label="Remove image"
-                                  >
-                                    <Trash2 className="size-4 text-red-500" />
-                                  </Button>
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </div>
-
-                      <div className="space-y-3">
-                        <div>
-                          <Label htmlFor="edit-answer-image">
-                            Answer Images
-                          </Label>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            <Input
-                              id="edit-answer-image"
-                              type="file"
-                              accept="image/*"
-                              multiple
-                              onChange={handleEditAddAnswerImageFiles}
-                              className="max-w-xl flex-1"
-                            />
-                          </div>
-                          <p className="mt-1 text-xs text-slate-500">
-                            上传答案图片，按列表顺序显示，可上下调整顺序。
-                          </p>
-                        </div>
-
-                        {editAnswerImages.length > 0 ? (
-                          <ul className="space-y-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
-                            {editAnswerImages.map((image, index) => (
-                              <li
-                                key={image.id}
-                                className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:gap-3"
-                              >
-                                <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500 self-start">
-                                  {index + 1}
-                                </span>
-                                <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
-                                  <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
-                                    <Image
-                                      src={
-                                        resolveImageSrc(
-                                          image.storagePath ?? image.url,
-                                        ) ?? image.url
-                                      }
-                                      alt={`答案预览 ${index + 1}`}
-                                      width={1200}
-                                      height={675}
-                                      className="h-full w-full object-contain"
-                                      sizes="(max-width: 768px) 100vw, 640px"
-                                      unoptimized
-                                    />
-                                  </div>
-                                </div>
-                                <div className="ml-auto flex items-start gap-1 pt-1 sm:ml-0">
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    onClick={() =>
-                                      moveEditAnswerImage(index, "up")
-                                    }
-                                    disabled={index === 0}
-                                    aria-label="Move answer image up"
-                                  >
-                                    <ArrowUp className="size-4" />
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    onClick={() =>
-                                      moveEditAnswerImage(index, "down")
-                                    }
-                                    disabled={
-                                      index === editAnswerImages.length - 1
-                                    }
-                                    aria-label="Move answer image down"
-                                  >
-                                    <ArrowDown className="size-4" />
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    onClick={() =>
-                                      handleEditRemoveAnswerImage(index)
-                                    }
-                                    aria-label="Remove answer image"
-                                  >
-                                    <Trash2 className="size-4 text-red-500" />
-                                  </Button>
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </div>
-
-                      <div className="flex items-center gap-3 border-t border-slate-200 pt-4">
+          <>
+            <div className="space-y-4">
+              {questions.map((question) => {
+                const questionCardData = buildQuestionCardData(question);
+                return (
+                  <Card key={question.id} className="border-slate-200">
+                    <CardHeader className="border-b border-slate-100">
+                      <CardTitle className="text-base font-semibold text-slate-800">
+                        Question #{question.id}
+                      </CardTitle>
+                      <CardDescription className="flex flex-wrap items-center gap-3 text-xs">
+                        <span>
+                          创建于：{formatDateTime(question.createdAt)}
+                        </span>
+                      </CardDescription>
+                      <CardAction className="flex items-center gap-2">
                         <Button
-                          type="submit"
-                          disabled={isUpdating}
-                          className="gap-2"
+                          type="button"
+                          variant="outline"
+                          size="icon-sm"
+                          title="Edit question"
+                          onClick={() => beginEdit(question)}
+                          disabled={
+                            isUpdating && editingQuestionId === question.id
+                          }
                         >
-                          {isUpdating ? (
+                          {isUpdating && editingQuestionId === question.id ? (
                             <Loader2 className="size-4 animate-spin" />
-                          ) : null}
-                          Save changes
+                          ) : (
+                            <Pencil className="size-4" />
+                          )}
                         </Button>
                         <Button
                           type="button"
                           variant="outline"
-                          onClick={cancelEdit}
-                          disabled={isUpdating}
+                          size="icon-sm"
+                          title="Delete question"
+                          onClick={() => handleDelete(question.id)}
+                          disabled={busyQuestionId === question.id}
                         >
-                          Cancel
+                          {busyQuestionId === question.id ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="size-4 text-red-500" />
+                          )}
                         </Button>
+                      </CardAction>
+                    </CardHeader>
+                    {editingQuestionId !== question.id ? (
+                      <div className="border-t border-slate-100 bg-slate-50/60">
+                        <div className="px-4 py-4">
+                          <QuestionCard question={questionCardData} />
+                        </div>
                       </div>
-                    </form>
-                  ) : null}
-                </Card>
-              );
-            })}
-          </div>
+                    ) : null}
+                    {editingQuestionId === question.id ? (
+                      <form onSubmit={handleUpdate} className="space-y-4 p-4">
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label htmlFor="edit-chapter">Chapter</Label>
+                            <select
+                              id="edit-chapter"
+                              value={editChapterId}
+                              onChange={(event) =>
+                                setEditChapterId(event.target.value)
+                              }
+                              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200"
+                            >
+                              <option value="">Select a chapter</option>
+                              {chapterOptions.map((chapterOption) => (
+                                <option
+                                  key={chapterOption.id}
+                                  value={chapterOption.id}
+                                >
+                                  {chapterOption.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="edit-marks">Marks</Label>
+                            <Input
+                              id="edit-marks"
+                              type="number"
+                              min={1}
+                              step={1}
+                              value={editMarks}
+                              onChange={(event) =>
+                                setEditMarks(event.target.value)
+                              }
+                              placeholder="请输入分值（正整数）"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="edit-difficulty">Difficulty</Label>
+                            <select
+                              id="edit-difficulty"
+                              value={editDifficulty}
+                              onChange={(event) =>
+                                setEditDifficulty(event.target.value)
+                              }
+                              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200"
+                            >
+                              <option value="1">较易 (1)</option>
+                              <option value="2">中等 (2)</option>
+                              <option value="3">较难 (3)</option>
+                              <option value="4">挑战 (4)</option>
+                            </select>
+                          </div>
+                          <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
+                            <input
+                              type="checkbox"
+                              checked={editCalculatorAllowed}
+                              onChange={(event) =>
+                                setEditCalculatorAllowed(event.target.checked)
+                              }
+                              className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                            />
+                            <div className="flex flex-col">
+                              <span className="font-medium text-slate-800">
+                                允许使用计算器
+                              </span>
+                              <span className="text-xs text-slate-500">
+                                勾选表示此题可以使用计算器。
+                              </span>
+                            </div>
+                          </label>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div>
+                            <Label htmlFor="edit-image">
+                              Images (Vertical Stack)
+                            </Label>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <Input
+                                id="edit-image"
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={handleEditAddImageFiles}
+                                className="max-w-xl flex-1"
+                              />
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500">
+                              选择一张或多张图片上传，按列表顺序显示，可上下调整顺序。
+                            </p>
+                          </div>
+
+                          {editImages.length > 0 ? (
+                            <ul className="space-y-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
+                              {editImages.map((image, index) => (
+                                <li
+                                  key={image.id}
+                                  className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:gap-3"
+                                >
+                                  <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500 self-start">
+                                    {index + 1}
+                                  </span>
+                                  <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
+                                    <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
+                                      <Image
+                                        src={
+                                          resolveImageSrc(
+                                            image.storagePath ?? image.url,
+                                          ) ?? image.url
+                                        }
+                                        alt={`预览 ${index + 1}`}
+                                        width={1200}
+                                        height={675}
+                                        className="h-full w-full object-contain"
+                                        sizes="(max-width: 768px) 100vw, 640px"
+                                        unoptimized
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="ml-auto flex items-start gap-1 pt-1 sm:ml-0">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      onClick={() => moveEditImage(index, "up")}
+                                      disabled={index === 0}
+                                      aria-label="Move image up"
+                                    >
+                                      <ArrowUp className="size-4" />
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      onClick={() =>
+                                        moveEditImage(index, "down")
+                                      }
+                                      disabled={index === editImages.length - 1}
+                                      aria-label="Move image down"
+                                    >
+                                      <ArrowDown className="size-4" />
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      onClick={() =>
+                                        handleEditRemoveImage(index)
+                                      }
+                                      aria-label="Remove image"
+                                    >
+                                      <Trash2 className="size-4 text-red-500" />
+                                    </Button>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </div>
+
+                        <div className="space-y-3">
+                          <div>
+                            <Label htmlFor="edit-answer-image">
+                              Answer Images
+                            </Label>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <Input
+                                id="edit-answer-image"
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={handleEditAddAnswerImageFiles}
+                                className="max-w-xl flex-1"
+                              />
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500">
+                              上传答案图片，按列表顺序显示，可上下调整顺序。
+                            </p>
+                          </div>
+
+                          {editAnswerImages.length > 0 ? (
+                            <ul className="space-y-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
+                              {editAnswerImages.map((image, index) => (
+                                <li
+                                  key={image.id}
+                                  className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:gap-3"
+                                >
+                                  <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500 self-start">
+                                    {index + 1}
+                                  </span>
+                                  <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
+                                    <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
+                                      <Image
+                                        src={
+                                          resolveImageSrc(
+                                            image.storagePath ?? image.url,
+                                          ) ?? image.url
+                                        }
+                                        alt={`答案预览 ${index + 1}`}
+                                        width={1200}
+                                        height={675}
+                                        className="h-full w-full object-contain"
+                                        sizes="(max-width: 768px) 100vw, 640px"
+                                        unoptimized
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="ml-auto flex items-start gap-1 pt-1 sm:ml-0">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      onClick={() =>
+                                        moveEditAnswerImage(index, "up")
+                                      }
+                                      disabled={index === 0}
+                                      aria-label="Move answer image up"
+                                    >
+                                      <ArrowUp className="size-4" />
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      onClick={() =>
+                                        moveEditAnswerImage(index, "down")
+                                      }
+                                      disabled={
+                                        index === editAnswerImages.length - 1
+                                      }
+                                      aria-label="Move answer image down"
+                                    >
+                                      <ArrowDown className="size-4" />
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      onClick={() =>
+                                        handleEditRemoveAnswerImage(index)
+                                      }
+                                      aria-label="Remove answer image"
+                                    >
+                                      <Trash2 className="size-4 text-red-500" />
+                                    </Button>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </div>
+
+                        <div className="flex items-center gap-3 border-t border-slate-200 pt-4">
+                          <Button
+                            type="submit"
+                            disabled={isUpdating}
+                            className="gap-2"
+                          >
+                            {isUpdating ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : null}
+                            Save changes
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={cancelEdit}
+                            disabled={isUpdating}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </form>
+                    ) : null}
+                  </Card>
+                );
+              })}
+            </div>
+            <div className="flex items-center justify-end gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePrevPage}
+                disabled={page <= 1 || isLoadingQuestions}
+              >
+                上一页
+              </Button>
+              <span className="text-sm text-slate-600">第 {page} 页</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleNextPage}
+                disabled={!hasMore || isLoadingQuestions}
+              >
+                下一页
+              </Button>
+            </div>
+          </>
         )}
       </section>
     </div>
