@@ -38,19 +38,40 @@ type QuestionCardProps = {
 
 const difficultyMeta: Record<
   number,
-  { label: string; level: number; accent: string }
+  { label: string; level: number; accentClass: string; dotClass: string }
 > = {
-  1: { label: "Easy", level: 1, accent: "text-emerald-600" },
-  2: { label: "Medium", level: 2, accent: "text-amber-600" },
-  3: { label: "Hard", level: 3, accent: "text-orange-600" },
-  4: { label: "Challenge", level: 4, accent: "text-rose-600" },
+  1: {
+    label: "Easy",
+    level: 1,
+    accentClass: "text-emerald-600",
+    dotClass: "bg-emerald-500",
+  },
+  2: {
+    label: "Medium",
+    level: 2,
+    accentClass: "text-amber-600",
+    dotClass: "bg-amber-500",
+  },
+  3: {
+    label: "Hard",
+    level: 3,
+    accentClass: "text-orange-600",
+    dotClass: "bg-orange-500",
+  },
+  4: {
+    label: "Challenge",
+    level: 4,
+    accentClass: "text-rose-600",
+    dotClass: "bg-rose-500",
+  },
 };
 
 export function QuestionCard({ question }: QuestionCardProps) {
   const meta = difficultyMeta[question.difficulty] ?? {
     label: "Unknown",
     level: 0,
-    accent: "text-slate-500",
+    accentClass: "text-slate-500",
+    dotClass: "bg-slate-400",
   };
   const subjectLabel =
     question.subjectName ??
@@ -82,14 +103,14 @@ export function QuestionCard({ question }: QuestionCardProps) {
                   {subjectLabel} {chapterLabel ? ` > ${chapterLabel}` : ""}
                 </span> */}
               <div className="flex flex-wrap items-center gap-3">
-                <span className={`font-semibold ${meta.accent}`}>
+                <span className={`font-semibold ${meta.accentClass}`}>
                   {meta.label}
                 </span>
                 <div className="flex items-center gap-1">
                   {Array.from({ length: 4 }).map((_, index) => (
                     <span
                       key={`${question.id}-difficulty-${index}`}
-                      className={`h-2.5 w-2.5 rounded-full ${index < meta.level ? "bg-emerald-500" : "bg-slate-200"}`}
+                      className={`h-2.5 w-2.5 rounded-full ${index < meta.level ? meta.dotClass : "bg-slate-200"}`}
                     />
                   ))}
                 </div>
@@ -183,7 +204,7 @@ export function QuestionCard({ question }: QuestionCardProps) {
                   {subjectLabel} {chapterLabel ? ` > ${chapterLabel}` : ""}
                 </span>
                 <div className="flex items-center gap-2">
-                  <span className={`font-semibold ${meta.accent}`}>
+                  <span className={`font-semibold ${meta.accentClass}`}>
                     {meta.label}
                   </span>
                 </div>
@@ -191,7 +212,7 @@ export function QuestionCard({ question }: QuestionCardProps) {
                   {Array.from({ length: 4 }).map((_, index) => (
                     <span
                       key={`full-${question.id}-difficulty-${index}`}
-                      className={`h-2.5 w-2.5 rounded-full ${index < meta.level ? "bg-amber-500" : "bg-slate-200"}`}
+                      className={`h-2.5 w-2.5 rounded-full ${index < meta.level ? meta.dotClass : "bg-slate-200"}`}
                     />
                   ))}
                 </div>
