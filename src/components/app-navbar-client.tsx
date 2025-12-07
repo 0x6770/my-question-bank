@@ -2,7 +2,8 @@
 
 import { LogOut } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
 import { LogoutButton } from "@/components/logout-button";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ export function AppNavbarClient({
   const [adminRole, setAdminRole] = useState<AdminRole | null>(
     initialAdminRole,
   );
+  const pathname = usePathname();
 
   useEffect(() => {
     const supabase = createClient();
@@ -82,12 +84,48 @@ export function AppNavbarClient({
 
   const roleMeta = adminRole ? roleLabelMap[adminRole] : null;
 
+  const navItems = useMemo(
+    () => [
+      { href: "/account", label: "Account" },
+      { href: "/questions", label: "Question Bank" },
+      { href: "/papers", label: "Exam Paper" },
+    ],
+    [],
+  );
+
+  const isQuestionsPage =
+    pathname === "/questions" ||
+    pathname === "/" ||
+    pathname?.startsWith("/?") ||
+    pathname?.startsWith("/questions?");
+
   return (
-    <header className="sticky top-0 z-50 border-b bg-background">
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3">
-        <Link href="/" className="text-lg font-semibold tracking-tight">
-          My Question Bank
-        </Link>
+    <header className="sticky top-0 z-50 border-b bg-background px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 py-3">
+        <nav className="flex items-center gap-4 text-sm font-semibold text-slate-700">
+          {navItems.map((item) => {
+            const isActive =
+              item.href === "/"
+                ? isQuestionsPage
+                : pathname === item.href ||
+                  pathname?.startsWith(`${item.href}?`);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "rounded-md px-2 py-1 transition",
+                  "hover:text-slate-900 hover:underline hover:underline-offset-4",
+                  isActive
+                    ? "text-slate-900 underline underline-offset-4"
+                    : "text-slate-700",
+                )}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
 
         <div className="flex items-center gap-3">
           {user ? (

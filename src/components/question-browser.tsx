@@ -1,6 +1,7 @@
 /* eslint-disable react/jsx-no-useless-fragment */
 "use client";
 
+import { ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { QuestionCard } from "@/components/question-card";
 import { Button } from "@/components/ui/button";
@@ -236,7 +237,7 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-slate-200 bg-slate-100/70 p-4 sm:p-5">
+      <div className="rounded-2xl border border-slate-200 bg-slate-100/70 p-4">
         <div className="flex flex-wrap items-start gap-4 md:items-end">
           <div className="space-y-2">
             <p className="text-sm font-semibold text-slate-700">
@@ -249,10 +250,10 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
                 className="flex h-11 min-w-[260px] items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 text-left text-sm font-medium text-slate-800 shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200"
               >
                 <span className="truncate">{currentLabel}</span>
-                <span className="text-slate-400">▾</span>
+                <ChevronDown className="size-4 text-slate-400" />
               </button>
               {hierarchyOpen ? (
-                <div className="absolute z-20 mt-2 w-[min(900px,95vw)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl pb-10">
+                <div className="absolute z-20 mt-2 w-[min(900px,95vw)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl pb-10">
                   <div className="grid grid-cols-3">
                     <div className="max-h-72 overflow-auto">
                       <button

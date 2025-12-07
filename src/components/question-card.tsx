@@ -71,7 +71,7 @@ export function QuestionCard({ question }: QuestionCardProps) {
     <>
       <article className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <div className="grid gap-0 border-b border-slate-100 md:grid-cols-[1fr_200px] lg:grid-cols-[1fr_200px]">
-          <div className="flex flex-col gap-3 px-4 py-3">
+          <div className="flex flex-col gap-3 px-4 py-4">
             <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
               <span
                 className={`rounded px-3 py-1 font-semibold uppercase tracking-wide ${question.calculator ? "bg-sky-50 text-sky-700" : "bg-slate-100 text-slate-500"}`}
