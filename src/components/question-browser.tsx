@@ -136,17 +136,21 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
   useEffect(() => {
     const controller = new AbortController();
     const load = async () => {
+      const isChapterSelected = hierarchySelection.startsWith("chapter:");
+      if (!isChapterSelected) {
+        setQuestions([]);
+        setHasMore(false);
+        setFetchError(null);
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(true);
       setFetchError(null);
       try {
         const params = new URLSearchParams();
-        if (hierarchySelection.startsWith("subject:")) {
-          const [, id] = hierarchySelection.split(":");
-          params.set("subjectId", id);
-        } else if (hierarchySelection.startsWith("chapter:")) {
-          const [, id] = hierarchySelection.split(":");
-          params.set("chapterId", id);
-        }
+        const [, id] = hierarchySelection.split(":");
+        params.set("chapterId", id);
         params.set("page", String(page));
         if (difficultySelections.size > 0) {
           params.set(
@@ -181,29 +185,20 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
   }, [difficultySelections, hierarchySelection, page]);
 
   const currentLabel = useMemo(() => {
-    if (hierarchySelection === "all") return "All Subjects / Chapters";
-    const [kind, rawId] = hierarchySelection.split(":");
+    if (!hierarchySelection.startsWith("chapter:")) return "Select a chapter";
+    const [, rawId] = hierarchySelection.split(":");
     const numericId = Number.parseInt(rawId, 10);
-    if (kind === "subject") {
-      const subject = subjects.find((item) => item.id === numericId);
-      return subject
-        ? `${subject.name} (All Chapters)`
-        : "All Subjects / Chapters";
-    }
-    if (kind === "chapter") {
-      const chapter = chapters.find((item) => item.id === numericId);
-      const parent =
-        chapter?.parentChapterId != null
-          ? chapters.find((item) => item.id === chapter.parentChapterId)
-          : null;
-      const subject = chapter
-        ? subjects.find((item) => item.id === chapter.subjectId)
+    const chapter = chapters.find((item) => item.id === numericId);
+    const parent =
+      chapter?.parentChapterId != null
+        ? chapters.find((item) => item.id === chapter.parentChapterId)
         : null;
-      return chapter && subject
-        ? `${subject.name} / ${parent ? `${parent.name} / ` : ""}${chapter.name}`
-        : (chapter?.name ?? "All Subjects / Chapters");
-    }
-    return "All Subjects / Chapters";
+    const subject = chapter
+      ? subjects.find((item) => item.id === chapter.subjectId)
+      : null;
+    return chapter && subject
+      ? `${subject.name} / ${parent ? `${parent.name} / ` : ""}${chapter.name}`
+      : (chapter?.name ?? "Select a chapter");
   }, [chapters, hierarchySelection, subjects]);
 
   const visibleRootChapters = useMemo(() => {
@@ -233,7 +228,7 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
   }, [chapters]);
 
   const filtersActive =
-    hierarchySelection !== "all" || difficultySelections.size > 0;
+    hierarchySelection.startsWith("chapter:") || difficultySelections.size > 0;
 
   return (
     <div className="space-y-6">
@@ -253,21 +248,12 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
                 <ChevronDown className="size-4 text-slate-400" />
               </button>
               {hierarchyOpen ? (
-                <div className="absolute z-20 mt-2 w-[min(900px,95vw)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl pb-10">
+                <div className="absolute z-20 mt-2 w-[min(900px,95vw)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
                   <div className="grid grid-cols-3">
                     <div className="max-h-72 overflow-auto">
-                      <button
-                        type="button"
-                        className={`flex w-full items-center justify-between px-3 py-2 text-sm font-semibold ${hierarchySelection === "all" ? "bg-slate-50 text-slate-900" : "text-slate-700 hover:bg-slate-50"}`}
-                        onClick={() => {
-                          selectHierarchy("all");
-                          setHierarchyOpen(false);
-                          setActiveSubjectId(null);
-                          setActiveParentChapterId(null);
-                        }}
-                      >
-                        全部学科
-                      </button>
+                      <div className="px-3 py-2 text-sm font-semibold text-slate-700">
+                        选择学科查看章节
+                      </div>
                       {subjects.map((subject) => (
                         <button
                           key={subject.id}
@@ -280,14 +266,11 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
                             setActiveSubjectId(subject.id);
                             setActiveParentChapterId(null);
                           }}
-                          onClick={() => {
-                            selectHierarchy(`subject:${subject.id}`);
-                            setHierarchyOpen(false);
-                            setActiveParentChapterId(null);
-                          }}
-                          className={`flex w-full items-center justify-between px-3 py-2 text-sm font-semibold ${activeSubjectId === subject.id ? "bg-slate-50 text-slate-900" : "text-slate-700 hover:bg-slate-50"}`}
+                          className={`flex w-full items-start gap-3 px-3 py-2 text-left text-sm font-semibold ${activeSubjectId === subject.id ? "bg-slate-50 text-slate-900" : "text-slate-700 hover:bg-slate-50"}`}
                         >
-                          {subject.name}
+                          <span className="flex-1 whitespace-normal text-left leading-snug break-words">
+                            {subject.name}
+                          </span>
                           <span className="text-slate-400">›</span>
                         </button>
                       ))}
@@ -299,27 +282,16 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
                         </div>
                       ) : (
                         <div className="flex flex-col divide-y divide-slate-200">
-                          <button
-                            type="button"
-                            className={`flex w-full items-center justify-between px-3 py-2 text-sm font-medium ${hierarchySelection === `subject:${activeSubjectId}` ? "bg-white text-slate-900" : "text-slate-700 hover:bg-white"}`}
-                            onClick={() => {
-                              selectHierarchy(`subject:${activeSubjectId}`);
-                              setHierarchyOpen(false);
-                              setActiveParentChapterId(null);
-                            }}
-                          >
-                            全部章节
-                          </button>
                           {visibleRootChapters.length === 0 ? (
                             <div className="px-4 py-6 text-sm text-slate-500">
                               该学科暂无章节
                             </div>
                           ) : (
-                            visibleRootChapters.map((chapter) => (
+                            visibleRootChapters.map((chapter, index) => (
                               <button
                                 key={chapter.id}
                                 type="button"
-                                className={`flex w-full items-center justify-between px-3 py-2 text-sm font-medium ${activeParentChapterId === chapter.id ? "bg-white text-slate-900" : "text-slate-700 hover:bg-white"}`}
+                                className={`flex w-full items-start gap-3 px-3 py-2 text-left text-sm font-medium ${activeParentChapterId === chapter.id ? "bg-white text-slate-900" : "text-slate-700 hover:bg-white"}`}
                                 onMouseEnter={() =>
                                   setActiveParentChapterId(chapter.id)
                                 }
@@ -332,7 +304,12 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
                                   setHierarchyOpen(false);
                                 }}
                               >
-                                {chapter.name}
+                                <span className="text-slate-400">
+                                  {index + 1}.
+                                </span>
+                                <span className="flex-1 whitespace-normal text-left leading-snug break-words">
+                                  {chapter.name}
+                                </span>
                                 {chaptersWithChildren.has(chapter.id) ? (
                                   <span className="text-slate-400">›</span>
                                 ) : null}
@@ -353,17 +330,22 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
                         </div>
                       ) : (
                         <div className="flex flex-col divide-y divide-slate-200">
-                          {visibleSubChapters.map((chapter) => (
+                          {visibleSubChapters.map((chapter, index) => (
                             <button
                               key={chapter.id}
                               type="button"
-                              className={`flex w-full items-center justify-between px-3 py-2 text-sm font-medium ${hierarchySelection === `chapter:${chapter.id}` ? "bg-slate-50 text-slate-900" : "text-slate-700 hover:bg-slate-50"}`}
+                              className={`flex w-full items-start gap-3 px-3 py-2 text-left text-sm font-medium ${hierarchySelection === `chapter:${chapter.id}` ? "bg-slate-50 text-slate-900" : "text-slate-700 hover:bg-slate-50"}`}
                               onClick={() => {
                                 selectHierarchy(`chapter:${chapter.id}`);
                                 setHierarchyOpen(false);
                               }}
                             >
-                              {chapter.name}
+                              <span className="text-slate-400">
+                                {index + 1}.
+                              </span>
+                              <span className="flex-1 whitespace-normal text-left leading-snug break-words">
+                                {chapter.name}
+                              </span>
                             </button>
                           ))}
                         </div>
@@ -435,7 +417,9 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
           </div>
         ) : questions.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center text-slate-500">
-            没有符合筛选条件的题目。
+            {hierarchySelection.startsWith("chapter:")
+              ? "没有符合筛选条件的题目。"
+              : "请选择一个章节以查看题目。"}
           </div>
         ) : (
           <>
