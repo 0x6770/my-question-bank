@@ -30,11 +30,11 @@ export function BackToTopButton() {
     <Button
       type="button"
       onClick={scrollToTop}
-      className="fixed bottom-6 right-6 gap-1 rounded-full bg-[#001b48] text-base font-semibold text-white shadow-none transition-colors hover:bg-[#0a275f]"
+      size="icon"
+      className="fixed bottom-6 right-6 rounded-full bg-[#001b48] transition-colors hover:bg-[#0a275f]"
       aria-label="回到顶部"
     >
       <ArrowUp className="size-5" />
-      回到顶部
     </Button>
   );
 }
