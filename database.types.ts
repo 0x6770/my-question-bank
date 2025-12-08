@@ -34,6 +34,38 @@ export type Database = {
   };
   public: {
     Tables: {
+      answer_images: {
+        Row: {
+          created_at: string;
+          id: number;
+          position: number;
+          question_id: number;
+          storage_path: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: number;
+          position: number;
+          question_id: number;
+          storage_path: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: number;
+          position?: number;
+          question_id?: number;
+          storage_path?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "answer_images_question_id_fkey";
+            columns: ["question_id"];
+            isOneToOne: false;
+            referencedRelation: "questions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       chapters: {
         Row: {
           created_at: string;
@@ -274,6 +306,35 @@ export type Database = {
             columns: ["question_id"];
             isOneToOne: false;
             referencedRelation: "questions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      user_subject_access: {
+        Row: {
+          created_at: string;
+          granted_by: string | null;
+          subject_id: number;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          granted_by?: string | null;
+          subject_id: number;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          granted_by?: string | null;
+          subject_id?: number;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "user_subject_access_subject_id_fkey";
+            columns: ["subject_id"];
+            isOneToOne: false;
+            referencedRelation: "subjects";
             referencedColumns: ["id"];
           },
         ];
