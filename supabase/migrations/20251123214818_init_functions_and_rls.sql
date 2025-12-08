@@ -8,7 +8,11 @@ CREATE OR REPLACE FUNCTION "public"."handle_new_user"() RETURNS "trigger"
     AS $$
 begin
   insert into public.profiles (id, role, email)
-  values (new.id, 'user', coalesce(new.raw_user_meta_data->>'email', ''));
+  values (
+    new.id,
+    'user',
+    coalesce(new.email, new.raw_user_meta_data->>'email', '')
+  );
   return new;
 end
 $$;
@@ -45,6 +49,14 @@ CREATE POLICY "Allow user to access their own profile"
     FOR SELECT
     TO "authenticated"
     USING ((( SELECT "auth"."uid"() AS "uid") = "id"));
+
+CREATE POLICY "Allow admins to read all profiles" ON "public"."profiles"
+    FOR SELECT
+    TO "authenticated"
+    USING ("public"."in_roles"(VARIADIC ARRAY[
+        'admin'::"public"."user_role",
+        'super_admin'::"public"."user_role"
+    ]));
 
 ALTER TABLE "public"."profiles" ENABLE ROW LEVEL SECURITY;
 
