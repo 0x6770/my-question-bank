@@ -235,13 +235,14 @@ export async function GET(request: Request) {
 
   // Bookmarks for current user (if signed in)
   let bookmarksById: Record<number, boolean> = {};
+  let answersViewedById: Record<number, boolean> = {};
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (user && withSigned.length > 0) {
     const { data: bookmarkRows } = await supabase
       .from("user_questions")
-      .select("question_id, is_bookmarked")
+      .select("question_id, is_bookmarked, answer_viewed_at")
       .in(
         "question_id",
         withSigned.map((q) => q.id),
@@ -249,11 +250,18 @@ export async function GET(request: Request) {
     bookmarksById = Object.fromEntries(
       (bookmarkRows ?? []).map((row) => [row.question_id, row.is_bookmarked]),
     );
+    answersViewedById = Object.fromEntries(
+      (bookmarkRows ?? []).map((row) => [
+        row.question_id,
+        Boolean(row.answer_viewed_at),
+      ]),
+    );
   }
 
   const withBookmarks = withSigned.map((question) => ({
     ...question,
     isBookmarked: bookmarksById[question.id] ?? false,
+    isAnswerViewed: answersViewedById[question.id] ?? false,
   }));
 
   return NextResponse.json({

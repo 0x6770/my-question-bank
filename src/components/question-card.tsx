@@ -35,6 +35,7 @@ type QuestionCardProps = {
     images: QuestionImage[];
     answerImages: QuestionImage[];
     isBookmarked?: boolean;
+    isAnswerViewed?: boolean;
   };
 };
 
@@ -76,10 +77,19 @@ export function QuestionCard({ question }: QuestionCardProps) {
   const [isBookmarked, setIsBookmarked] = useState(
     question.isBookmarked ?? false,
   );
+  const [viewingAnswer, setViewingAnswer] = useState(false);
+  const [answerError, setAnswerError] = useState<string | null>(null);
+  const [isAnswerViewed, setIsAnswerViewed] = useState(
+    question.isAnswerViewed ?? false,
+  );
 
   useEffect(() => {
     setIsBookmarked(question.isBookmarked ?? false);
   }, [question.isBookmarked]);
+
+  useEffect(() => {
+    setIsAnswerViewed(question.isAnswerViewed ?? false);
+  }, [question.isAnswerViewed]);
 
   useEffect(() => {
     supabase.auth
@@ -114,6 +124,30 @@ export function QuestionCard({ question }: QuestionCardProps) {
       );
     } finally {
       setBookmarking(false);
+    }
+  };
+
+  const handleViewAnswer = async () => {
+    if (!userId) {
+      setAnswerError("请登录后查看答案。");
+      return;
+    }
+    setViewingAnswer(true);
+    setAnswerError(null);
+    try {
+      const { error } = await supabase.rpc("track_answer_view", {
+        q_id: question.id,
+      });
+      if (error) throw error;
+      setIsAnswerViewed(true);
+    } catch (error) {
+      setAnswerError(
+        error instanceof Error
+          ? error.message
+          : "记录查看状态失败，请稍后重试。",
+      );
+    } finally {
+      setViewingAnswer(false);
     }
   };
 
@@ -217,14 +251,19 @@ export function QuestionCard({ question }: QuestionCardProps) {
                 />
               </Button>
               <span className="h-6 w-px bg-slate-200" aria-hidden="true" />
-              <Button variant="ghost" size="icon" aria-label="Mark complete">
-                <CheckCircle2 className="size-5" />
-              </Button>
+              <div className="flex items-center justify-center rounded-full p-1">
+                <CheckCircle2
+                  aria-label={isAnswerViewed ? "已查看答案" : "未查看答案"}
+                  className={`size-5 ${isAnswerViewed ? "text-emerald-600" : "text-slate-300"}`}
+                />
+              </div>
             </div>
             <div className="space-y-3">
               <Button
                 variant="outline"
                 className="w-full justify-between gap-3 rounded border-sky-100 bg-sky-50 px-4 py-4 text-slate-800 hover:bg-sky-100"
+                onClick={handleViewAnswer}
+                disabled={viewingAnswer}
               >
                 <div className="flex items-center gap-3">
                   <FileText className="size-4" />
@@ -244,6 +283,9 @@ export function QuestionCard({ question }: QuestionCardProps) {
 
             {bookmarkError ? (
               <p className="text-xs text-red-600">{bookmarkError}</p>
+            ) : null}
+            {answerError ? (
+              <p className="text-xs text-red-600">{answerError}</p>
             ) : null}
           </aside>
         </div>

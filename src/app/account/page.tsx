@@ -9,6 +9,7 @@ type BookmarkedQuestion = {
   calculator: boolean;
   createdAt: string;
   bookmarkedAt: string | null;
+  isAnswerViewed: boolean;
   chapterId: number | null;
   chapterName: string | null;
   subjectId: number | null;
@@ -39,14 +40,16 @@ export default async function AccountPage() {
 
   const { data: bookmarkRows, error: bookmarkError } = await supabase
     .from("user_questions")
-    .select("question_id, created_at")
+    .select("question_id, created_at, answer_viewed_at")
     .eq("is_bookmarked", true)
     .order("created_at", { ascending: false });
 
   const questionIds = (bookmarkRows ?? []).map((row) => row.question_id);
   const bookmarkedAtMap = new Map<number, string>();
+  const answerViewedMap = new Map<number, boolean>();
   for (const row of bookmarkRows ?? []) {
     bookmarkedAtMap.set(row.question_id, row.created_at);
+    answerViewedMap.set(row.question_id, Boolean(row.answer_viewed_at));
   }
 
   let questions: BookmarkedQuestion[] = [];
@@ -127,6 +130,7 @@ export default async function AccountPage() {
         chapterName: row.chapters?.name ?? null,
         subjectId: row.chapters?.subject_id ?? null,
         subjectName: row.chapters?.subjects?.name ?? null,
+        isAnswerViewed: answerViewedMap.get(row.id) ?? false,
         isBookmarked: true,
         images: (row.question_images ?? [])
           .slice()

@@ -149,7 +149,9 @@ CREATE TABLE IF NOT EXISTS "public"."user_questions" (
     "question_id" bigint,
     "is_bookmarked" boolean DEFAULT false NOT NULL,
     "completed_at" timestamp with time zone,
-    "last_viewed_at" timestamp with time zone
+    "last_viewed_at" timestamp with time zone,
+    "answer_viewed_at" timestamp with time zone,
+    "answer_view_count" integer DEFAULT 0
 );
 
 ALTER TABLE "public"."user_questions"
