@@ -8,6 +8,7 @@ type BookmarkedQuestion = {
   difficulty: number;
   calculator: boolean;
   createdAt: string;
+  bookmarkedAt: string | null;
   chapterId: number | null;
   chapterName: string | null;
   subjectId: number | null;
@@ -43,6 +44,10 @@ export default async function AccountPage() {
     .order("created_at", { ascending: false });
 
   const questionIds = (bookmarkRows ?? []).map((row) => row.question_id);
+  const bookmarkedAtMap = new Map<number, string>();
+  for (const row of bookmarkRows ?? []) {
+    bookmarkedAtMap.set(row.question_id, row.created_at);
+  }
 
   let questions: BookmarkedQuestion[] = [];
   let questionError: string | null = null;
@@ -117,6 +122,7 @@ export default async function AccountPage() {
         difficulty: row.difficulty ?? 1,
         calculator: row.calculator ?? false,
         createdAt: row.created_at,
+        bookmarkedAt: bookmarkedAtMap.get(row.id) ?? null,
         chapterId: row.chapter_id ?? null,
         chapterName: row.chapters?.name ?? null,
         subjectId: row.chapters?.subject_id ?? null,
@@ -145,6 +151,11 @@ export default async function AccountPage() {
     bookmarkError || questionError
       ? (bookmarkError?.message ?? questionError ?? "无法加载收藏列表。")
       : null;
+
+  const formatDate = (value: string | null) =>
+    value
+      ? new Date(value).toLocaleString("zh-CN", { hour12: false })
+      : "未知时间";
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-10">
@@ -175,9 +186,14 @@ export default async function AccountPage() {
               还没有收藏题目，去题库挑选一些吧。
             </div>
           ) : (
-            <div className="mt-4 space-y-4">
+            <div className="mt-4 space-y-8">
               {questions.map((q) => (
-                <QuestionCard key={q.id} question={q} />
+                <div key={q.id} className="space-y-2">
+                  <p className="text-xs text-slate-500">
+                    收藏于：{formatDate(q.bookmarkedAt)}
+                  </p>
+                  <QuestionCard question={q} />
+                </div>
               ))}
             </div>
           )}
