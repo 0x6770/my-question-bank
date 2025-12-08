@@ -233,5 +233,32 @@ export async function GET(request: Request) {
     })),
   }));
 
-  return NextResponse.json({ questions: withSigned, hasMore, page: safePage });
+  // Bookmarks for current user (if signed in)
+  let bookmarksById: Record<number, boolean> = {};
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user && withSigned.length > 0) {
+    const { data: bookmarkRows } = await supabase
+      .from("user_questions")
+      .select("question_id, is_bookmarked")
+      .in(
+        "question_id",
+        withSigned.map((q) => q.id),
+      );
+    bookmarksById = Object.fromEntries(
+      (bookmarkRows ?? []).map((row) => [row.question_id, row.is_bookmarked]),
+    );
+  }
+
+  const withBookmarks = withSigned.map((question) => ({
+    ...question,
+    isBookmarked: bookmarksById[question.id] ?? false,
+  }));
+
+  return NextResponse.json({
+    questions: withBookmarks,
+    hasMore,
+    page: safePage,
+  });
 }

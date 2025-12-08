@@ -10,7 +10,8 @@ import {
   X,
 } from "lucide-react";
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "./ui/button";
 
 type QuestionImage = {
@@ -33,6 +34,7 @@ type QuestionCardProps = {
     chapterName?: string | null;
     images: QuestionImage[];
     answerImages: QuestionImage[];
+    isBookmarked?: boolean;
   };
 };
 
@@ -67,6 +69,54 @@ const difficultyMeta: Record<
 };
 
 export function QuestionCard({ question }: QuestionCardProps) {
+  const supabase = useMemo(() => createClient(), []);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [bookmarking, setBookmarking] = useState(false);
+  const [bookmarkError, setBookmarkError] = useState<string | null>(null);
+  const [isBookmarked, setIsBookmarked] = useState(
+    question.isBookmarked ?? false,
+  );
+
+  useEffect(() => {
+    setIsBookmarked(question.isBookmarked ?? false);
+  }, [question.isBookmarked]);
+
+  useEffect(() => {
+    supabase.auth
+      .getUser()
+      .then(({ data }) => setUserId(data.user?.id ?? null))
+      .catch(() => setUserId(null));
+  }, [supabase]);
+
+  const toggleBookmark = async () => {
+    if (!userId) {
+      setBookmarkError("请登录后再收藏题目。");
+      return;
+    }
+    setBookmarking(true);
+    setBookmarkError(null);
+    const next = !isBookmarked;
+    setIsBookmarked(next);
+    try {
+      const { error } = await supabase.from("user_questions").upsert(
+        {
+          user_id: userId,
+          question_id: question.id,
+          is_bookmarked: next,
+        },
+        { onConflict: "user_id,question_id" },
+      );
+      if (error) throw error;
+    } catch (error) {
+      setIsBookmarked(!next);
+      setBookmarkError(
+        error instanceof Error ? error.message : "更新收藏失败，请稍后重试。",
+      );
+    } finally {
+      setBookmarking(false);
+    }
+  };
+
   const meta = difficultyMeta[question.difficulty] ?? {
     label: "Unknown",
     level: 0,
@@ -155,8 +205,16 @@ export function QuestionCard({ question }: QuestionCardProps) {
 
           <aside className="flex flex-col gap-5 border-t border-slate-100 bg-white px-4 py-5 lg:border-l lg:border-t-0">
             <div className="flex items-center justify-center gap-3 text-slate-600">
-              <Button variant="ghost" size="icon" aria-label="Bookmark">
-                <Bookmark className="size-5" />
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={isBookmarked ? "取消收藏" : "收藏题目"}
+                onClick={toggleBookmark}
+                disabled={bookmarking}
+              >
+                <Bookmark
+                  className={`size-5 ${isBookmarked ? "fill-sky-500 text-sky-600" : ""}`}
+                />
               </Button>
               <span className="h-6 w-px bg-slate-200" aria-hidden="true" />
               <Button variant="ghost" size="icon" aria-label="Mark complete">
@@ -183,6 +241,10 @@ export function QuestionCard({ question }: QuestionCardProps) {
                 </div>
               </Button>
             </div>
+
+            {bookmarkError ? (
+              <p className="text-xs text-red-600">{bookmarkError}</p>
+            ) : null}
           </aside>
         </div>
       </article>
