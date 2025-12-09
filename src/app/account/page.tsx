@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import { QuestionCard } from "@/components/question-card";
 import { createClient } from "@/lib/supabase/server";
+import { AccountTabs } from "./account-tabs";
 
 type BookmarkedQuestion = {
   id: number;
@@ -9,7 +9,6 @@ type BookmarkedQuestion = {
   calculator: boolean;
   createdAt: string;
   bookmarkedAt: string | null;
-  isAnswerViewed: boolean;
   chapterId: number | null;
   chapterName: string | null;
   subjectId: number | null;
@@ -40,16 +39,19 @@ export default async function AccountPage() {
 
   const { data: bookmarkRows, error: bookmarkError } = await supabase
     .from("user_questions")
-    .select("question_id, created_at, answer_viewed_at")
-    .eq("is_bookmarked", true)
+    .select("question_id, created_at, answer_viewed_at, is_bookmarked")
     .order("created_at", { ascending: false });
 
-  const questionIds = (bookmarkRows ?? []).map((row) => row.question_id);
+  const questionIds = Array.from(
+    new Set((bookmarkRows ?? []).map((row) => row.question_id)),
+  );
   const bookmarkedAtMap = new Map<number, string>();
   const answerViewedMap = new Map<number, boolean>();
+  const isBookmarkedMap = new Map<number, boolean>();
   for (const row of bookmarkRows ?? []) {
     bookmarkedAtMap.set(row.question_id, row.created_at);
     answerViewedMap.set(row.question_id, Boolean(row.answer_viewed_at));
+    isBookmarkedMap.set(row.question_id, row.is_bookmarked ?? false);
   }
 
   let questions: BookmarkedQuestion[] = [];
@@ -125,13 +127,10 @@ export default async function AccountPage() {
         difficulty: row.difficulty ?? 1,
         calculator: row.calculator ?? false,
         createdAt: row.created_at,
-        bookmarkedAt: bookmarkedAtMap.get(row.id) ?? null,
         chapterId: row.chapter_id ?? null,
         chapterName: row.chapters?.name ?? null,
         subjectId: row.chapters?.subject_id ?? null,
         subjectName: row.chapters?.subjects?.name ?? null,
-        isAnswerViewed: answerViewedMap.get(row.id) ?? false,
-        isBookmarked: true,
         images: (row.question_images ?? [])
           .slice()
           .sort((a, b) => a.position - b.position)
@@ -150,16 +149,32 @@ export default async function AccountPage() {
     }
   }
 
-  const bookmarksCount = bookmarkRows?.length ?? 0;
   const loadError =
     bookmarkError || questionError
       ? (bookmarkError?.message ?? questionError ?? "无法加载收藏列表。")
       : null;
 
-  const formatDate = (value: string | null) =>
-    value
-      ? new Date(value).toLocaleString("zh-CN", { hour12: false })
-      : "未知时间";
+  const bookmarks = questions
+    .filter((q) => isBookmarkedMap.get(q.id))
+    .map((q) => ({
+      question: {
+        ...q,
+        isBookmarked: true,
+        isAnswerViewed: answerViewedMap.get(q.id) ?? false,
+      },
+      bookmarkedAt: bookmarkedAtMap.get(q.id) ?? null,
+    }));
+
+  const viewed = questions
+    .filter((q) => answerViewedMap.get(q.id))
+    .map((q) => ({
+      question: {
+        ...q,
+        isBookmarked: isBookmarkedMap.get(q.id) ?? false,
+        isAnswerViewed: true,
+      },
+      viewedAt: bookmarkedAtMap.get(q.id) ?? null,
+    }));
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-10">
@@ -171,37 +186,13 @@ export default async function AccountPage() {
           </p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">我的收藏</h2>
-              <p className="text-sm text-slate-500">
-                共收藏 {bookmarksCount} 道题目。
-              </p>
-            </div>
+        {loadError ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            无法加载收藏列表：{loadError}
           </div>
-
-          {loadError ? (
-            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              无法加载收藏列表：{loadError}
-            </div>
-          ) : bookmarksCount === 0 ? (
-            <div className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-              还没有收藏题目，去题库挑选一些吧。
-            </div>
-          ) : (
-            <div className="mt-4 space-y-8">
-              {questions.map((q) => (
-                <div key={q.id} className="space-y-2">
-                  <p className="text-xs text-slate-500">
-                    收藏于：{formatDate(q.bookmarkedAt)}
-                  </p>
-                  <QuestionCard question={q} />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        ) : (
+          <AccountTabs bookmarks={bookmarks} viewed={viewed} />
+        )}
       </div>
     </main>
   );
