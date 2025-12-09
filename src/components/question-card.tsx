@@ -82,6 +82,8 @@ export function QuestionCard({ question }: QuestionCardProps) {
   const [isAnswerViewed, setIsAnswerViewed] = useState(
     question.isAnswerViewed ?? false,
   );
+  const [showQuestion, setShowQuestion] = useState(true);
+  const [showAnswer, setShowAnswer] = useState(false);
 
   useEffect(() => {
     setIsBookmarked(question.isBookmarked ?? false);
@@ -324,61 +326,106 @@ export function QuestionCard({ question }: QuestionCardProps) {
                   Marks: {question.marks}
                 </span>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setFullscreenOpen(false)}
-                aria-label="Close fullscreen"
-              >
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-            <div className="grid flex-1 grid-cols-1 gap-0 overflow-hidden md:grid-cols-2">
-              <div className="relative border-r border-slate-200">
-                <div className="absolute inset-0 overflow-auto p-4">
-                  <div className="space-y-4">
-                    {question.images.length > 0 ? (
-                      question.images.map((image) => (
-                        <Image
-                          key={image.id}
-                          src={image.signedUrl ?? image.storage_path}
-                          alt={`Question ${question.id} image`}
-                          width={1600}
-                          height={1200}
-                          className="block h-auto w-full object-contain"
-                          sizes="(max-width: 1200px) 100vw, 1000px"
-                          unoptimized
-                        />
-                      ))
-                    ) : (
-                      <p className="text-sm text-slate-500">暂无题目图片。</p>
-                    )}
-                  </div>
+              <div className="flex items-center gap-3">
+                <div className="inline-flex overflow-hidden rounded-full border border-slate-200 bg-white text-sm shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (showQuestion && !showAnswer) return;
+                      setShowQuestion((prev) => !prev);
+                    }}
+                    className={`px-3 py-1 font-medium transition ${showQuestion ? "bg-sky-100 text-slate-900" : "bg-white text-slate-600 hover:bg-slate-50"} border-r border-slate-200`}
+                  >
+                    Question
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (showAnswer && !showQuestion) return;
+                      setShowAnswer((prev) => !prev);
+                    }}
+                    className={`px-3 py-1 font-medium transition ${showAnswer ? "bg-sky-100 text-slate-900" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+                  >
+                    Answer
+                  </button>
                 </div>
-              </div>
-              <div className="relative">
-                <div className="absolute inset-0 overflow-auto p-4">
-                  <div className="space-y-4">
-                    {question.answerImages.length > 0 ? (
-                      question.answerImages.map((image) => (
-                        <Image
-                          key={image.id}
-                          src={image.signedUrl ?? image.storage_path}
-                          alt={`Answer for question ${question.id}`}
-                          width={1600}
-                          height={1200}
-                          className="block h-auto w-full object-contain"
-                          sizes="(max-width: 1200px) 100vw, 1000px"
-                          unoptimized
-                        />
-                      ))
-                    ) : (
-                      <p className="text-sm text-slate-500">暂无答案图片。</p>
-                    )}
-                  </div>
-                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setFullscreenOpen(false)}
+                  aria-label="Close fullscreen"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
               </div>
             </div>
+
+            {(() => {
+              const gridCols =
+                showQuestion && showAnswer
+                  ? "md:grid-cols-2"
+                  : "md:grid-cols-1";
+              return (
+                <div
+                  className={`grid flex-1 grid-cols-1 gap-0 overflow-hidden ${gridCols}`}
+                >
+                  {showQuestion ? (
+                    <div
+                      className={`relative ${showAnswer ? "border-r border-slate-200" : ""}`}
+                    >
+                      <div className="absolute inset-0 overflow-auto p-4">
+                        <div className="space-y-4">
+                          {question.images.length > 0 ? (
+                            question.images.map((image) => (
+                              <Image
+                                key={image.id}
+                                src={image.signedUrl ?? image.storage_path}
+                                alt={`Question ${question.id} image`}
+                                width={1600}
+                                height={1200}
+                                className="block h-auto w-full object-contain"
+                                sizes="(max-width: 1200px) 100vw, 1000px"
+                                unoptimized
+                              />
+                            ))
+                          ) : (
+                            <p className="text-sm text-slate-500">
+                              暂无题目图片。
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                  {showAnswer ? (
+                    <div className="relative">
+                      <div className="absolute inset-0 overflow-auto p-4">
+                        <div className="space-y-4">
+                          {question.answerImages.length > 0 ? (
+                            question.answerImages.map((image) => (
+                              <Image
+                                key={image.id}
+                                src={image.signedUrl ?? image.storage_path}
+                                alt={`Answer for question ${question.id}`}
+                                width={1600}
+                                height={1200}
+                                className="block h-auto w-full object-contain"
+                                sizes="(max-width: 1200px) 100vw, 1000px"
+                                unoptimized
+                              />
+                            ))
+                          ) : (
+                            <p className="text-sm text-slate-500">
+                              暂无答案图片。
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })()}
           </div>
         </div>
       ) : null}
