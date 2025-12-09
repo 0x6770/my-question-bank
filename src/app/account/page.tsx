@@ -177,8 +177,8 @@ export default async function AccountPage() {
     }));
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-10">
-      <div className="mx-auto max-w-4xl space-y-6">
+    <main className="min-h-screen bg-slate-50 px-4 py-12 sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6">
         <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
           <h1 className="text-xl font-semibold text-slate-900">My Account</h1>
           <p className="text-sm text-slate-500">
