@@ -274,6 +274,8 @@ export type Database = {
       };
       user_questions: {
         Row: {
+          answer_view_count: number | null;
+          answer_viewed_at: string | null;
           completed_at: string | null;
           created_at: string;
           id: number;
@@ -283,6 +285,8 @@ export type Database = {
           user_id: string;
         };
         Insert: {
+          answer_view_count?: number | null;
+          answer_viewed_at?: string | null;
           completed_at?: string | null;
           created_at?: string;
           id?: number;
@@ -292,6 +296,8 @@ export type Database = {
           user_id: string;
         };
         Update: {
+          answer_view_count?: number | null;
+          answer_viewed_at?: string | null;
           completed_at?: string | null;
           created_at?: string;
           id?: number;
@@ -349,6 +355,7 @@ export type Database = {
         Args: { roles: Database["public"]["Enums"]["user_role"][] };
         Returns: boolean;
       };
+      track_answer_view: { Args: { q_id: number }; Returns: undefined };
     };
     Enums: {
       user_role: "super_admin" | "admin" | "user";
