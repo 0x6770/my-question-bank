@@ -11,6 +11,8 @@ export async function GET(request: Request) {
   const chapterIdParam = searchParams.get("chapterId");
   const difficultiesParam = searchParams.get("difficulties");
   const pageParam = searchParams.get("page");
+  const hideViewedParam = searchParams.get("hide_viewed");
+  const hideViewed = hideViewedParam === "true";
 
   const subjectId = subjectIdParam ? Number.parseInt(subjectIdParam, 10) : null;
   const chapterId = chapterIdParam ? Number.parseInt(chapterIdParam, 10) : null;
@@ -258,7 +260,12 @@ export async function GET(request: Request) {
     );
   }
 
-  const withBookmarks = withSigned.map((question) => ({
+  let filtered = withSigned;
+  if (hideViewed && user) {
+    filtered = withSigned.filter((question) => !answersViewedById[question.id]);
+  }
+
+  const withBookmarks = filtered.map((question) => ({
     ...question,
     isBookmarked: bookmarksById[question.id] ?? false,
     isAnswerViewed: answersViewedById[question.id] ?? false,

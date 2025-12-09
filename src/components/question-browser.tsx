@@ -64,6 +64,7 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
   >(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
+  const [hideViewed, setHideViewed] = useState(true);
   const hierarchyRef = useRef<HTMLDivElement>(null);
 
   const toggleDifficulty = (value: number) => {
@@ -87,6 +88,7 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
   const clearFilters = () => {
     setDifficultySelections(new Set());
     setActiveSubjectId(null);
+    setHideViewed(false);
     selectHierarchy("all");
   };
 
@@ -158,6 +160,9 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
             Array.from(difficultySelections).join(","),
           );
         }
+        if (hideViewed) {
+          params.set("hide_viewed", "true");
+        }
         const response = await fetch(`/api/questions?${params.toString()}`, {
           signal: controller.signal,
         });
@@ -182,7 +187,7 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
 
     void load();
     return () => controller.abort();
-  }, [difficultySelections, hierarchySelection, page]);
+  }, [difficultySelections, hierarchySelection, page, hideViewed]);
 
   const currentLabel = useMemo(() => {
     if (!hierarchySelection.startsWith("chapter:")) return "Select a chapter";
@@ -228,7 +233,9 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
   }, [chapters]);
 
   const filtersActive =
-    hierarchySelection.startsWith("chapter:") || difficultySelections.size > 0;
+    hierarchySelection.startsWith("chapter:") ||
+    difficultySelections.size > 0 ||
+    hideViewed;
 
   return (
     <div className="space-y-6">
@@ -391,6 +398,18 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
           </div>
 
           <div className="ml-auto flex flex-col justify-between gap-3 md:items-end md:justify-center">
+            <label className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-700">
+              <input
+                type="checkbox"
+                className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                checked={hideViewed}
+                onChange={(e) => {
+                  setHideViewed(e.target.checked);
+                  setPage(1);
+                }}
+              />
+              <span>隐藏已完成</span>
+            </label>
             <Button
               variant="outline"
               size="sm"
