@@ -11,8 +11,7 @@ export async function GET(request: Request) {
   const chapterIdParam = searchParams.get("chapterId");
   const difficultiesParam = searchParams.get("difficulties");
   const pageParam = searchParams.get("page");
-  const hideViewedParam = searchParams.get("hide_viewed");
-  const hideViewed = hideViewedParam === "true";
+  const completionParam = searchParams.get("completion"); // "all" | "completed" | "incompleted"
 
   const subjectId = subjectIdParam ? Number.parseInt(subjectIdParam, 10) : null;
   const chapterId = chapterIdParam ? Number.parseInt(chapterIdParam, 10) : null;
@@ -261,8 +260,13 @@ export async function GET(request: Request) {
   }
 
   let filtered = withSigned;
-  if (hideViewed && user) {
-    filtered = withSigned.filter((question) => !answersViewedById[question.id]);
+  if (user && completionParam && completionParam !== "all") {
+    const shouldIncludeViewed = completionParam === "completed";
+    filtered = withSigned.filter((question) =>
+      shouldIncludeViewed
+        ? answersViewedById[question.id]
+        : !answersViewedById[question.id],
+    );
   }
 
   const withBookmarks = filtered.map((question) => ({
