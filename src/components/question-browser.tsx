@@ -7,7 +7,8 @@ import { QuestionCard } from "@/components/question-card";
 import { Button } from "@/components/ui/button";
 
 type QuestionBrowserProps = {
-  subjects: { id: number; name: string }[];
+  examBoards: { id: number; name: string }[];
+  subjects: { id: number; name: string; exam_board_id: number | null }[];
   chapters: {
     id: number;
     name: string;
@@ -49,7 +50,11 @@ const difficultyOptions = [
   { value: 4, label: "Challenge" },
 ];
 
-export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
+export function QuestionBrowser({
+  examBoards,
+  subjects,
+  chapters,
+}: QuestionBrowserProps) {
   const [hierarchySelection, setHierarchySelection] = useState<string>("all");
   const [difficultySelections, setDifficultySelections] = useState<Set<number>>(
     new Set(),
@@ -62,6 +67,9 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
   const [activeParentChapterId, setActiveParentChapterId] = useState<
     number | null
   >(null);
+  const [activeExamBoardId, setActiveExamBoardId] = useState<number | null>(
+    null,
+  );
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [completionFilter, setCompletionFilter] = useState<
@@ -112,10 +120,26 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
   }, [hierarchyOpen]);
 
   useEffect(() => {
+    if (activeExamBoardId != null) return;
+    const firstExamId =
+      subjects.find((subject) => subject.exam_board_id != null)
+        ?.exam_board_id ??
+      examBoards[0]?.id ??
+      null;
+    if (firstExamId != null) {
+      setActiveExamBoardId(firstExamId);
+    }
+  }, [activeExamBoardId, subjects, examBoards]);
+
+  useEffect(() => {
     if (hierarchySelection.startsWith("subject:")) {
       const [, id] = hierarchySelection.split(":");
       const subjectId = Number.parseInt(id, 10);
       if (Number.isFinite(subjectId)) {
+        const subject = subjects.find((item) => item.id === subjectId);
+        if (subject?.exam_board_id != null) {
+          setActiveExamBoardId(subject.exam_board_id);
+        }
         setActiveSubjectId(subjectId);
         setActiveParentChapterId(null);
       }
@@ -128,6 +152,14 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
       if (Number.isFinite(chapterId)) {
         const chapter = chapters.find((item) => item.id === chapterId);
         if (chapter) {
+          if (chapter.subjectId != null) {
+            const subject = subjects.find(
+              (item) => item.id === chapter.subjectId,
+            );
+            if (subject?.exam_board_id != null) {
+              setActiveExamBoardId(subject.exam_board_id);
+            }
+          }
           setActiveSubjectId(chapter.subjectId ?? null);
           setActiveParentChapterId(
             chapter.parentChapterId ?? chapter.id ?? null,
@@ -135,7 +167,7 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
         }
       }
     }
-  }, [chapters, hierarchySelection]);
+  }, [chapters, hierarchySelection, subjects]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -194,7 +226,12 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
   }, [completionFilter, difficultySelections, hierarchySelection, page]);
 
   const currentLabel = useMemo(() => {
-    if (!hierarchySelection.startsWith("chapter:")) return "Select a chapter";
+    if (!hierarchySelection.startsWith("chapter:")) {
+      const examName = activeExamBoardId
+        ? examBoards.find((exam) => exam.id === activeExamBoardId)?.name
+        : null;
+      return examName ?? "Select a chapter";
+    }
     const [, rawId] = hierarchySelection.split(":");
     const numericId = Number.parseInt(rawId, 10);
     const chapter = chapters.find((item) => item.id === numericId);
@@ -208,7 +245,7 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
     return chapter && subject
       ? `${subject.name} / ${parent ? `${parent.name} / ` : ""}${chapter.name}`
       : (chapter?.name ?? "Select a chapter");
-  }, [chapters, hierarchySelection, subjects]);
+  }, [activeExamBoardId, chapters, examBoards, hierarchySelection, subjects]);
 
   const visibleRootChapters = useMemo(() => {
     if (activeSubjectId == null) return [];
@@ -241,13 +278,20 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
     difficultySelections.size > 0 ||
     completionFilter !== "all";
 
+  const visibleSubjects = useMemo(() => {
+    if (activeExamBoardId == null) return subjects;
+    return subjects.filter(
+      (subject) => subject.exam_board_id === activeExamBoardId,
+    );
+  }, [activeExamBoardId, subjects]);
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-slate-200 bg-slate-100/70 p-4">
         <div className="flex flex-wrap items-start gap-4 md:items-end">
           <div className="space-y-2">
             <p className="text-sm font-semibold text-slate-700">
-              Subject / Chapter
+              Exam / Subject / Chapter
             </p>
             <div className="relative" ref={hierarchyRef}>
               <button
@@ -259,34 +303,72 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
                 <ChevronDown className="size-4 text-slate-400" />
               </button>
               {hierarchyOpen ? (
-                <div className="absolute z-20 mt-2 w-[min(900px,95vw)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-                  <div className="grid grid-cols-3">
+                <div className="absolute z-20 mt-2 w-[min(1100px,95vw)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+                  <div className="grid grid-cols-4">
                     <div className="max-h-72 overflow-auto">
                       <div className="px-3 py-2 text-sm font-semibold text-slate-700">
-                        选择学科查看章节
+                        选择考试局
                       </div>
-                      {subjects.map((subject) => (
+                      {examBoards.map((exam) => (
                         <button
-                          key={subject.id}
+                          key={exam.id}
                           type="button"
                           onMouseEnter={() => {
-                            setActiveSubjectId(subject.id);
+                            setActiveExamBoardId(exam.id);
+                            setActiveSubjectId(null);
                             setActiveParentChapterId(null);
+                            setHierarchySelection("all");
                           }}
                           onFocus={() => {
-                            setActiveSubjectId(subject.id);
+                            setActiveExamBoardId(exam.id);
+                            setActiveSubjectId(null);
                             setActiveParentChapterId(null);
+                            setHierarchySelection("all");
                           }}
-                          className={`flex w-full items-start gap-3 px-3 py-2 text-left text-sm font-semibold ${activeSubjectId === subject.id ? "bg-slate-50 text-slate-900" : "text-slate-700 hover:bg-slate-50"}`}
+                          className={`flex w-full items-start gap-3 px-3 py-2 text-left text-sm font-semibold ${activeExamBoardId === exam.id ? "bg-slate-50 text-slate-900" : "text-slate-700 hover:bg-slate-50"}`}
                         >
                           <span className="flex-1 whitespace-normal text-left leading-snug break-words">
-                            {subject.name}
+                            {exam.name}
                           </span>
                           <span className="text-slate-400">›</span>
                         </button>
                       ))}
                     </div>
                     <div className="max-h-72 overflow-auto bg-slate-50">
+                      {activeExamBoardId == null ? (
+                        <div className="px-4 py-6 text-sm text-slate-500">
+                          先选择考试局
+                        </div>
+                      ) : visibleSubjects.length === 0 ? (
+                        <div className="px-4 py-6 text-sm text-slate-500">
+                          当前考试局暂无学科
+                        </div>
+                      ) : (
+                        <div className="flex flex-col divide-y divide-slate-200">
+                          {visibleSubjects.map((subject) => (
+                            <button
+                              key={subject.id}
+                              type="button"
+                              className={`flex w-full items-start gap-3 px-3 py-2 text-left text-sm font-semibold ${activeSubjectId === subject.id ? "bg-white text-slate-900" : "text-slate-700 hover:bg-white"}`}
+                              onMouseEnter={() => {
+                                setActiveSubjectId(subject.id);
+                                setActiveParentChapterId(null);
+                              }}
+                              onFocus={() => {
+                                setActiveSubjectId(subject.id);
+                                setActiveParentChapterId(null);
+                              }}
+                            >
+                              <span className="flex-1 whitespace-normal text-left leading-snug break-words">
+                                {subject.name}
+                              </span>
+                              <span className="text-slate-400">›</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="max-h-72 overflow-auto">
                       {activeSubjectId == null ? (
                         <div className="px-4 py-6 text-sm text-slate-500">
                           先选择学科查看章节
@@ -302,7 +384,7 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
                               <button
                                 key={chapter.id}
                                 type="button"
-                                className={`flex w-full items-start gap-3 px-3 py-2 text-left text-sm font-medium ${activeParentChapterId === chapter.id ? "bg-white text-slate-900" : "text-slate-700 hover:bg-white"}`}
+                                className={`flex w-full items-start gap-3 px-3 py-2 text-left text-sm font-medium ${activeParentChapterId === chapter.id ? "bg-slate-50 text-slate-900" : "text-slate-700 hover:bg-slate-50"}`}
                                 onMouseEnter={() =>
                                   setActiveParentChapterId(chapter.id)
                                 }
@@ -330,7 +412,7 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
                         </div>
                       )}
                     </div>
-                    <div className="max-h-72 overflow-auto">
+                    <div className="max-h-72 overflow-auto bg-slate-50">
                       {activeParentChapterId == null ? (
                         <div className="px-4 py-6 text-sm text-slate-500">
                           先选择章节查看子章节
@@ -345,7 +427,7 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
                             <button
                               key={chapter.id}
                               type="button"
-                              className={`flex w-full items-start gap-3 px-3 py-2 text-left text-sm font-medium ${hierarchySelection === `chapter:${chapter.id}` ? "bg-slate-50 text-slate-900" : "text-slate-700 hover:bg-slate-50"}`}
+                              className={`flex w-full items-start gap-3 px-3 py-2 text-left text-sm font-medium ${hierarchySelection === `chapter:${chapter.id}` ? "bg-white text-slate-900" : "text-slate-700 hover:bg-white"}`}
                               onClick={() => {
                                 selectHierarchy(`chapter:${chapter.id}`);
                                 setHierarchyOpen(false);
@@ -366,11 +448,15 @@ export function QuestionBrowser({ subjects, chapters }: QuestionBrowserProps) {
                   <div className="pointer-events-none absolute inset-0">
                     <div
                       className="absolute top-0 bottom-0 border-l border-slate-200"
-                      style={{ left: "33.3333%" }}
+                      style={{ left: "25%" }}
                     />
                     <div
                       className="absolute top-0 bottom-0 border-l border-slate-200"
-                      style={{ left: "66.6667%" }}
+                      style={{ left: "50%" }}
+                    />
+                    <div
+                      className="absolute top-0 bottom-0 border-l border-slate-200"
+                      style={{ left: "75%" }}
                     />
                   </div>
                 </div>

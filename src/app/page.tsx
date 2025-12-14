@@ -5,9 +5,18 @@ import { createClient } from "@/lib/supabase/server";
 export default async function Home() {
   const supabase = await createClient();
 
+  const { data: examBoards } = await supabase
+    .from("exam_boards")
+    .select("id, name, question_bank")
+    .eq("question_bank", 0)
+    .order("name", { ascending: true });
+
   const { data: subjects } = await supabase
     .from("subjects")
-    .select("id, name")
+    .select(
+      "id, name, exam_board_id, exam_board:exam_boards(name, question_bank)",
+    )
+    .eq("exam_board.question_bank", 0)
     .order("name", { ascending: true });
 
   const { data: chapters } = await supabase
@@ -19,14 +28,25 @@ export default async function Home() {
     <main className="min-h-screen bg-slate-50 px-4 py-12 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
         <QuestionBrowser
-          subjects={subjects ?? []}
+          examBoards={examBoards ?? []}
+          subjects={(subjects ?? []).filter(
+            (subject) => subject.exam_board?.question_bank === 0,
+          )}
           chapters={
-            chapters?.map((chapter) => ({
-              id: chapter.id,
-              name: chapter.name,
-              subjectId: chapter.subject_id ?? null,
-              parentChapterId: chapter.parent_chapter_id ?? null,
-            })) ?? []
+            chapters
+              ?.filter((chapter) =>
+                (subjects ?? []).some(
+                  (subject) =>
+                    subject.id === chapter.subject_id &&
+                    subject.exam_board?.question_bank === 0,
+                ),
+              )
+              .map((chapter) => ({
+                id: chapter.id,
+                name: chapter.name,
+                subjectId: chapter.subject_id ?? null,
+                parentChapterId: chapter.parent_chapter_id ?? null,
+              })) ?? []
           }
         />
       </div>

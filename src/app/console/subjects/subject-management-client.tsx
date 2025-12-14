@@ -56,6 +56,7 @@ type SubjectManagementProps = {
   initialSubjects: SubjectRow[];
   initialChapters: ChapterRow[];
   loadError: string | null;
+  questionBank: number;
 };
 
 const compareByName = <T extends { name: string }>(a: T, b: T) =>
@@ -147,6 +148,7 @@ export function SubjectManagement({
   initialSubjects,
   initialChapters,
   loadError,
+  questionBank,
 }: SubjectManagementProps) {
   const supabase = useMemo(() => createClient(), []);
   const [examBoards, setExamBoards] =
@@ -285,7 +287,7 @@ export function SubjectManagement({
       if (modalState.type === "createBoard") {
         const { data, error } = await supabase
           .from("exam_boards")
-          .insert({ name: trimmed })
+          .insert({ name: trimmed, question_bank: questionBank })
           .select("id, name, created_at")
           .single();
         if (error || !data) throw new Error(error?.message ?? "创建失败");

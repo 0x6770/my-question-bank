@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, FileQuestion, Tag, Users } from "lucide-react";
+import { FileQuestion, FileText, Tag, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType, ReactNode, SVGProps } from "react";
@@ -12,14 +12,28 @@ import type { AdminRole } from "./types";
 type NavItem = {
   href: string;
   label: string;
-  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  icon?: ComponentType<SVGProps<SVGSVGElement>>;
   requiresSuperAdmin?: boolean;
+  children?: NavItem[];
 };
 
 const navItems: NavItem[] = [
-  { href: "/console/questions", label: "Questions", icon: FileQuestion },
+  {
+    href: "/console/questions",
+    label: "Questions",
+    icon: FileQuestion,
+    children: [{ href: "/console/subjects", label: "Subjects" }],
+  },
+  {
+    href: "/console/exam-papers",
+    label: "Exam Papers",
+    icon: FileText,
+    children: [
+      { href: "/console/exam-papers/subjects", label: "Subjects" },
+      { href: "/console/exam-papers/tags", label: "Tags" },
+    ],
+  },
   { href: "/console/tags", label: "Tags", icon: Tag },
-  { href: "/console/subjects", label: "Subjects", icon: BookOpen },
   {
     href: "/console/users",
     label: "Users",
@@ -48,9 +62,11 @@ export function ConsoleShell({ adminRole, children }: ConsoleShellProps) {
       <aside className="flex w-72 flex-col border-r border-slate-200 bg-white">
         <nav className="px-3 py-3">
           <ul className="space-y-1">
-            {visibleNavItems.map(({ href, icon: Icon, label }) => {
-              const isActive =
-                pathname === href || pathname.startsWith(`${href}/`);
+            {visibleNavItems.map(({ href, icon: Icon, label, children }) => {
+              const hasChildren = Boolean(children?.length);
+              const isActive = hasChildren
+                ? pathname === href
+                : pathname === href || pathname.startsWith(`${href}/`);
               return (
                 <li key={href}>
                   <Link
@@ -62,9 +78,34 @@ export function ConsoleShell({ adminRole, children }: ConsoleShellProps) {
                         : "text-slate-600 hover:bg-slate-100",
                     )}
                   >
-                    <Icon className="size-5" />
+                    {Icon ? <Icon className="size-5" /> : null}
                     {label}
                   </Link>
+                  {children?.length ? (
+                    <ul className="mt-1 space-y-1 pl-8">
+                      {children.map((child) => {
+                        const childActive =
+                          pathname === child.href ||
+                          pathname.startsWith(`${child.href}/`);
+                        return (
+                          <li key={child.href}>
+                            <Link
+                              href={child.href}
+                              className={cn(
+                                "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition",
+                                childActive
+                                  ? "bg-slate-900 text-white"
+                                  : "text-slate-600 hover:bg-slate-100",
+                              )}
+                            >
+                              <span className="h-px w-4 rounded-full bg-slate-300" />
+                              {child.label}
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : null}
                 </li>
               );
             })}

@@ -16,12 +16,12 @@ export default async function ConsoleUsersPage() {
     supabase
       .from("user_subject_access")
       .select(
-        "user_id, subject:subjects(id, name, exam_board:exam_boards(name))",
+        "user_id, subject:subjects(id, name, exam_board:exam_boards(name, question_bank))",
       )
       .order("created_at", { ascending: false }),
     supabase
       .from("subjects")
-      .select("id, name, exam_board:exam_boards(name)")
+      .select("id, name, exam_board:exam_boards(name, question_bank)")
       .order("name", { ascending: true }),
   ]);
 
@@ -30,9 +30,21 @@ export default async function ConsoleUsersPage() {
       ? "无法加载用户或授权数据，请稍后重试。"
       : null;
 
+  const filteredSubjects = (subjects ?? []).filter(
+    (subject) => subject.exam_board?.question_bank === 0,
+  );
+  const allowedSubjectIds = new Set(
+    filteredSubjects.map((subject) => subject.id),
+  );
+
   const accessGrants = (accessRows ?? [])
-    .filter((row) => row.subject)
-    .map((row) => ({ userId: row.user_id, subjectId: row.subject?.id }));
+    .filter(
+      (row) =>
+        row.subject &&
+        row.subject.exam_board?.question_bank === 0 &&
+        allowedSubjectIds.has(row.subject.id),
+    )
+    .map((row) => ({ userId: row.user_id, subjectId: row.subject.id }));
 
   return (
     <div className="flex flex-1 flex-col gap-6">

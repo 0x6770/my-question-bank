@@ -113,18 +113,104 @@ export type Database = {
           created_at: string;
           id: number;
           name: string;
+          question_bank: number;
         };
         Insert: {
           created_at?: string;
           id?: number;
           name: string;
+          question_bank: number;
         };
         Update: {
           created_at?: string;
           id?: number;
           name?: string;
+          question_bank?: number;
         };
         Relationships: [];
+      };
+      exam_paper_tag_values: {
+        Row: {
+          created_at: string;
+          exam_paper_id: number;
+          tag_value_id: number;
+        };
+        Insert: {
+          created_at?: string;
+          exam_paper_id: number;
+          tag_value_id: number;
+        };
+        Update: {
+          created_at?: string;
+          exam_paper_id?: number;
+          tag_value_id?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "exam_paper_tag_values_exam_paper_id_fkey";
+            columns: ["exam_paper_id"];
+            isOneToOne: false;
+            referencedRelation: "exam_papers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "exam_paper_tag_values_tag_value_id_fkey";
+            columns: ["tag_value_id"];
+            isOneToOne: false;
+            referencedRelation: "subject_exam_tag_values";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      exam_papers: {
+        Row: {
+          created_at: string;
+          id: number;
+          mark_scheme_path: string | null;
+          paper_code: string;
+          paper_label: string;
+          question_paper_path: string | null;
+          season: string;
+          subject_id: number;
+          time_zone: string | null;
+          updated_at: string;
+          year: number;
+        };
+        Insert: {
+          created_at?: string;
+          id?: number;
+          mark_scheme_path?: string | null;
+          paper_code: string;
+          paper_label: string;
+          question_paper_path?: string | null;
+          season: string;
+          subject_id: number;
+          time_zone?: string | null;
+          updated_at?: string;
+          year: number;
+        };
+        Update: {
+          created_at?: string;
+          id?: number;
+          mark_scheme_path?: string | null;
+          paper_code?: string;
+          paper_label?: string;
+          question_paper_path?: string | null;
+          season?: string;
+          subject_id?: number;
+          time_zone?: string | null;
+          updated_at?: string;
+          year?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "exam_papers_subject_id_fkey";
+            columns: ["subject_id"];
+            isOneToOne: false;
+            referencedRelation: "subjects";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       profiles: {
         Row: {
@@ -210,6 +296,79 @@ export type Database = {
             columns: ["chapter_id"];
             isOneToOne: false;
             referencedRelation: "chapters";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      subject_exam_tag_values: {
+        Row: {
+          created_at: string;
+          id: number;
+          position: number;
+          tag_id: number;
+          updated_at: string;
+          value: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: number;
+          position?: number;
+          tag_id: number;
+          updated_at?: string;
+          value: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: number;
+          position?: number;
+          tag_id?: number;
+          updated_at?: string;
+          value?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "subject_exam_tag_values_tag_id_fkey";
+            columns: ["tag_id"];
+            isOneToOne: false;
+            referencedRelation: "subject_exam_tags";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      subject_exam_tags: {
+        Row: {
+          created_at: string;
+          id: number;
+          name: string;
+          position: number;
+          required: boolean;
+          subject_id: number;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: number;
+          name: string;
+          position?: number;
+          required?: boolean;
+          subject_id: number;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: number;
+          name?: string;
+          position?: number;
+          required?: boolean;
+          subject_id?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "subject_exam_tags_subject_id_fkey";
+            columns: ["subject_id"];
+            isOneToOne: false;
+            referencedRelation: "subjects";
             referencedColumns: ["id"];
           },
         ];

@@ -1,8 +1,9 @@
 WITH eb AS (
-  INSERT INTO public.exam_boards (name)
-  VALUES ('Alevel')
+  INSERT INTO public.exam_boards (name, question_bank)
+  VALUES ('Alevel', 0)
   ON CONFLICT (name) DO UPDATE
-    SET name = EXCLUDED.name
+    SET name = EXCLUDED.name,
+        question_bank = EXCLUDED.question_bank
   RETURNING id
 ),
 sub AS (
