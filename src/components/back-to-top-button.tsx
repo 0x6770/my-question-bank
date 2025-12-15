@@ -32,7 +32,7 @@ export function BackToTopButton() {
       onClick={scrollToTop}
       size="icon"
       className="fixed bottom-6 right-6 rounded-full bg-[#001b48] transition-colors hover:bg-[#0a275f]"
-      aria-label="回到顶部"
+      aria-label="Back to top"
     >
       <ArrowUp className="size-5" />
     </Button>

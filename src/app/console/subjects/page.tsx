@@ -25,7 +25,7 @@ export default async function ConsoleSubjectsPage() {
 
   const loadError =
     examBoardsResult.error || subjectsResult.error || chaptersResult.error
-      ? "无法加载考试局、学科或章节数据，请稍后重试。"
+      ? "Failed to load exam boards, subjects, or chapters. Please try again later."
       : null;
 
   const examBoards = (examBoardsResult.data ?? []).filter(

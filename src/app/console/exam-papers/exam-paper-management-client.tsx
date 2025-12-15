@@ -97,7 +97,7 @@ function Modal({
             variant="ghost"
             size="icon-sm"
             onClick={onClose}
-            aria-label="关闭"
+            aria-label="Close"
           >
             <X className="size-4" />
           </Button>
@@ -191,7 +191,7 @@ export function ExamPaperManagement({
   const uploadPdf = useCallback(
     async (paperId: number, file: File, kind: PdfKind, upsert = false) => {
       if (!ensurePdf(file)) {
-        throw new Error("仅支持上传 PDF 文件。");
+        throw new Error("Only PDF files are supported.");
       }
       const path =
         kind === "question"
@@ -228,18 +228,21 @@ export function ExamPaperManagement({
     const markSchemeFile = createState.markSchemeFile;
 
     if (!subjectId) {
-      setMessage({ type: "error", text: "请选择学科。" });
+      setMessage({ type: "error", text: "Please select a subject." });
       return;
     }
     if (!questionFile) {
-      setMessage({ type: "error", text: "请上传 Question Paper PDF。" });
+      setMessage({
+        type: "error",
+        text: "Please upload the Question Paper PDF.",
+      });
       return;
     }
     if (
       !ensurePdf(questionFile) ||
       (markSchemeFile && !ensurePdf(markSchemeFile))
     ) {
-      setMessage({ type: "error", text: "仅支持上传 PDF 文件。" });
+      setMessage({ type: "error", text: "Only PDF files are supported." });
       return;
     }
 
@@ -248,7 +251,10 @@ export function ExamPaperManagement({
       (tag) => tag.required && !createTagSelections[tag.id],
     );
     if (missingRequired) {
-      setMessage({ type: "error", text: "必填标签尚未选择对应的可选值。" });
+      setMessage({
+        type: "error",
+        text: "Please fill all required tag values.",
+      });
       return;
     }
 
@@ -273,14 +279,14 @@ export function ExamPaperManagement({
     if (!selectedPaper || !selectedSeason || !selectedYear) {
       setMessage({
         type: "error",
-        text: "请为 paper / season / year 标签选择值。",
+        text: "Please choose values for paper / season / year.",
       });
       return;
     }
 
     const parsedYear = Number.parseInt(selectedYear.value, 10);
     if (!Number.isFinite(parsedYear)) {
-      setMessage({ type: "error", text: "year 标签的值必须是数字。" });
+      setMessage({ type: "error", text: "Year must be a number." });
       return;
     }
 
@@ -301,7 +307,7 @@ export function ExamPaperManagement({
         .select("id")
         .single();
       if (insertError || !inserted) {
-        throw new Error(insertError?.message ?? "创建试卷失败。");
+        throw new Error(insertError?.message ?? "Failed to create exam paper.");
       }
       createdId = inserted.id;
 
@@ -356,10 +362,12 @@ export function ExamPaperManagement({
         markSchemeFile: null,
       });
       setCreateTagSelections({});
-      setMessage({ type: "success", text: "创建成功。" });
+      setMessage({ type: "success", text: "Created successfully." });
     } catch (error) {
       const reason =
-        error instanceof Error ? error.message : "创建失败，请稍后重试。";
+        error instanceof Error
+          ? error.message
+          : "Creation failed, please try again.";
       setMessage({ type: "error", text: reason });
       if (createdId) {
         await supabase.from("exam_papers").delete().eq("id", createdId);
@@ -402,14 +410,14 @@ export function ExamPaperManagement({
       tagsBySubject.get(Number.parseInt(editState.subjectId, 10)) ?? [];
 
     if (!subjectId) {
-      setMessage({ type: "error", text: "请选择学科。" });
+      setMessage({ type: "error", text: "Please select a subject." });
       return;
     }
     if (
       (editFiles.question && !ensurePdf(editFiles.question)) ||
       (editFiles.markScheme && !ensurePdf(editFiles.markScheme))
     ) {
-      setMessage({ type: "error", text: "仅支持上传 PDF 文件。" });
+      setMessage({ type: "error", text: "Only PDF files are supported." });
       return;
     }
 
@@ -417,7 +425,10 @@ export function ExamPaperManagement({
       (tag) => tag.required && !editTagSelections[tag.id],
     );
     if (missingRequired) {
-      setMessage({ type: "error", text: "必填标签尚未选择对应的可选值。" });
+      setMessage({
+        type: "error",
+        text: "Please fill all required tag values.",
+      });
       return;
     }
 
@@ -442,14 +453,14 @@ export function ExamPaperManagement({
     if (!selectedPaper || !selectedSeason || !selectedYear) {
       setMessage({
         type: "error",
-        text: "请为 paper / season / year 标签选择值。",
+        text: "Please choose values for paper / season / year.",
       });
       return;
     }
 
     const parsedYear = Number.parseInt(selectedYear.value, 10);
     if (!Number.isFinite(parsedYear)) {
-      setMessage({ type: "error", text: "year 标签的值必须是数字。" });
+      setMessage({ type: "error", text: "Year must be a number." });
       return;
     }
 
@@ -519,12 +530,14 @@ export function ExamPaperManagement({
         }
       }
 
-      setMessage({ type: "success", text: "已更新试卷。" });
+      setMessage({ type: "success", text: "Updated successfully." });
       setEditingPaper(null);
       setListRefreshKey((prev) => prev + 1);
     } catch (error) {
       const reason =
-        error instanceof Error ? error.message : "更新失败，请稍后重试。";
+        error instanceof Error
+          ? error.message
+          : "Update failed, please try again.";
       setMessage({ type: "error", text: reason });
     } finally {
       setEditBusy(false);
@@ -534,7 +547,9 @@ export function ExamPaperManagement({
   const handleDelete = async (paper: BrowserExamPaper) => {
     resetMessage();
     if (
-      !window.confirm(`确认删除试卷 ${paper.paper_label ?? paper.paper_code}?`)
+      !window.confirm(
+        `Delete exam paper ${paper.paper_label ?? paper.paper_code}?`,
+      )
     ) {
       return;
     }
@@ -553,11 +568,13 @@ export function ExamPaperManagement({
       if (error) {
         throw new Error(error.message);
       }
-      setMessage({ type: "success", text: "已删除试卷。" });
+      setMessage({ type: "success", text: "Deleted successfully." });
       setListRefreshKey((prev) => prev + 1);
     } catch (error) {
       const reason =
-        error instanceof Error ? error.message : "删除失败，请稍后重试。";
+        error instanceof Error
+          ? error.message
+          : "Delete failed, please try again.";
       setMessage({ type: "error", text: reason });
     } finally {
       setDeletingId(null);
@@ -623,7 +640,8 @@ export function ExamPaperManagement({
               Exam Papers
             </h1>
             <p className="text-sm text-slate-500">
-              上传、修改、删除试卷 PDF，支持按学科、年份和关键词筛选。
+              Upload, update, and delete exam paper PDFs. Filter by subject,
+              year, and keywords.
             </p>
           </div>
           <Button
@@ -633,7 +651,7 @@ export function ExamPaperManagement({
             onClick={() => setListRefreshKey((prev) => prev + 1)}
           >
             <RefreshCcw className="size-4" />
-            刷新
+            Refresh
           </Button>
         </div>
         {message ? (
@@ -659,15 +677,17 @@ export function ExamPaperManagement({
         <CardHeader className="border-b border-slate-100">
           <CardTitle className="flex items-center gap-2">
             <Plus className="size-5 text-slate-500" />
-            新增试卷
+            Create Exam Paper
           </CardTitle>
-          <CardDescription>创建试卷元数据并上传 PDF。</CardDescription>
+          <CardDescription>
+            Create exam paper metadata and upload PDFs.
+          </CardDescription>
         </CardHeader>
         <CardContent className="pt-6">
           <form className="space-y-4" onSubmit={handleCreate}>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="create-subject">学科 *</Label>
+                <Label htmlFor="create-subject">Subject *</Label>
                 <select
                   id="create-subject"
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none"
@@ -680,7 +700,7 @@ export function ExamPaperManagement({
                     setCreateTagSelections({});
                   }}
                 >
-                  <option value="">选择学科</option>
+                  <option value="">Select a subject</option>
                   {subjectOptions.map((option) => (
                     <option key={option.id} value={option.id}>
                       {option.label}
@@ -712,7 +732,7 @@ export function ExamPaperManagement({
                         }))
                       }
                     >
-                      <option value="">选择值</option>
+                      <option value="">Select a value</option>
                       {(tag.values ?? []).map((value) => (
                         <option key={value.id} value={value.id}>
                           {value.value}
@@ -743,7 +763,7 @@ export function ExamPaperManagement({
               </div>
               <div className="space-y-2">
                 <Label htmlFor="create-mark-file">
-                  Mark Scheme (PDF，可选)
+                  Mark Scheme (PDF, optional)
                 </Label>
                 <Input
                   id="create-mark-file"
@@ -766,7 +786,7 @@ export function ExamPaperManagement({
                 ) : (
                   <UploadCloud className="size-4" />
                 )}
-                {createBusy ? "创建中..." : "创建试卷"}
+                {createBusy ? "Creating..." : "Create Exam Paper"}
               </Button>
               <Button
                 type="button"
@@ -780,7 +800,7 @@ export function ExamPaperManagement({
                   resetMessage();
                 }}
               >
-                重置
+                Reset
               </Button>
             </div>
           </form>
@@ -791,9 +811,11 @@ export function ExamPaperManagement({
         <CardHeader className="border-b border-slate-100">
           <CardTitle className="flex items-center gap-2">
             <ArrowUpDown className="size-5 text-slate-500" />
-            筛选
+            Filter
           </CardTitle>
-          <CardDescription>按学科与标签组合检索试卷。</CardDescription>
+          <CardDescription>
+            Filter exam papers by subject and tags.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 pt-4">
           <ExamPaperBrowser
@@ -807,7 +829,7 @@ export function ExamPaperManagement({
                   size="icon-sm"
                   variant="ghost"
                   onClick={() => openEdit(paper)}
-                  aria-label="编辑"
+                  aria-label="Edit"
                 >
                   <Pencil className="size-4" />
                 </Button>
@@ -817,7 +839,7 @@ export function ExamPaperManagement({
                   className="text-red-600"
                   onClick={() => handleDelete(paper)}
                   disabled={deletingId === paper.id}
-                  aria-label="删除"
+                  aria-label="Delete"
                 >
                   {deletingId === paper.id ? (
                     <Loader2 className="size-4 animate-spin" />
@@ -833,8 +855,8 @@ export function ExamPaperManagement({
 
       <Modal
         open={Boolean(editingPaper)}
-        title="编辑试卷"
-        description="可修改元数据并替换 PDF。"
+        title="Edit Exam Paper"
+        description="Update metadata and replace PDFs."
         onClose={() => setEditingPaper(null)}
         footer={
           <div className="flex items-center justify-end gap-2">
@@ -843,7 +865,7 @@ export function ExamPaperManagement({
               onClick={() => setEditingPaper(null)}
               disabled={editBusy}
             >
-              取消
+              Cancel
             </Button>
             <Button
               type="submit"
@@ -852,7 +874,7 @@ export function ExamPaperManagement({
               className="gap-2"
             >
               {editBusy ? <Loader2 className="size-4 animate-spin" /> : null}
-              保存
+              Save
             </Button>
           </div>
         }
@@ -894,7 +916,7 @@ export function ExamPaperManagement({
                     <div className="grid grid-cols-2">
                       <div className="max-h-72 overflow-auto">
                         <div className="px-3 py-2 text-sm font-semibold text-slate-700">
-                          选择考试局
+                          Choose exam board
                         </div>
                         {examBoardOptions.map((exam) => (
                           <button
@@ -917,11 +939,11 @@ export function ExamPaperManagement({
                       <div className="max-h-72 overflow-auto bg-slate-50">
                         {editActiveExamBoardId == null ? (
                           <div className="px-4 py-6 text-sm text-slate-500">
-                            先选择考试局
+                            Select an exam board first
                           </div>
                         ) : modalSubjectOptions.length === 0 ? (
                           <div className="px-4 py-6 text-sm text-slate-500">
-                            当前考试局暂无学科
+                            No subjects under this exam board
                           </div>
                         ) : (
                           <div className="flex flex-col divide-y divide-slate-200">
@@ -980,7 +1002,7 @@ export function ExamPaperManagement({
                         }))
                       }
                     >
-                      <option value="">选择值</option>
+                      <option value="">Select a value</option>
                       {(tag.values ?? []).map((value) => (
                         <option key={value.id} value={value.id}>
                           {value.value}
@@ -995,7 +1017,7 @@ export function ExamPaperManagement({
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="edit-question-file">
-                  Question Paper (替换时上传)
+                  Question Paper (upload to replace)
                 </Label>
                 <Input
                   id="edit-question-file"
@@ -1010,16 +1032,18 @@ export function ExamPaperManagement({
                 />
                 {editingPaper.question_paper_path ? (
                   <p className="text-xs text-slate-500">
-                    现有文件：{editingPaper.question_paper_path}
+                    Existing file: {editingPaper.question_paper_path}
                   </p>
                 ) : (
                   <p className="text-xs text-slate-500">
-                    当前未上传 Question Paper。
+                    No Question Paper uploaded.
                   </p>
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-mark-file">Mark Scheme (替换时上传)</Label>
+                <Label htmlFor="edit-mark-file">
+                  Mark Scheme (upload to replace)
+                </Label>
                 <Input
                   id="edit-mark-file"
                   type="file"
@@ -1033,11 +1057,11 @@ export function ExamPaperManagement({
                 />
                 {editingPaper.mark_scheme_path ? (
                   <p className="text-xs text-slate-500">
-                    现有文件：{editingPaper.mark_scheme_path}
+                    Existing file: {editingPaper.mark_scheme_path}
                   </p>
                 ) : (
                   <p className="text-xs text-slate-500">
-                    当前未上传 Mark Scheme。
+                    No Mark Scheme uploaded.
                   </p>
                 )}
               </div>

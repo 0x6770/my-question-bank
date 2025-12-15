@@ -280,7 +280,7 @@ export function ExamPaperBrowser({
         setListError(
           tagsResult.error?.message ??
             papersResult.error?.message ??
-            "加载失败，请稍后重试。",
+            "Failed to load, please try again later.",
         );
       } else {
         setTagsBySubject((prev) => {
@@ -418,8 +418,8 @@ export function ExamPaperBrowser({
           Exam Papers
         </h1>
         <p className="text-sm text-slate-500">
-          按学科和默认标签（paper / season / year / time
-          zone）筛选可访问的试卷。
+          Filter by exam, subject and default tags (paper / season / year / time
+          zone) to browse available papers.
         </p>
       </header>
 
@@ -444,7 +444,7 @@ export function ExamPaperBrowser({
                     <div className="grid grid-cols-2">
                       <div className="max-h-72 overflow-auto">
                         <div className="px-3 py-2 text-sm font-semibold text-slate-700">
-                          选择考试局
+                          Choose exam board
                         </div>
                         {examBoardOptions.map((exam) => (
                           <button
@@ -465,11 +465,11 @@ export function ExamPaperBrowser({
                       <div className="max-h-72 overflow-auto bg-slate-50">
                         {activeExamBoardId == null ? (
                           <div className="px-4 py-6 text-sm text-slate-500">
-                            先选择考试局
+                            Select an exam board first
                           </div>
                         ) : subjectOptions.length === 0 ? (
                           <div className="px-4 py-6 text-sm text-slate-500">
-                            当前考试局暂无学科
+                            No subjects under this exam board
                           </div>
                         ) : (
                           <div className="flex flex-col divide-y divide-slate-200">

@@ -203,7 +203,7 @@ export function QuestionBrowser({
           signal: controller.signal,
         });
         if (!response.ok) {
-          throw new Error("加载题目失败");
+          throw new Error("Failed to load questions");
         }
         const data: QuestionResult = await response.json();
         setQuestions(data.questions);
@@ -213,7 +213,7 @@ export function QuestionBrowser({
           setFetchError(
             error instanceof Error
               ? error.message
-              : "加载题目失败，请稍后重试。",
+              : "Failed to load questions, please try again later.",
           );
         }
       } finally {
@@ -307,7 +307,7 @@ export function QuestionBrowser({
                   <div className="grid grid-cols-4">
                     <div className="max-h-72 overflow-auto">
                       <div className="px-3 py-2 text-sm font-semibold text-slate-700">
-                        选择考试局
+                        Choose exam board
                       </div>
                       {examBoards.map((exam) => (
                         <button
@@ -337,11 +337,11 @@ export function QuestionBrowser({
                     <div className="max-h-72 overflow-auto bg-slate-50">
                       {activeExamBoardId == null ? (
                         <div className="px-4 py-6 text-sm text-slate-500">
-                          先选择考试局
+                          Select an exam board first
                         </div>
                       ) : visibleSubjects.length === 0 ? (
                         <div className="px-4 py-6 text-sm text-slate-500">
-                          当前考试局暂无学科
+                          No subjects under this exam board
                         </div>
                       ) : (
                         <div className="flex flex-col divide-y divide-slate-200">
@@ -371,13 +371,13 @@ export function QuestionBrowser({
                     <div className="max-h-72 overflow-auto">
                       {activeSubjectId == null ? (
                         <div className="px-4 py-6 text-sm text-slate-500">
-                          先选择学科查看章节
+                          Select a subject to view chapters
                         </div>
                       ) : (
                         <div className="flex flex-col divide-y divide-slate-200">
                           {visibleRootChapters.length === 0 ? (
                             <div className="px-4 py-6 text-sm text-slate-500">
-                              该学科暂无章节
+                              No chapters for this subject
                             </div>
                           ) : (
                             visibleRootChapters.map((chapter, index) => (
@@ -415,11 +415,11 @@ export function QuestionBrowser({
                     <div className="max-h-72 overflow-auto bg-slate-50">
                       {activeParentChapterId == null ? (
                         <div className="px-4 py-6 text-sm text-slate-500">
-                          先选择章节查看子章节
+                          Select a chapter to view subchapters
                         </div>
                       ) : visibleSubChapters.length === 0 ? (
                         <div className="px-4 py-6 text-sm text-slate-500">
-                          该章节暂无子章节
+                          No subchapters for this chapter
                         </div>
                       ) : (
                         <div className="flex flex-col divide-y divide-slate-200">
@@ -529,7 +529,7 @@ export function QuestionBrowser({
               className="w-full max-w-xs md:w-auto"
               disabled={!filtersActive}
             >
-              清空筛选
+              Clear filters
             </Button>
           </div>
         </div>
@@ -544,13 +544,13 @@ export function QuestionBrowser({
       <div className="space-y-6">
         {isLoading ? (
           <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center text-slate-500">
-            正在加载题目...
+            Loading questions...
           </div>
         ) : questions.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center text-slate-500">
             {hierarchySelection.startsWith("chapter:")
-              ? "没有符合筛选条件的题目。"
-              : "请选择一个章节以查看题目。"}
+              ? "No questions match the filters."
+              : "Select a chapter to view questions."}
           </div>
         ) : (
           <>
@@ -564,16 +564,16 @@ export function QuestionBrowser({
                 onClick={() => setPage((prev) => Math.max(1, prev - 1))}
                 disabled={page <= 1 || isLoading}
               >
-                上一页
+                Previous
               </Button>
-              <span className="text-sm text-slate-600">第 {page} 页</span>
+              <span className="text-sm text-slate-600">Page {page}</span>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setPage((prev) => prev + 1)}
                 disabled={!hasMore || isLoading}
               >
-                下一页
+                Next
               </Button>
             </div>
           </>

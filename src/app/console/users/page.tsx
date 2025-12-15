@@ -27,7 +27,7 @@ export default async function ConsoleUsersPage() {
 
   const loadError =
     profilesError || accessError || subjectsError
-      ? "无法加载用户或授权数据，请稍后重试。"
+      ? "Failed to load users or permissions. Please try again later."
       : null;
 
   const filteredSubjects = (subjects ?? []).filter(
@@ -52,7 +52,9 @@ export default async function ConsoleUsersPage() {
         <h1 className="text-2xl font-semibold tracking-tight">
           User Management
         </h1>
-        <p className="text-sm text-slate-500">查看并管理用户可访问的学科。</p>
+        <p className="text-sm text-slate-500">
+          View and manage subjects accessible to users.
+        </p>
       </header>
 
       {loadError ? (
@@ -63,9 +65,9 @@ export default async function ConsoleUsersPage() {
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-6 py-4">
-          <h2 className="text-lg font-semibold text-slate-800">用户列表</h2>
+          <h2 className="text-lg font-semibold text-slate-800">User List</h2>
           <p className="text-sm text-slate-500">
-            可直接调整 subject 访问权限。
+            Adjust subject access directly.
           </p>
         </div>
         <UserAccessManager

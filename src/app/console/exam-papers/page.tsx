@@ -50,7 +50,7 @@ export default async function ConsoleExamPapersPage() {
 
   const loadError =
     subjectsError || papersError || tagsError
-      ? "无法加载学科、试卷或标签数据，请稍后重试。"
+      ? "Failed to load subjects, papers, or tags. Please try again later."
       : null;
 
   return (

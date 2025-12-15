@@ -102,7 +102,7 @@ export function QuestionCard({ question }: QuestionCardProps) {
 
   const toggleBookmark = async () => {
     if (!userId) {
-      setBookmarkError("请登录后再收藏题目。");
+      setBookmarkError("Please log in to bookmark questions.");
       return;
     }
     setBookmarking(true);
@@ -122,7 +122,9 @@ export function QuestionCard({ question }: QuestionCardProps) {
     } catch (error) {
       setIsBookmarked(!next);
       setBookmarkError(
-        error instanceof Error ? error.message : "更新收藏失败，请稍后重试。",
+        error instanceof Error
+          ? error.message
+          : "Failed to update bookmark, please try again later.",
       );
     } finally {
       setBookmarking(false);
@@ -131,7 +133,7 @@ export function QuestionCard({ question }: QuestionCardProps) {
 
   const handleViewAnswer = async () => {
     if (!userId) {
-      setAnswerError("请登录后查看答案。");
+      setAnswerError("Please log in to view answers.");
       return;
     }
     setViewingAnswer(true);
@@ -146,7 +148,7 @@ export function QuestionCard({ question }: QuestionCardProps) {
       setAnswerError(
         error instanceof Error
           ? error.message
-          : "记录查看状态失败，请稍后重试。",
+          : "Failed to record answer view, please try again later.",
       );
     } finally {
       setViewingAnswer(false);
@@ -233,7 +235,7 @@ export function QuestionCard({ question }: QuestionCardProps) {
                 </div>
               ) : (
                 <div className="px-4 py-10 text-sm text-slate-500">
-                  暂无图片内容。
+                  No images available.
                 </div>
               )}
             </div>
@@ -244,7 +246,9 @@ export function QuestionCard({ question }: QuestionCardProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label={isBookmarked ? "取消收藏" : "收藏题目"}
+                aria-label={
+                  isBookmarked ? "Remove bookmark" : "Bookmark question"
+                }
                 onClick={toggleBookmark}
                 disabled={bookmarking}
               >
@@ -255,7 +259,9 @@ export function QuestionCard({ question }: QuestionCardProps) {
               <span className="h-6 w-px bg-slate-200" aria-hidden="true" />
               <div className="flex items-center justify-center rounded-full p-1">
                 <CheckCircle2
-                  aria-label={isAnswerViewed ? "已查看答案" : "未查看答案"}
+                  aria-label={
+                    isAnswerViewed ? "Answer viewed" : "Answer not viewed"
+                  }
                   className={`size-5 ${isAnswerViewed ? "text-emerald-600" : "text-slate-300"}`}
                 />
               </div>
@@ -390,7 +396,7 @@ export function QuestionCard({ question }: QuestionCardProps) {
                             ))
                           ) : (
                             <p className="text-sm text-slate-500">
-                              暂无题目图片。
+                              No question images.
                             </p>
                           )}
                         </div>
@@ -416,7 +422,7 @@ export function QuestionCard({ question }: QuestionCardProps) {
                             ))
                           ) : (
                             <p className="text-sm text-slate-500">
-                              暂无答案图片。
+                              No answer images.
                             </p>
                           )}
                         </div>

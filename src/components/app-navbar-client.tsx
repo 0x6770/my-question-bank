@@ -131,7 +131,7 @@ export function AppNavbarClient({
           {user ? (
             <>
               <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-                <span>{user.email ?? "已登录"}</span>
+                <span>{user.email ?? "Logged in"}</span>
                 {roleMeta ? (
                   <span
                     className={cn(

@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+// biome-ignore lint/correctness/noUnusedImports: lucide icons used in JSX below
 import { BadgeCheck, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -101,7 +102,7 @@ export function ExamPaperTagManagement({
   }, [tags]);
 
   const currentSubjectTags = selectedSubjectId
-    ? tagsBySubject.get(Number.parseInt(selectedSubjectId, 10)) ?? []
+    ? (tagsBySubject.get(Number.parseInt(selectedSubjectId, 10)) ?? [])
     : [];
 
   const resetMessage = () => setMessage(null);
@@ -111,12 +112,15 @@ export function ExamPaperTagManagement({
     resetMessage();
     const subjectId = Number.parseInt(selectedSubjectId, 10);
     if (!subjectId) {
-      setMessage({ type: "error", text: "请选择学科后再创建标签。" });
+      setMessage({
+        type: "error",
+        text: "Please select a subject before creating a tag.",
+      });
       return;
     }
     const name = creatingTagName.trim();
     if (!name) {
-      setMessage({ type: "error", text: "请输入标签名称。" });
+      setMessage({ type: "error", text: "Please enter a tag name." });
       return;
     }
     setCreating(true);
@@ -134,12 +138,12 @@ export function ExamPaperTagManagement({
       .single();
 
     if (error || !data) {
-      setMessage({ type: "error", text: error?.message ?? "创建失败。" });
+      setMessage({ type: "error", text: error?.message ?? "Creation failed." });
     } else {
       setTags((prev) => [...prev, { ...data, values: [] }]);
       setCreatingTagName("");
       setCreatingRequired(false);
-      setMessage({ type: "success", text: "创建成功。" });
+      setMessage({ type: "success", text: "Created successfully." });
     }
     setCreating(false);
   };
@@ -148,7 +152,7 @@ export function ExamPaperTagManagement({
     resetMessage();
     const valueText = (valueInputs[tagId] ?? "").trim();
     if (!valueText) {
-      setMessage({ type: "error", text: "请输入可选值。" });
+      setMessage({ type: "error", text: "Please enter a value." });
       return;
     }
     setBusyId(tagId);
@@ -162,17 +166,18 @@ export function ExamPaperTagManagement({
       .single();
 
     if (error || !data) {
-      setMessage({ type: "error", text: error?.message ?? "新增值失败。" });
+      setMessage({
+        type: "error",
+        text: error?.message ?? "Failed to add value.",
+      });
     } else {
       setTags((prev) =>
         prev.map((t) =>
-          t.id === tagId
-            ? { ...t, values: [...(t.values ?? []), data] }
-            : t,
+          t.id === tagId ? { ...t, values: [...(t.values ?? []), data] } : t,
         ),
       );
       setValueInputs((prev) => ({ ...prev, [tagId]: "" }));
-      setMessage({ type: "success", text: "已添加。" });
+      setMessage({ type: "success", text: "Added successfully." });
     }
     setBusyId(null);
   };
@@ -181,7 +186,7 @@ export function ExamPaperTagManagement({
     resetMessage();
     const trimmed = name.trim();
     if (!trimmed) {
-      setMessage({ type: "error", text: "标签名称不能为空。" });
+      setMessage({ type: "error", text: "Tag name cannot be empty." });
       return;
     }
     setBusyId(tagId);
@@ -195,7 +200,7 @@ export function ExamPaperTagManagement({
       setTags((prev) =>
         prev.map((t) => (t.id === tagId ? { ...t, name: trimmed } : t)),
       );
-      setMessage({ type: "success", text: "标签名称已更新。" });
+      setMessage({ type: "success", text: "Tag name updated." });
     }
     setBusyId(null);
     setEditingTagId(null);
@@ -210,7 +215,7 @@ export function ExamPaperTagManagement({
     resetMessage();
     const trimmed = nextValue.trim();
     if (!trimmed) {
-      setMessage({ type: "error", text: "可选值不能为空。" });
+      setMessage({ type: "error", text: "Value cannot be empty." });
       return;
     }
     setBusyId(valueId);
@@ -233,7 +238,7 @@ export function ExamPaperTagManagement({
             : t,
         ),
       );
-      setMessage({ type: "success", text: "可选值已更新。" });
+      setMessage({ type: "success", text: "Options updated." });
     }
     setBusyId(null);
     setEditingValueId(null);
@@ -257,7 +262,7 @@ export function ExamPaperTagManagement({
             : t,
         ),
       );
-      setMessage({ type: "success", text: "已删除。" });
+      setMessage({ type: "success", text: "Deleted successfully." });
     }
     setBusyId(null);
   };
@@ -266,7 +271,7 @@ export function ExamPaperTagManagement({
     resetMessage();
     if (
       !window.confirm(
-        "确认删除该标签？将同时删除其下所有可选值及关联的试卷选择。",
+        "Delete this tag? This will remove all options and related exam paper selections.",
       )
     ) {
       return;
@@ -280,7 +285,7 @@ export function ExamPaperTagManagement({
       setMessage({ type: "error", text: error.message });
     } else {
       setTags((prev) => prev.filter((t) => t.id !== tagId));
-      setMessage({ type: "success", text: "已删除标签。" });
+      setMessage({ type: "success", text: "Tag deleted." });
     }
     setBusyId(null);
   };
@@ -288,9 +293,12 @@ export function ExamPaperTagManagement({
   return (
     <div className="flex flex-1 flex-col gap-6">
       <header className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Exam Paper Tags</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Exam Paper Tags
+        </h1>
         <p className="text-sm text-slate-500">
-          为各学科配置标签和值，创建试卷时将按标签要求选择。
+          Configure tags and values per subject; creating exam papers will
+          require these selections.
         </p>
         {message ? (
           <div
@@ -308,13 +316,15 @@ export function ExamPaperTagManagement({
 
       <Card>
         <CardHeader className="border-b border-slate-100">
-          <CardTitle>选择学科</CardTitle>
-          <CardDescription>切换学科以管理对应的标签与值。</CardDescription>
+          <CardTitle>Select Subject</CardTitle>
+          <CardDescription>
+            Switch subject to manage its tags and values.
+          </CardDescription>
         </CardHeader>
         <CardContent className="pt-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
             <div className="space-y-2 sm:w-80">
-              <Label htmlFor="subject-select">学科</Label>
+              <Label htmlFor="subject-select">Subject</Label>
               <select
                 id="subject-select"
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none"
@@ -324,7 +334,7 @@ export function ExamPaperTagManagement({
                   resetMessage();
                 }}
               >
-                <option value="">选择学科</option>
+                <option value="">Select Subject</option>
                 {subjectOptions.map((option) => (
                   <option key={option.id} value={option.id}>
                     {option.label}
@@ -338,22 +348,27 @@ export function ExamPaperTagManagement({
 
       <Card>
         <CardHeader className="border-b border-slate-100">
-          <CardTitle>新建标签</CardTitle>
-          <CardDescription>为当前学科添加标签并设置是否必填。</CardDescription>
+          <CardTitle>Create Tag</CardTitle>
+          <CardDescription>
+            Add tags for the current subject and set whether they are required.
+          </CardDescription>
         </CardHeader>
         <CardContent className="pt-6">
-          <form className="grid grid-cols-1 gap-4 md:grid-cols-3" onSubmit={handleCreateTag}>
+          <form
+            className="grid grid-cols-1 gap-4 md:grid-cols-3"
+            onSubmit={handleCreateTag}
+          >
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="tag-name">标签名称</Label>
+              <Label htmlFor="tag-name">Tag Name</Label>
               <Input
                 id="tag-name"
-                placeholder="例如：Paper"
+                placeholder="e.g., Paper"
                 value={creatingTagName}
                 onChange={(event) => setCreatingTagName(event.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label className="invisible block text-sm">必填</Label>
+              <Label className="invisible block text-sm">Required</Label>
               <Button
                 type="button"
                 variant={creatingRequired ? "default" : "outline"}
@@ -363,20 +378,23 @@ export function ExamPaperTagManagement({
                 {creatingRequired ? (
                   <>
                     <BadgeCheck className="mr-2 size-4" />
-                    必填
+                    Required
                   </>
                 ) : (
-                  "设为必填"
+                  "Set as required"
                 )}
               </Button>
             </div>
             <div className="md:col-span-3 flex items-center gap-3">
               <Button type="submit" disabled={creating}>
-                {creating ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-                创建标签
+                {creating ? (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                ) : null}
+                Create Tag
               </Button>
               <p className="text-xs text-slate-500">
-                需先选择学科，名称在同一学科下唯一。
+                Select a subject first; the name must be unique within the
+                subject.
               </p>
             </div>
           </form>
@@ -385,12 +403,14 @@ export function ExamPaperTagManagement({
 
       <Card>
         <CardHeader className="border-b border-slate-100">
-          <CardTitle>标签列表</CardTitle>
-          <CardDescription>管理当前学科的标签及可选值。</CardDescription>
+          <CardTitle>Tag List</CardTitle>
+          <CardDescription>
+            Manage tags and options for the current subject.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 pt-6">
           {currentSubjectTags.length === 0 ? (
-            <p className="text-sm text-slate-500">该学科暂无标签。</p>
+            <p className="text-sm text-slate-500">No tags for this subject.</p>
           ) : (
             currentSubjectTags.map((tag) => (
               <div
@@ -404,18 +424,22 @@ export function ExamPaperTagManagement({
                         <>
                           <Input
                             value={editingTagName}
-                            onChange={(event) => setEditingTagName(event.target.value)}
+                            onChange={(event) =>
+                              setEditingTagName(event.target.value)
+                            }
                             className="w-52"
                           />
                           <Button
                             size="sm"
-                            onClick={() => handleRenameTag(tag.id, editingTagName)}
+                            onClick={() =>
+                              handleRenameTag(tag.id, editingTagName)
+                            }
                             disabled={busyId === tag.id}
                           >
                             {busyId === tag.id ? (
                               <Loader2 className="mr-1 size-4 animate-spin" />
                             ) : null}
-                            保存
+                            Save
                           </Button>
                           <Button
                             size="sm"
@@ -425,7 +449,7 @@ export function ExamPaperTagManagement({
                               setEditingTagName("");
                             }}
                           >
-                            取消
+                            Cancel
                           </Button>
                         </>
                       ) : (
@@ -441,7 +465,7 @@ export function ExamPaperTagManagement({
                               setEditingTagName(tag.name);
                               setEditingValueId(null);
                             }}
-                            aria-label="重命名标签"
+                            aria-label="Rename Tag"
                           >
                             <Pencil className="size-4" />
                           </Button>
@@ -449,12 +473,12 @@ export function ExamPaperTagManagement({
                       )}
                       {tag.required ? (
                         <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                          必填
+                          Required
                         </span>
                       ) : null}
                     </div>
                     <p className="text-xs text-slate-500">
-                      可选值：{tag.values?.length ?? 0}
+                      Options: {tag.values?.length ?? 0}
                     </p>
                   </div>
                   <Button
@@ -463,7 +487,7 @@ export function ExamPaperTagManagement({
                     className="text-red-600"
                     onClick={() => handleDeleteTag(tag.id)}
                     disabled={busyId === tag.id}
-                    aria-label="删除标签"
+                    aria-label="DeleteTag"
                   >
                     {busyId === tag.id ? (
                       <Loader2 className="size-4 animate-spin" />
@@ -491,14 +515,18 @@ export function ExamPaperTagManagement({
                           <Button
                             size="sm"
                             onClick={() =>
-                              handleRenameValue(tag.id, value.id, editingValueText)
+                              handleRenameValue(
+                                tag.id,
+                                value.id,
+                                editingValueText,
+                              )
                             }
                             disabled={busyId === value.id}
                           >
                             {busyId === value.id ? (
                               <Loader2 className="mr-1 size-4 animate-spin" />
                             ) : null}
-                            保存
+                            Save
                           </Button>
                           <Button
                             size="sm"
@@ -508,7 +536,7 @@ export function ExamPaperTagManagement({
                               setEditingValueText("");
                             }}
                           >
-                            取消
+                            Cancel
                           </Button>
                         </>
                       ) : (
@@ -522,7 +550,7 @@ export function ExamPaperTagManagement({
                               setEditingValueText(value.value);
                               setEditingTagId(null);
                             }}
-                            aria-label="编辑可选值"
+                            aria-label="Edit option"
                           >
                             <Pencil className="size-4" />
                           </button>
@@ -531,7 +559,7 @@ export function ExamPaperTagManagement({
                             className="text-slate-400 transition hover:text-red-500"
                             onClick={() => handleDeleteValue(tag.id, value.id)}
                             disabled={busyId === value.id}
-                            aria-label="删除可选值"
+                            aria-label="Delete option"
                           >
                             <Trash2 className="size-4" />
                           </button>
@@ -541,14 +569,14 @@ export function ExamPaperTagManagement({
                   ))}
                   {(tag.values ?? []).length === 0 ? (
                     <span className="text-xs text-slate-500">
-                      暂无可选值，请添加。
+                      No options yet, please add.
                     </span>
                   ) : null}
                 </div>
 
                 <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
                   <Input
-                    placeholder="添加可选值，例如 P1 / P2 / P3"
+                    placeholder="Add option values, e.g., P1 / P2 / P3"
                     value={valueInputs[tag.id] ?? ""}
                     onChange={(event) =>
                       setValueInputs((prev) => ({
@@ -566,7 +594,7 @@ export function ExamPaperTagManagement({
                     {busyId === tag.id ? (
                       <Loader2 className="mr-2 size-4 animate-spin" />
                     ) : null}
-                    添加值
+                    Add value
                   </Button>
                 </div>
               </div>

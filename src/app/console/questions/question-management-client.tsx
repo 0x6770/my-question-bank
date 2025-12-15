@@ -110,7 +110,7 @@ type QuestionApiResponse = {
 function buildChapterLabelMap(chapters: ChapterRow[]) {
   const chapterMap = new Map(chapters.map((chapter) => [chapter.id, chapter]));
   const memo = new Map<number, string>();
-  const fallbackSubjectName = "未分配学科";
+  const fallbackSubjectName = "Unassigned subject";
 
   const computeLabel = (chapter: ChapterRow): string => {
     if (memo.has(chapter.id)) {
@@ -291,7 +291,9 @@ export function QuestionManagement({
       try {
         const response = await fetch(`/api/questions?page=${safePage}`);
         if (!response.ok) {
-          throw new Error("加载题目列表失败，请稍后重试。");
+          throw new Error(
+            "Failed to load question list, please try again later.",
+          );
         }
         const data = (await response.json()) as QuestionApiResponse;
         const mapped = mapApiQuestions(data.questions ?? []);
@@ -308,7 +310,7 @@ export function QuestionManagement({
         setListError(
           error instanceof Error
             ? error.message
-            : "加载题目列表失败，请稍后重试。",
+            : "Failed to load question list, please try again later.",
         );
       } finally {
         setIsLoadingQuestions(false);
@@ -400,7 +402,9 @@ export function QuestionManagement({
         upsert: false,
       });
     if (error || !data?.path) {
-      throw new Error(error?.message ?? "上传图片失败，请稍后重试。");
+      throw new Error(
+        error?.message ?? "Image upload failed, please try again later.",
+      );
     }
     return {
       path: data.path,
@@ -506,7 +510,7 @@ export function QuestionManagement({
     if (!chosenChapterId) {
       setFeedback({
         type: "error",
-        message: "请选择所属章节。",
+        message: "Please select a chapter.",
       });
       return;
     }
@@ -518,7 +522,7 @@ export function QuestionManagement({
     ) {
       setFeedback({
         type: "error",
-        message: "请选择正确的难度（1 至 4）。",
+        message: "Please select a valid difficulty (1 to 4).",
       });
       return;
     }
@@ -526,7 +530,7 @@ export function QuestionManagement({
     if (!Number.isFinite(parsedMarks) || parsedMarks <= 0) {
       setFeedback({
         type: "error",
-        message: "请填写大于 0 的分值。",
+        message: "Please enter a score greater than 0.",
       });
       return;
     }
@@ -547,7 +551,9 @@ export function QuestionManagement({
       setFeedback({
         type: "error",
         message:
-          error instanceof Error ? error.message : "上传图片时出现问题。",
+          error instanceof Error
+            ? error.message
+            : "There was an issue uploading images.",
       });
       return;
     }
@@ -567,7 +573,8 @@ export function QuestionManagement({
       setIsSubmitting(false);
       setFeedback({
         type: "error",
-        message: insertError?.message ?? "创建题目时出现问题。",
+        message:
+          insertError?.message ?? "There was an issue creating the question.",
       });
       return;
     }
@@ -593,7 +600,9 @@ export function QuestionManagement({
         setIsSubmitting(false);
         setFeedback({
           type: "error",
-          message: imageError.message ?? "保存图片列表失败，稍后重试。",
+          message:
+            imageError.message ??
+            "Failed to save image list, please try again.",
         });
         return;
       }
@@ -620,7 +629,9 @@ export function QuestionManagement({
         setIsSubmitting(false);
         setFeedback({
           type: "error",
-          message: answerError.message ?? "保存答案图片失败，稍后重试。",
+          message:
+            answerError.message ??
+            "Failed to save answer images, please try again.",
         });
         return;
       }
@@ -649,7 +660,7 @@ export function QuestionManagement({
 
     setFeedback({
       type: "success",
-      message: "题目已创建成功。",
+      message: "Question created successfully.",
     });
     setIsSubmitting(false);
     resetForm();
@@ -669,7 +680,7 @@ export function QuestionManagement({
     }
 
     const confirmed = window.confirm(
-      `确定要删除题目 #${question.id} 吗？此操作不可撤销。`,
+      `Are you sure you want to delete question #${question.id}? This action cannot be undone.`,
     );
     if (!confirmed) {
       return;
@@ -686,7 +697,7 @@ export function QuestionManagement({
     if (error) {
       setFeedback({
         type: "error",
-        message: error.message ?? "删除题目时出现问题。",
+        message: error.message ?? "There was an issue deleting the question.",
       });
       return;
     }
@@ -695,7 +706,7 @@ export function QuestionManagement({
     setQuestions((prev) => prev.filter((item) => item.id !== questionId));
     setFeedback({
       type: "success",
-      message: "题目已删除。",
+      message: "Question deleted.",
     });
     setPage(nextPage);
     void loadQuestionsPage(nextPage);
@@ -817,7 +828,7 @@ export function QuestionManagement({
     if (!chosenChapterId) {
       setFeedback({
         type: "error",
-        message: "请选择所属章节。",
+        message: "Please select a chapter.",
       });
       return;
     }
@@ -829,7 +840,7 @@ export function QuestionManagement({
     ) {
       setFeedback({
         type: "error",
-        message: "请选择正确的难度（1 至 4）。",
+        message: "Please select a valid difficulty (1 to 4).",
       });
       return;
     }
@@ -837,7 +848,7 @@ export function QuestionManagement({
     if (!Number.isFinite(parsedMarks) || parsedMarks <= 0) {
       setFeedback({
         type: "error",
-        message: "请填写大于 0 的分值。",
+        message: "Please enter a score greater than 0.",
       });
       return;
     }
@@ -858,7 +869,9 @@ export function QuestionManagement({
       setFeedback({
         type: "error",
         message:
-          error instanceof Error ? error.message : "上传图片时出现问题。",
+          error instanceof Error
+            ? error.message
+            : "There was an issue uploading images.",
       });
       return;
     }
@@ -879,7 +892,8 @@ export function QuestionManagement({
       setIsUpdating(false);
       setFeedback({
         type: "error",
-        message: updateError?.message ?? "更新题目时出现问题。",
+        message:
+          updateError?.message ?? "There was an issue updating the question.",
       });
       return;
     }
@@ -901,7 +915,7 @@ export function QuestionManagement({
         message:
           deleteImagesError?.message ??
           deleteAnswerImagesError?.message ??
-          "更新图片列表失败。",
+          "Failed to update image list.",
       });
       return;
     }
@@ -925,7 +939,9 @@ export function QuestionManagement({
         setIsUpdating(false);
         setFeedback({
           type: "error",
-          message: insertImagesError.message ?? "保存图片列表失败，稍后重试。",
+          message:
+            insertImagesError.message ??
+            "Failed to save image list, please try again.",
         });
         return;
       }
@@ -953,7 +969,8 @@ export function QuestionManagement({
         setFeedback({
           type: "error",
           message:
-            insertAnswerImagesError.message ?? "保存答案图片失败，稍后重试。",
+            insertAnswerImagesError.message ??
+            "Failed to save answer images, please try again.",
         });
         return;
       }
@@ -987,7 +1004,7 @@ export function QuestionManagement({
 
     setFeedback({
       type: "success",
-      message: "题目已更新。",
+      message: "Question updated.",
     });
     setIsUpdating(false);
     cancelEdit();
@@ -1045,7 +1062,8 @@ export function QuestionManagement({
             Question Management
           </h1>
           <p className="text-sm text-slate-500">
-            创建题目、上传图片并关联章节来构建题库。
+            Create questions, upload images, and link chapters to build the
+            bank.
           </p>
         </div>
         <Button onClick={scrollToForm} className="gap-2">
@@ -1069,8 +1087,10 @@ export function QuestionManagement({
 
       <Card>
         <CardHeader>
-          <CardTitle>创建新题目</CardTitle>
-          <CardDescription>选择章节并上传按顺序展示的图片。</CardDescription>
+          <CardTitle>Create New Question</CardTitle>
+          <CardDescription>
+            Choose a chapter and upload images in display order.
+          </CardDescription>
         </CardHeader>
 
         <form ref={formRef} onSubmit={handleCreate} className="space-y-6">
@@ -1102,7 +1122,7 @@ export function QuestionManagement({
                   step={1}
                   value={marks}
                   onChange={(event) => setMarks(event.target.value)}
-                  placeholder="请输入分值（正整数）"
+                  placeholder="Enter marks (positive integer)"
                 />
               </div>
               <div className="space-y-2">
@@ -1113,10 +1133,10 @@ export function QuestionManagement({
                   onChange={(event) => setDifficulty(event.target.value)}
                   className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200"
                 >
-                  <option value="1">较易 (1)</option>
-                  <option value="2">中等 (2)</option>
-                  <option value="3">较难 (3)</option>
-                  <option value="4">挑战 (4)</option>
+                  <option value="1">Easy (1)</option>
+                  <option value="2">Medium (2)</option>
+                  <option value="3">Hard (3)</option>
+                  <option value="4">Challenge (4)</option>
                 </select>
               </div>
             </div>
@@ -1132,10 +1152,10 @@ export function QuestionManagement({
                 />
                 <div className="flex flex-col">
                   <span className="font-medium text-slate-800">
-                    允许使用计算器
+                    Calculator allowed
                   </span>
                   <span className="text-xs text-slate-500">
-                    勾选表示此题可以使用计算器。
+                    Check if a calculator is allowed for this question.
                   </span>
                 </div>
               </label>
@@ -1155,7 +1175,8 @@ export function QuestionManagement({
                   />
                 </div>
                 <p className="mt-1 text-xs text-slate-500">
-                  选择一张或多张图片上传，按列表顺序显示，可上下调整顺序。
+                  Select one or more images to upload; they display in list
+                  order and can be reordered.
                 </p>
               </div>
 
@@ -1176,7 +1197,7 @@ export function QuestionManagement({
                               resolveImageSrc(image.storagePath ?? image.url) ??
                               image.url
                             }
-                            alt={`预览 ${index + 1}`}
+                            alt={`Preview ${index + 1}`}
                             width={1200}
                             height={675}
                             className="h-full w-full object-contain"
@@ -1236,7 +1257,8 @@ export function QuestionManagement({
                   />
                 </div>
                 <p className="mt-1 text-xs text-slate-500">
-                  上传答案图片，按列表顺序显示，可上下调整顺序。
+                  Upload answer images; they display in list order and can be
+                  reordered.
                 </p>
               </div>
 
@@ -1254,7 +1276,7 @@ export function QuestionManagement({
                         <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
                           <Image
                             src={image.storagePath ?? image.url}
-                            alt={`答案预览 ${index + 1}`}
+                            alt={`Answer preview ${index + 1}`}
                             width={1200}
                             height={675}
                             className="h-full w-full object-contain"
@@ -1322,7 +1344,7 @@ export function QuestionManagement({
       <section className="space-y-4">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
           <ScrollText className="size-4" />
-          <span>题目列表</span>
+          <span>Question List</span>
         </div>
         {listError ? (
           <div className="flex flex-1 items-center justify-center rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
@@ -1331,11 +1353,11 @@ export function QuestionManagement({
         ) : null}
         {isLoadingQuestions ? (
           <div className="flex flex-1 items-center justify-center rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
-            正在加载题目...
+            Loading questions...
           </div>
         ) : questions.length === 0 ? (
           <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
-            目前还没有题目，先在上方创建第一题吧。
+            No questions yet. Create the first one above.
           </div>
         ) : (
           <>
@@ -1350,7 +1372,7 @@ export function QuestionManagement({
                       </CardTitle>
                       <CardDescription className="flex flex-wrap items-center gap-3 text-xs">
                         <span>
-                          创建于：{formatDateTime(question.createdAt)}
+                          Created at:{formatDateTime(question.createdAt)}
                         </span>
                       </CardDescription>
                       <CardAction className="flex items-center gap-2">
@@ -1428,7 +1450,7 @@ export function QuestionManagement({
                               onChange={(event) =>
                                 setEditMarks(event.target.value)
                               }
-                              placeholder="请输入分值（正整数）"
+                              placeholder="Enter marks (positive integer)"
                             />
                           </div>
                           <div className="space-y-2">
@@ -1441,10 +1463,10 @@ export function QuestionManagement({
                               }
                               className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200"
                             >
-                              <option value="1">较易 (1)</option>
-                              <option value="2">中等 (2)</option>
-                              <option value="3">较难 (3)</option>
-                              <option value="4">挑战 (4)</option>
+                              <option value="1">Easy (1)</option>
+                              <option value="2">Medium (2)</option>
+                              <option value="3">Hard (3)</option>
+                              <option value="4">Challenge (4)</option>
                             </select>
                           </div>
                           <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
@@ -1458,10 +1480,11 @@ export function QuestionManagement({
                             />
                             <div className="flex flex-col">
                               <span className="font-medium text-slate-800">
-                                允许使用计算器
+                                Calculator allowed
                               </span>
                               <span className="text-xs text-slate-500">
-                                勾选表示此题可以使用计算器。
+                                Check if a calculator is allowed for this
+                                question.
                               </span>
                             </div>
                           </label>
@@ -1483,7 +1506,8 @@ export function QuestionManagement({
                               />
                             </div>
                             <p className="mt-1 text-xs text-slate-500">
-                              选择一张或多张图片上传，按列表顺序显示，可上下调整顺序。
+                              Select one or more images to upload; they display
+                              in list order and can be reordered.
                             </p>
                           </div>
 
@@ -1505,7 +1529,7 @@ export function QuestionManagement({
                                             image.storagePath ?? image.url,
                                           ) ?? image.url
                                         }
-                                        alt={`预览 ${index + 1}`}
+                                        alt={`Preview ${index + 1}`}
                                         width={1200}
                                         height={675}
                                         className="h-full w-full object-contain"
@@ -1571,7 +1595,8 @@ export function QuestionManagement({
                               />
                             </div>
                             <p className="mt-1 text-xs text-slate-500">
-                              上传答案图片，按列表顺序显示，可上下调整顺序。
+                              Upload answer images; they display in list order
+                              and can be reordered.
                             </p>
                           </div>
 
@@ -1593,7 +1618,7 @@ export function QuestionManagement({
                                             image.storagePath ?? image.url,
                                           ) ?? image.url
                                         }
-                                        alt={`答案预览 ${index + 1}`}
+                                        alt={`Answer preview ${index + 1}`}
                                         width={1200}
                                         height={675}
                                         className="h-full w-full object-contain"
@@ -1680,16 +1705,16 @@ export function QuestionManagement({
                 onClick={handlePrevPage}
                 disabled={page <= 1 || isLoadingQuestions}
               >
-                上一页
+                Previous
               </Button>
-              <span className="text-sm text-slate-600">第 {page} 页</span>
+              <span className="text-sm text-slate-600">Page {page}</span>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleNextPage}
                 disabled={!hasMore || isLoadingQuestions}
               >
-                下一页
+                Next
               </Button>
             </div>
           </>

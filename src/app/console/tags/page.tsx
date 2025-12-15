@@ -12,7 +12,9 @@ export default async function ConsoleTagsPage() {
   return (
     <TagManagement
       initialTags={tags ?? []}
-      loadError={error ? "无法加载标签列表，请稍后重试。" : null}
+      loadError={
+        error ? "Failed to load tag list. Please try again later." : null
+      }
     />
   );
 }

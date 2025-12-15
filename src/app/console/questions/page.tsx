@@ -177,7 +177,7 @@ export default async function ConsoleQuestionsPage() {
       initialHasMore={hasMoreInitial}
       loadError={
         chaptersError || questionsError
-          ? "无法加载题目数据，请稍后重试。"
+          ? "Failed to load question data. Please try again later."
           : null
       }
     />

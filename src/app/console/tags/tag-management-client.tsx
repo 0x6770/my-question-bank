@@ -275,7 +275,8 @@ export function TagManagement({ initialTags, loadError }: TagManagementProps) {
             Tag Management
           </h1>
           <p className="text-sm text-slate-500">
-            创建、分层和维护题目标签，以便后续筛选与分类。
+            Create, organize, and maintain question tags for filtering and
+            categorization.
           </p>
         </div>
         <Button
@@ -297,7 +298,7 @@ export function TagManagement({ initialTags, loadError }: TagManagementProps) {
         <CardHeader className="border-b">
           <CardTitle className="text-lg">Create New Tag</CardTitle>
           <CardDescription>
-            输入标签名称并可选地指定上级标签，构建层级结构。
+            Enter a tag name and optionally specify a parent to build hierarchy.
           </CardDescription>
           {formFeedback ? (
             <CardAction>
@@ -379,7 +380,7 @@ export function TagManagement({ initialTags, loadError }: TagManagementProps) {
         <CardHeader className="border-b">
           <CardTitle className="text-lg">Existing Tags</CardTitle>
           <CardDescription>
-            查看标签层级，快速添加子标签、重命名或删除。
+            View tag hierarchy to quickly add, rename, or delete child tags.
           </CardDescription>
           {listFeedback ? (
             <CardAction>
@@ -399,7 +400,7 @@ export function TagManagement({ initialTags, loadError }: TagManagementProps) {
         <CardContent className="px-0 py-0">
           {tags.length === 0 ? (
             <div className="px-6 py-8 text-sm text-slate-500">
-              暂无标签，请先创建一个新的标签。
+              No tags yet. Create a new tag first.
             </div>
           ) : (
             <ul className="divide-y divide-slate-100">

@@ -81,7 +81,7 @@ export default async function AccountPage() {
       .order("created_at", { ascending: false });
 
     if (error || !data) {
-      questionError = error?.message ?? "无法加载收藏的题目。";
+      questionError = error?.message ?? "Failed to load bookmarked questions.";
     } else {
       const questionImagePaths = new Set<string>();
       const answerImagePaths = new Set<string>();
@@ -151,7 +151,7 @@ export default async function AccountPage() {
 
   const loadError =
     bookmarkError || questionError
-      ? (bookmarkError?.message ?? questionError ?? "无法加载收藏列表。")
+      ? (bookmarkError?.message ?? questionError ?? "Failed to load bookmarks.")
       : null;
 
   const bookmarks = questions
@@ -182,13 +182,13 @@ export default async function AccountPage() {
         <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
           <h1 className="text-xl font-semibold text-slate-900">My Account</h1>
           <p className="text-sm text-slate-500">
-            当前用户：{user.email ?? user.id}
+            Current user: {user.email ?? user.id}
           </p>
         </div>
 
         {loadError ? (
           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            无法加载收藏列表：{loadError}
+            Failed to load bookmarks: {loadError}
           </div>
         ) : (
           <AccountTabs bookmarks={bookmarks} viewed={viewed} />

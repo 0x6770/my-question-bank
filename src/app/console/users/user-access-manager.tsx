@@ -74,7 +74,9 @@ export function UserAccessManager({ users, subjects, accessGrants }: Props) {
       });
     } catch (error) {
       setErrorMsg(
-        error instanceof Error ? error.message : "更新权限失败，请稍后重试。",
+        error instanceof Error
+          ? error.message
+          : "Failed to update permissions. Please try again later.",
       );
     } finally {
       setBusyKey(null);
@@ -84,7 +86,7 @@ export function UserAccessManager({ users, subjects, accessGrants }: Props) {
   if (users.length === 0) {
     return (
       <div className="px-6 py-10 text-center text-sm text-slate-500">
-        暂无用户数据。
+        No user data.
       </div>
     );
   }
@@ -114,7 +116,7 @@ export function UserAccessManager({ users, subjects, accessGrants }: Props) {
               </p>
               {isAdmin ? (
                 <p className="text-xs text-emerald-600">
-                  管理员拥有全部访问权限
+                  Admins have full access
                 </p>
               ) : null}
             </div>
@@ -122,13 +124,15 @@ export function UserAccessManager({ users, subjects, accessGrants }: Props) {
             {isAdmin ? (
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700">
-                  拥有全部学科访问权限
-                  {subjects.length ? `（共 ${subjects.length} 个）` : ""}
+                  All subjects accessible
+                  {subjects.length ? ` (total ${subjects.length})` : ""}
                 </span>
               </div>
             ) : (
               <div className="space-y-2">
-                <p className="text-xs text-slate-500">勾选允许访问的学科：</p>
+                <p className="text-xs text-slate-500">
+                  Select subjects to grant access:
+                </p>
                 <div className="flex flex-wrap gap-2">
                   {subjects.map((subject) => {
                     const checked = userAccess.has(subject.id);
@@ -163,8 +167,8 @@ export function UserAccessManager({ users, subjects, accessGrants }: Props) {
                 </div>
                 <div className="text-xs text-slate-500">
                   {userAccess.size === 0
-                    ? "未被授权任何学科"
-                    : `已授权 ${userAccess.size} 个学科`}
+                    ? "No subjects authorized"
+                    : `Authorized for ${userAccess.size} subjects`}
                 </div>
               </div>
             )}

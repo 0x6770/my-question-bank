@@ -77,7 +77,7 @@ function Modal({
   onClose,
   busy,
   onConfirm,
-  confirmLabel = "保存",
+  confirmLabel = "Save",
 }: {
   open: boolean;
   title: string;
@@ -103,7 +103,7 @@ function Modal({
             variant="ghost"
             size="icon-sm"
             onClick={onClose}
-            aria-label="关闭"
+            aria-label="Close"
           >
             <X className="size-4" aria-hidden="true" />
           </Button>
@@ -111,7 +111,7 @@ function Modal({
         <div className="px-5 py-4">{children}</div>
         <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-4">
           <Button variant="outline" onClick={onClose} disabled={busy}>
-            取消
+            Cancel
           </Button>
           <Button onClick={onConfirm} disabled={busy} className="gap-2">
             {busy ? <Loader2 className="size-4 animate-spin" /> : null}
@@ -279,7 +279,7 @@ export function SubjectManagement({
     if (!modalState) return;
     const trimmed = modalName.trim();
     if (!trimmed) {
-      pushToast("error", "请输入名称后再保存。");
+      pushToast("error", "Please enter a name before saving.");
       return;
     }
     setModalBusy(true);
@@ -290,10 +290,11 @@ export function SubjectManagement({
           .insert({ name: trimmed, question_bank: questionBank })
           .select("id, name, created_at")
           .single();
-        if (error || !data) throw new Error(error?.message ?? "创建失败");
+        if (error || !data)
+          throw new Error(error?.message ?? "Creation failed");
         setExamBoards((prev) => [...prev, data]);
         setSelectedBoardId(data.id);
-        pushToast("success", `已创建考试局「${data.name}」`);
+        pushToast("success", `Exam board created「${data.name}」`);
       } else if (modalState.type === "editBoard") {
         const { board } = modalState;
         if (trimmed === board.name) {
@@ -312,7 +313,7 @@ export function SubjectManagement({
             item.id === board.id ? { ...item, name: trimmed } : item,
           ),
         );
-        pushToast("success", `已重命名为「${trimmed}」`);
+        pushToast("success", `Renamed to「${trimmed}」`);
       } else if (modalState.type === "createSubject") {
         const { board } = modalState;
         const { data, error } = await supabase
@@ -320,9 +321,13 @@ export function SubjectManagement({
           .insert({ name: trimmed, exam_board_id: board.id })
           .select("id, name, exam_board_id, created_at")
           .single();
-        if (error || !data) throw new Error(error?.message ?? "创建失败");
+        if (error || !data)
+          throw new Error(error?.message ?? "Creation failed");
         setSubjects((prev) => [...prev, data]);
-        pushToast("success", `已为「${board.name}」新增学科「${data.name}」`);
+        pushToast(
+          "success",
+          `Added subject to「${board.name}」New subject added「${data.name}」`,
+        );
       } else if (modalState.type === "editSubject") {
         const { subject } = modalState;
         if (trimmed === subject.name) {
@@ -341,7 +346,7 @@ export function SubjectManagement({
             item.id === subject.id ? { ...item, name: trimmed } : item,
           ),
         );
-        pushToast("success", `已重命名学科为「${trimmed}」`);
+        pushToast("success", `Subject renamed to「${trimmed}」`);
       } else if (modalState.type === "createChapter") {
         const { subject, parentChapterId } = modalState;
         const siblings = chapters.filter(
@@ -369,9 +374,10 @@ export function SubjectManagement({
             "id, name, subject_id, parent_chapter_id, position, created_at",
           )
           .single();
-        if (error || !data) throw new Error(error?.message ?? "创建失败");
+        if (error || !data)
+          throw new Error(error?.message ?? "Creation failed");
         setChapters((prev) => [...prev, data]);
-        pushToast("success", `已创建章节「${data.name}」`);
+        pushToast("success", `Chapter created「${data.name}」`);
       } else if (modalState.type === "editChapter") {
         const { chapter } = modalState;
         if (trimmed === chapter.name) {
@@ -390,13 +396,15 @@ export function SubjectManagement({
             item.id === chapter.id ? { ...item, name: trimmed } : item,
           ),
         );
-        pushToast("success", `已重命名章节为「${trimmed}」`);
+        pushToast("success", `Chapter renamed to「${trimmed}」`);
       }
       closeModal();
     } catch (error) {
       pushToast(
         "error",
-        error instanceof Error ? error.message : "操作失败，请稍后重试。",
+        error instanceof Error
+          ? error.message
+          : "Operation failed, please try again later.",
       );
     } finally {
       setModalBusy(false);
@@ -424,8 +432,8 @@ export function SubjectManagement({
     );
     const confirmed = window.confirm(
       relatedSubjects.length > 0
-        ? `删除「${board.name}」将同时移除其中的 ${relatedSubjects.length} 个学科及其章节，确定继续？`
-        : `确定删除考试局「${board.name}」吗？`,
+        ? `Delete「${board.name}」will also remove its ${relatedSubjects.length} subjects and chapters. Continue?`
+        : `Delete exam board "${board.name}"?`,
     );
     if (!confirmed) return;
     setBusyExamBoardId(board.id);
@@ -437,7 +445,9 @@ export function SubjectManagement({
     if (error) {
       pushToast(
         "error",
-        error.code === "23503" ? "存在关联数据，暂无法删除。" : error.message,
+        error.code === "23503"
+          ? "Cannot delete due to related data."
+          : error.message,
       );
       return;
     }
@@ -454,7 +464,7 @@ export function SubjectManagement({
       setSelectedBoardId(remainingBoards[0]?.id ?? null);
       setOpenSubjectId(null);
     }
-    pushToast("success", `已删除考试局「${board.name}」`);
+    pushToast("success", `Deleted exam board "${board.name}"`);
   };
 
   const handleDeleteSubject = async (subject: SubjectRow) => {
@@ -463,8 +473,8 @@ export function SubjectManagement({
     );
     const confirmed = window.confirm(
       relatedChapters.length > 0
-        ? `删除学科「${subject.name}」会一并移除 ${relatedChapters.length} 个章节，确定继续？`
-        : `确定删除学科「${subject.name}」吗？`,
+        ? `Deleting subject "${subject.name}" will also remove ${relatedChapters.length} chapters. Continue?`
+        : `Delete subject "${subject.name}"?`,
     );
     if (!confirmed) return;
     setBusySubjectId(subject.id);
@@ -476,7 +486,9 @@ export function SubjectManagement({
     if (error) {
       pushToast(
         "error",
-        error.code === "23503" ? "存在关联数据，暂无法删除。" : error.message,
+        error.code === "23503"
+          ? "Cannot delete due to related data."
+          : error.message,
       );
       return;
     }
@@ -487,12 +499,12 @@ export function SubjectManagement({
     if (openSubjectId === subject.id) {
       setOpenSubjectId(null);
     }
-    pushToast("success", `已删除学科「${subject.name}」`);
+    pushToast("success", `Deleted subject "${subject.name}"`);
   };
 
   const handleDeleteChapter = async (chapter: ChapterRow) => {
     const confirmed = window.confirm(
-      `确定删除章节「${chapter.name}」及其所有子章节吗？`,
+      `Delete chapter "${chapter.name}" and all subchapters?`,
     );
     if (!confirmed) return;
     setBusyChapterId(chapter.id);
@@ -512,8 +524,8 @@ export function SubjectManagement({
     pushToast(
       "success",
       idsToDelete.length > 1
-        ? `已删除章节及 ${idsToDelete.length - 1} 个子章节`
-        : "已删除章节",
+        ? `Deleted chapter and ${idsToDelete.length - 1} subchapters`
+        : "Deleted chapter",
     );
   };
 
@@ -567,7 +579,7 @@ export function SubjectManagement({
     } catch (error) {
       pushToast(
         "error",
-        error instanceof Error ? error.message : "调整章节顺序失败。",
+        error instanceof Error ? error.message : "Failed to reorder chapters.",
       );
     } finally {
       setBusyChapterId(null);
@@ -629,7 +641,7 @@ export function SubjectManagement({
                     onClick={() => handleReorderChapter(chapter.id, "up")}
                     disabled={isBusy || index === 0}
                     className="text-slate-500 hover:text-slate-800"
-                    title="上移"
+                    title="Move up"
                   >
                     <ArrowUp className="size-4" aria-hidden="true" />
                   </Button>
@@ -640,7 +652,7 @@ export function SubjectManagement({
                     onClick={() => handleReorderChapter(chapter.id, "down")}
                     disabled={isBusy || index === chaptersList.length - 1}
                     className="text-slate-500 hover:text-slate-800"
-                    title="下移"
+                    title="Move down"
                   >
                     <ArrowDown className="size-4" aria-hidden="true" />
                   </Button>
@@ -691,13 +703,14 @@ export function SubjectManagement({
             Subject Management
           </h1>
           <p className="text-sm text-slate-500">
-            左侧选择考试局，右侧管理对应的学科与章节。
+            Select an exam board on the left and manage its subjects/chapters on
+            the right.
           </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={openCreateBoard} className="gap-2">
             <Plus className="size-4" aria-hidden="true" />
-            新建考试局
+            New Exam Board
           </Button>
         </div>
       </header>
@@ -705,24 +718,24 @@ export function SubjectManagement({
       <div className="grid gap-6 lg:grid-cols-[320px,1fr]">
         <Card className="border-slate-200">
           <CardHeader className="border-b border-slate-100">
-            <CardTitle className="text-base">考试局</CardTitle>
+            <CardTitle className="text-base">Exam Board</CardTitle>
             <CardDescription className="text-sm">
-              快速筛选并选择要管理的考试局。
+              Quickly filter and select an exam board to manage.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="board-search">搜索</Label>
+              <Label htmlFor="board-search">Search</Label>
               <Input
                 id="board-search"
-                placeholder="输入关键字..."
+                placeholder="Enter keywords..."
                 value={boardQuery}
                 onChange={(event) => setBoardQuery(event.target.value)}
               />
             </div>
             {filteredBoards.length === 0 ? (
               <div className="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
-                没有匹配的考试局。
+                No matching exam boards.
               </div>
             ) : (
               <ul className="space-y-2">
@@ -773,7 +786,7 @@ export function SubjectManagement({
                               isSelected ? "text-slate-200" : "text-slate-500",
                             )}
                           >
-                            {boardSubjects.length} 个学科
+                            {boardSubjects.length} subjects
                           </p>
                         </div>
                       </button>
@@ -821,15 +834,15 @@ export function SubjectManagement({
 
         <Card className="border-slate-200">
           <CardHeader className="border-b border-slate-100">
-            <CardTitle className="text-base">学科与章节</CardTitle>
+            <CardTitle className="text-base">Subjects & Chapters</CardTitle>
             <CardDescription className="text-sm">
-              按层级管理当前考试局下的学科与章节。
+              Manage subjects and chapters under the current exam board.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {selectedBoard == null ? (
               <div className="rounded-lg border border-dashed border-slate-200 px-6 py-10 text-center text-sm text-slate-500">
-                请选择左侧的考试局。
+                Please select an exam board on the left.
               </div>
             ) : (
               <>
@@ -840,7 +853,7 @@ export function SubjectManagement({
                     </p>
                     <p className="text-xs text-slate-500">
                       {subjectsByBoard.get(selectedBoard.id)?.length ?? 0}{" "}
-                      个学科
+                      subjects
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -851,14 +864,14 @@ export function SubjectManagement({
                       className="gap-2"
                     >
                       <Plus className="size-4" aria-hidden="true" />
-                      新建学科
+                      New Subject
                     </Button>
                   </div>
                 </div>
 
                 {(subjectsByBoard.get(selectedBoard.id) ?? []).length === 0 ? (
                   <div className="rounded-lg border border-dashed border-slate-200 px-6 py-10 text-center text-sm text-slate-500">
-                    暂无学科，点击右上角「新建学科」开始。
+                    No subjects yet. Click "New Subject" to start.
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -895,7 +908,7 @@ export function SubjectManagement({
                                     {subject.name}
                                   </p>
                                   <p className="text-xs text-slate-500">
-                                    {totalChapters} 个章节
+                                    {totalChapters} chapters
                                   </p>
                                 </div>
                               </button>
@@ -946,7 +959,7 @@ export function SubjectManagement({
                               <div className="border-t border-slate-100 bg-slate-50 px-4 py-4">
                                 {roots.length === 0 ? (
                                   <div className="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
-                                    暂无章节，点击上方「+」添加。
+                                    No chapters yet. Click the + above to add.
                                   </div>
                                 ) : (
                                   renderChapterTree(roots, subject)
@@ -969,38 +982,38 @@ export function SubjectManagement({
         open={modalState != null}
         title={
           modalState?.type === "createBoard"
-            ? "新建考试局"
+            ? "New Exam Board"
             : modalState?.type === "editBoard"
-              ? "重命名考试局"
+              ? "Rename Exam Board"
               : modalState?.type === "createSubject"
-                ? "新建学科"
+                ? "New Subject"
                 : modalState?.type === "editSubject"
-                  ? "重命名学科"
+                  ? "Rename Subject"
                   : modalState?.type === "createChapter"
-                    ? "新建章节"
-                    : "重命名章节"
+                    ? "New Chapter"
+                    : "Rename Chapter"
         }
         description={
           modalState?.type === "createSubject" && modalState.board
-            ? `所属考试局：${modalState.board.name}`
+            ? `Exam board: ${modalState.board.name}`
             : modalState?.type === "createChapter" && modalState.subject
-              ? `所属学科：${modalState.subject.name}`
+              ? `Subject: ${modalState.subject.name}`
               : undefined
         }
         onClose={closeModal}
         onConfirm={submitModal}
         busy={modalBusy}
-        confirmLabel="保存"
+        confirmLabel="Save"
       >
         <div className="space-y-2">
-          <Label htmlFor="modal-name">名称</Label>
+          <Label htmlFor="modal-name">Name</Label>
           <Input
             id="modal-name"
             autoFocus
             value={modalName}
             onChange={(event) => setModalName(event.target.value)}
             disabled={modalBusy}
-            placeholder="请输入名称"
+            placeholder="Please enter a name"
           />
         </div>
       </Modal>

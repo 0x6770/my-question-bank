@@ -34,7 +34,9 @@ export default async function ExamPaperTagsPage() {
   );
 
   const loadError =
-    subjectsError || tagsError ? "无法加载学科或标签数据，请稍后重试。" : null;
+    subjectsError || tagsError
+      ? "Failed to load subjects or tags. Please try again later."
+      : null;
 
   return (
     <ExamPaperTagManagement
