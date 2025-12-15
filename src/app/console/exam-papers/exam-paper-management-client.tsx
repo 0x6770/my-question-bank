@@ -2,6 +2,7 @@
 
 import {
   ArrowUpDown,
+  ChevronDown,
   Loader2,
   Pencil,
   Plus,
@@ -11,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import type React from "react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   type ExamPaper as BrowserExamPaper,
   ExamPaperBrowser,
@@ -172,7 +173,6 @@ export function ExamPaperManagement({
     question: File | null;
     markScheme: File | null;
   }>({ question: null, markScheme: null });
-  const [clearMarkScheme, setClearMarkScheme] = useState(false);
   const [editBusy, setEditBusy] = useState(false);
   const [editTagSelections, setEditTagSelections] = useState<
     Record<number, string>
@@ -180,6 +180,11 @@ export function ExamPaperManagement({
 
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [listRefreshKey, setListRefreshKey] = useState(0);
+  const [editSubjectPickerOpen, setEditSubjectPickerOpen] = useState(false);
+  const editSubjectPickerRef = useRef<HTMLDivElement>(null);
+  const [editActiveExamBoardId, setEditActiveExamBoardId] = useState<
+    number | null
+  >(null);
 
   const resetMessage = () => setMessage(null);
 
@@ -381,6 +386,9 @@ export function ExamPaperManagement({
         existingSelections[tagId] = String(entry.tag_value_id);
       }
     }
+    const subjectBoardId =
+      subjects.find((s) => s.id === paper.subject_id)?.exam_board_id ?? null;
+    setEditActiveExamBoardId(subjectBoardId ?? examBoards[0]?.id ?? null);
     setEditTagSelections(existingSelections);
   };
 
@@ -457,12 +465,6 @@ export function ExamPaperManagement({
           "question",
           true,
         );
-      }
-      if (clearMarkScheme) {
-        if (markSchemePath) {
-          await deletePdfs([markSchemePath]);
-        }
-        markSchemePath = null;
       }
       if (editFiles.markScheme) {
         markSchemePath = await uploadPdf(
@@ -575,6 +577,42 @@ export function ExamPaperManagement({
         })),
     [subjects],
   );
+  const examBoardOptions = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const subject of subjects) {
+      if (subject.exam_board_id) {
+        const name =
+          subject.exam_board?.name ??
+          `Exam Board ${subject.exam_board_id.toString()}`;
+        map.set(subject.exam_board_id, name);
+      }
+    }
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, label: name }))
+      .sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
+  }, [subjects]);
+
+  const subjectsByExamBoard = useMemo(() => {
+    const map = new Map<number, SubjectRow[]>();
+    for (const subject of subjects) {
+      if (!map.has(subject.exam_board_id)) map.set(subject.exam_board_id, []);
+      map.get(subject.exam_board_id)?.push(subject);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+    }
+    return map;
+  }, [subjects]);
+
+  const modalSubjectOptions = useMemo(() => {
+    if (editActiveExamBoardId == null) return [];
+    return (
+      subjectsByExamBoard.get(editActiveExamBoardId)?.map((subject) => ({
+        id: subject.id,
+        label: subject.name,
+      })) ?? []
+    );
+  }, [editActiveExamBoardId, subjectsByExamBoard]);
 
   return (
     <div className="flex flex-1 flex-col gap-6">
@@ -825,57 +863,99 @@ export function ExamPaperManagement({
             className="space-y-4"
             onSubmit={handleEditSubmit}
           >
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="edit-subject">学科 *</Label>
-                <select
-                  id="edit-subject"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none"
-                  value={editState.subjectId}
-                  onChange={(event) => {
-                    setEditState((prev) => ({
-                      ...prev,
-                      subjectId: event.target.value,
-                    }));
-                    setEditTagSelections({});
-                  }}
+            <div className="space-y-2">
+              <Label>Exam / Subject *</Label>
+              <div className="relative" ref={editSubjectPickerRef}>
+                <button
+                  type="button"
+                  onClick={() => setEditSubjectPickerOpen((prev) => !prev)}
+                  className="flex h-11 w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 text-left text-sm font-medium text-slate-800 shadow-sm outline-none transition focus-visible:border-slate-400 focus-visible:ring-2 focus-visible:ring-slate-200"
                 >
-                  {subjectOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-year">年份 *</Label>
-                  <Input
-                    id="edit-year"
-                    type="number"
-                    inputMode="numeric"
-                    value={editState.year}
-                    onChange={(event) =>
-                      setEditState((prev) => ({
-                        ...prev,
-                        year: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-season">季节 *</Label>
-                  <Input
-                    id="edit-season"
-                    value={editState.season}
-                    onChange={(event) =>
-                      setEditState((prev) => ({
-                        ...prev,
-                        season: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
+                  <span className="truncate">
+                    {(() => {
+                      const subj = subjects.find(
+                        (s) => String(s.id) === editState.subjectId,
+                      );
+                      if (!subj) return "Select exam & subject";
+                      const boardLabel =
+                        subj.exam_board?.name ??
+                        examBoardOptions.find(
+                          (b) => b.id === subj.exam_board_id,
+                        )?.label;
+                      return boardLabel
+                        ? `${boardLabel} · ${subj.name}`
+                        : subj.name;
+                    })()}
+                  </span>
+                  <ChevronDown className="size-4 text-slate-400" />
+                </button>
+                {editSubjectPickerOpen ? (
+                  <div className="absolute z-30 mt-2 w-full min-w-[640px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+                    <div className="grid grid-cols-2">
+                      <div className="max-h-72 overflow-auto">
+                        <div className="px-3 py-2 text-sm font-semibold text-slate-700">
+                          选择考试局
+                        </div>
+                        {examBoardOptions.map((exam) => (
+                          <button
+                            key={exam.id}
+                            type="button"
+                            onMouseEnter={() =>
+                              setEditActiveExamBoardId(exam.id)
+                            }
+                            onFocus={() => setEditActiveExamBoardId(exam.id)}
+                            onClick={() => setEditActiveExamBoardId(exam.id)}
+                            className={`flex w-full items-start gap-3 px-3 py-2 text-left text-sm font-semibold ${editActiveExamBoardId === exam.id ? "bg-slate-50 text-slate-900" : "text-slate-700 hover:bg-slate-50"}`}
+                          >
+                            <span className="flex-1 whitespace-normal text-left leading-snug break-words">
+                              {exam.label}
+                            </span>
+                            <span className="text-slate-400">›</span>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="max-h-72 overflow-auto bg-slate-50">
+                        {editActiveExamBoardId == null ? (
+                          <div className="px-4 py-6 text-sm text-slate-500">
+                            先选择考试局
+                          </div>
+                        ) : modalSubjectOptions.length === 0 ? (
+                          <div className="px-4 py-6 text-sm text-slate-500">
+                            当前考试局暂无学科
+                          </div>
+                        ) : (
+                          <div className="flex flex-col divide-y divide-slate-200">
+                            {modalSubjectOptions.map((option) => (
+                              <button
+                                key={option.id}
+                                type="button"
+                                className={`flex w-full items-start gap-3 px-3 py-2 text-left text-sm font-semibold ${editState.subjectId === String(option.id) ? "bg-white text-slate-900" : "text-slate-700 hover:bg-white"}`}
+                                onClick={() => {
+                                  setEditState((prev) => ({
+                                    ...prev,
+                                    subjectId: String(option.id),
+                                  }));
+                                  setEditTagSelections({});
+                                  setEditSubjectPickerOpen(false);
+                                }}
+                              >
+                                <span className="flex-1 whitespace-normal text-left leading-snug break-words">
+                                  {option.label}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="pointer-events-none absolute inset-0">
+                      <div
+                        className="absolute top-0 bottom-0 border-l border-slate-200"
+                        style={{ left: "50%" }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -928,25 +1008,18 @@ export function ExamPaperManagement({
                     }))
                   }
                 />
+                {editingPaper.question_paper_path ? (
+                  <p className="text-xs text-slate-500">
+                    现有文件：{editingPaper.question_paper_path}
+                  </p>
+                ) : (
+                  <p className="text-xs text-slate-500">
+                    当前未上传 Question Paper。
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="edit-mark-file">Mark Scheme</Label>
-                  {editingPaper.mark_scheme_path ? (
-                    <button
-                      type="button"
-                      className={cn(
-                        "text-xs font-medium underline underline-offset-4",
-                        clearMarkScheme
-                          ? "text-red-600"
-                          : "text-slate-500 hover:text-slate-700",
-                      )}
-                      onClick={() => setClearMarkScheme((prev) => !prev)}
-                    >
-                      {clearMarkScheme ? "取消清除" : "清除"}
-                    </button>
-                  ) : null}
-                </div>
+                <Label htmlFor="edit-mark-file">Mark Scheme (替换时上传)</Label>
                 <Input
                   id="edit-mark-file"
                   type="file"
