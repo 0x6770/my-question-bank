@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Loader2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,7 @@ type Tag = {
   values?: TagValue[] | null;
 };
 
-type ExamPaper = {
+export type ExamPaper = {
   id: number;
   subject_id: number;
   year: number | null;
@@ -54,14 +54,38 @@ type ExamPaperBrowserProps = {
   examBoards: ExamBoard[];
   subjects: Subject[];
   initialTags: Tag[];
+  renderActions?: (paper: ExamPaper) => React.ReactNode;
+  refreshKey?: number;
 };
 
 export function ExamPaperBrowser({
   examBoards,
   subjects,
   initialTags,
+  renderActions,
+  refreshKey = 0,
 }: ExamPaperBrowserProps) {
   const supabase = useMemo(() => createClient(), []);
+  const derivedExamBoards = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const board of examBoards) {
+      if (board?.id != null) {
+        map.set(
+          board.id,
+          board.name?.trim() || `Exam Board ${board.id.toString()}`,
+        );
+      }
+    }
+    for (const subject of subjects) {
+      if (subject.exam_board_id) {
+        const label =
+          subject.exam_board?.name?.trim() ||
+          `Exam Board ${subject.exam_board_id.toString()}`;
+        map.set(subject.exam_board_id, label);
+      }
+    }
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [examBoards, subjects]);
   const [selectedExamBoardId, setSelectedExamBoardId] = useState<string>(
     subjects[0]?.exam_board_id ? String(subjects[0].exam_board_id) : "",
   );
@@ -83,20 +107,23 @@ export function ExamPaperBrowser({
   const [signedUrlCache, setSignedUrlCache] = useState<Record<string, string>>(
     {},
   );
+  const [sortField, setSortField] = useState<
+    "year" | "season" | "paper" | "time_zone"
+  >("year");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [subjectPickerOpen, setSubjectPickerOpen] = useState(false);
   const subjectPickerRef = useRef<HTMLDivElement>(null);
   const [activeExamBoardId, setActiveExamBoardId] = useState<number | null>(
-    subjects[0]?.exam_board_id ?? examBoards[0]?.id ?? null,
+    subjects[0]?.exam_board_id ?? derivedExamBoards[0]?.id ?? null,
   );
+  const hasActions = Boolean(renderActions);
 
-  const examBoardOptions = useMemo(
-    () =>
-      examBoards
-        .slice()
-        .sort((a, b) => a.name.localeCompare(b.name, "zh-CN"))
-        .map((board) => ({ id: board.id, label: board.name })),
-    [examBoards],
-  );
+  const examBoardOptions = useMemo(() => {
+    return derivedExamBoards
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name, "zh-CN"))
+      .map((board) => ({ id: board.id, label: board.name }));
+  }, [derivedExamBoards]);
 
   const subjectsByExamBoard = useMemo(() => {
     const map = new Map<number, Subject[]>();
@@ -145,7 +172,7 @@ export function ExamPaperBrowser({
 
   const filteredPapers = useMemo(() => {
     if (!papers.length) return [];
-    return papers.filter((paper) => {
+    const filtered = papers.filter((paper) => {
       for (const [tagIdStr, valueIdStr] of Object.entries(filters)) {
         if (!valueIdStr) continue;
         const tagId = Number.parseInt(tagIdStr, 10);
@@ -157,7 +184,55 @@ export function ExamPaperBrowser({
       }
       return true;
     });
-  }, [filters, papers]);
+    const getSafe = (value: string | null | undefined) =>
+      value?.toString().toLowerCase() ?? "";
+    const compareString = (
+      a: string | null | undefined,
+      b: string | null | undefined,
+    ) => getSafe(a).localeCompare(getSafe(b), "zh-CN");
+    const compareByField = (
+      a: ExamPaper,
+      b: ExamPaper,
+      direction: "asc" | "desc",
+    ) => {
+      if (sortField === "year") {
+        const yearA = a.year ?? -Infinity;
+        const yearB = b.year ?? -Infinity;
+        return direction === "desc" ? yearB - yearA : yearA - yearB;
+      }
+      if (sortField === "season") {
+        return direction === "desc"
+          ? -compareString(a.season, b.season)
+          : compareString(a.season, b.season);
+      }
+      if (sortField === "paper") {
+        const cmp = compareString(
+          a.paper_code ?? a.paper_label,
+          b.paper_code ?? b.paper_label,
+        );
+        return direction === "desc" ? -cmp : cmp;
+      }
+      const cmp = compareString(a.time_zone, b.time_zone);
+      return direction === "desc" ? -cmp : cmp;
+    };
+    filtered.sort((a, b) => {
+      const cmp = compareByField(a, b, sortDirection);
+      if (cmp !== 0) return cmp;
+      // fallback: year desc then season/paper/time_zone for stability
+      const yearA = a.year ?? -Infinity;
+      const yearB = b.year ?? -Infinity;
+      if (yearA !== yearB) return yearB - yearA;
+      const seasonCmp = compareString(a.season, b.season);
+      if (seasonCmp !== 0) return seasonCmp;
+      const paperCmp = compareString(
+        a.paper_code ?? a.paper_label,
+        b.paper_code ?? b.paper_label,
+      );
+      if (paperCmp !== 0) return paperCmp;
+      return compareString(a.time_zone, b.time_zone);
+    });
+    return filtered;
+  }, [filters, papers, sortDirection, sortField]);
 
   const fetchSignedUrl = async (path: string | null) => {
     if (!path) return null;
@@ -221,22 +296,31 @@ export function ExamPaperBrowser({
   );
 
   useEffect(() => {
+    void refreshKey; // trigger reload when refreshKey changes
     const subjectId = selectedSubjectId
       ? Number.parseInt(selectedSubjectId, 10)
       : null;
     if (subjectId) {
       void loadSubjectData(subjectId);
     }
-  }, [loadSubjectData, selectedSubjectId]);
+  }, [loadSubjectData, selectedSubjectId, refreshKey]);
 
   useEffect(() => {
+    if (subjectPickerOpen) return;
     if (selectedExamBoardId) {
       const id = Number.parseInt(selectedExamBoardId, 10);
       if (Number.isFinite(id) && id !== activeExamBoardId) {
         setActiveExamBoardId(id);
       }
+    } else if (activeExamBoardId == null && examBoardOptions[0]) {
+      setActiveExamBoardId(examBoardOptions[0].id);
     }
-  }, [activeExamBoardId, selectedExamBoardId]);
+  }, [
+    activeExamBoardId,
+    examBoardOptions,
+    selectedExamBoardId,
+    subjectPickerOpen,
+  ]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -252,6 +336,12 @@ export function ExamPaperBrowser({
     }
     return () => window.removeEventListener("mousedown", handleClickOutside);
   }, [subjectPickerOpen]);
+
+  useEffect(() => {
+    if (subjectPickerOpen && activeExamBoardId == null && examBoardOptions[0]) {
+      setActiveExamBoardId(examBoardOptions[0].id);
+    }
+  }, [activeExamBoardId, examBoardOptions, subjectPickerOpen]);
 
   const handleChangeSubject = (subjectId: string) => {
     setSelectedSubjectId(subjectId);
@@ -274,6 +364,7 @@ export function ExamPaperBrowser({
   };
 
   useEffect(() => {
+    if (subjectPickerOpen) return;
     if (!selectedSubjectId) return;
     const subject = subjects.find(
       (item) => item.id === Number.parseInt(selectedSubjectId, 10),
@@ -281,7 +372,7 @@ export function ExamPaperBrowser({
     if (subject?.exam_board_id && subject.exam_board_id !== activeExamBoardId) {
       setActiveExamBoardId(subject.exam_board_id);
     }
-  }, [activeExamBoardId, selectedSubjectId, subjects]);
+  }, [activeExamBoardId, selectedSubjectId, subjects, subjectPickerOpen]);
 
   const handleOpenPdf = async (path: string | null) => {
     const url = await fetchSignedUrl(path);
@@ -333,7 +424,7 @@ export function ExamPaperBrowser({
       </header>
 
       <Card>
-        <CardContent className="space-y-4 pt-4">
+        <CardContent className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-2 lg:col-span-2 xl:col-span-2">
               <Label>Exam / Subject *</Label>
@@ -361,6 +452,7 @@ export function ExamPaperBrowser({
                             type="button"
                             onMouseEnter={() => setActiveExamBoardId(exam.id)}
                             onFocus={() => setActiveExamBoardId(exam.id)}
+                            onClick={() => setActiveExamBoardId(exam.id)}
                             className={`flex w-full items-start gap-3 px-3 py-2 text-left text-sm font-semibold ${activeExamBoardId === exam.id ? "bg-slate-50 text-slate-900" : "text-slate-700 hover:bg-slate-50"}`}
                           >
                             <span className="flex-1 whitespace-normal text-left leading-snug break-words">
@@ -466,25 +558,68 @@ export function ExamPaperBrowser({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardContent className="p-0">
+      <Card className="overflow-hidden">
+        <CardContent className="p-0 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
+            <table className="min-w-full border-collapse text-sm">
               <thead className="border-b border-slate-200 bg-slate-50 text-left text-slate-600">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Year</th>
-                  <th className="px-4 py-3 font-medium">Season</th>
-                  <th className="px-4 py-3 font-medium">Paper</th>
-                  <th className="px-4 py-3 font-medium">Time Zone</th>
+                  {[
+                    { key: "year", label: "Year" },
+                    { key: "season", label: "Season" },
+                    { key: "paper", label: "Paper" },
+                    { key: "time_zone", label: "Time Zone" },
+                  ].map((col) => {
+                    const isActive = sortField === col.key;
+                    const isAsc = sortDirection === "asc";
+                    const isAscActive = isActive && isAsc;
+                    const isDescActive = isActive && !isAsc;
+                    return (
+                      <th
+                        key={col.key}
+                        className="px-4 py-3 font-medium first:rounded-tl-xl last:rounded-tr-xl"
+                      >
+                        <button
+                          type="button"
+                          className="group flex items-center gap-1 text-sm font-semibold text-slate-700"
+                          onClick={() => {
+                            if (sortField === col.key) {
+                              setSortDirection((prev) =>
+                                prev === "asc" ? "desc" : "asc",
+                              );
+                            } else {
+                              setSortField(col.key as typeof sortField);
+                              setSortDirection(
+                                col.key === "year" ? "desc" : "asc",
+                              );
+                            }
+                          }}
+                        >
+                          {col.label}
+                          <span className="ml-1 flex flex-col -space-y-1 leading-none">
+                            <ChevronUp
+                              className={`size-3 ${isAscActive ? "text-blue-600" : "text-slate-300 group-hover:text-slate-500"}`}
+                            />
+                            <ChevronDown
+                              className={`size-3 ${isDescActive ? "text-blue-600" : "text-slate-300 group-hover:text-slate-500"}`}
+                            />
+                          </span>
+                        </button>
+                      </th>
+                    );
+                  })}
                   <th className="px-4 py-3 font-medium">Question Paper</th>
                   <th className="px-4 py-3 font-medium">Mark Scheme</th>
+                  {hasActions ? (
+                    <th className="px-4 py-3 font-medium">Actions</th>
+                  ) : null}
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={hasActions ? 7 : 6}
                       className="px-4 py-6 text-center text-slate-500"
                     >
                       <Loader2 className="mr-2 inline-block size-4 animate-spin" />
@@ -494,7 +629,7 @@ export function ExamPaperBrowser({
                 ) : filteredPapers.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={hasActions ? 7 : 6}
                       className="px-4 py-6 text-center text-slate-500"
                     >
                       No exam papers.
@@ -550,6 +685,11 @@ export function ExamPaperBrowser({
                           <span className="text-xs text-slate-500">--</span>
                         )}
                       </td>
+                      {hasActions ? (
+                        <td className="px-4 py-3">
+                          {renderActions ? renderActions(paper) : null}
+                        </td>
+                      ) : null}
                     </tr>
                   ))
                 )}

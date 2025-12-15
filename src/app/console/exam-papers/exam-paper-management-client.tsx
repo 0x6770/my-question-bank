@@ -1,10 +1,7 @@
 "use client";
 
-import type React from "react";
-import { useCallback, useMemo, useState } from "react";
 import {
   ArrowUpDown,
-  ExternalLink,
   Loader2,
   Pencil,
   Plus,
@@ -13,6 +10,12 @@ import {
   UploadCloud,
   X,
 } from "lucide-react";
+import type React from "react";
+import { useCallback, useMemo, useState } from "react";
+import {
+  type ExamPaper as BrowserExamPaper,
+  ExamPaperBrowser,
+} from "@/components/exam-paper-browser";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -48,43 +51,18 @@ type TagDefinition = {
   values?: TagValueRow[] | null;
 };
 
-type ExamPaperRow = Tables<"exam_papers"> & {
-  subject?: {
-    name?: string | null;
-    exam_board?: { name?: string | null } | null;
-  } | null;
-  tag_values?: {
-    tag_value_id: number;
-    tag_value?: { id: number; value: string; tag_id: number } | null;
-  }[];
-};
-
 type ExamPaperManagementProps = {
   initialSubjects: SubjectRow[];
-  initialExamPapers: ExamPaperRow[];
   initialSubjectTags: TagDefinition[];
   loadError: string | null;
 };
 
 type PdfKind = "question" | "mark-scheme";
 
-function formatDate(value: string | null | undefined) {
-  if (!value) return "";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
-}
-
-function subjectLabel(subject: ExamPaperRow["subject"]) {
-  if (!subject) return "未知学科";
-  const board = subject.exam_board?.name;
-  return board ? `${board} · ${subject.name ?? "未命名"}` : subject.name ?? "未命名";
-}
-
 function ensurePdf(file: File | null) {
   if (!file) return true;
   const isPdfType =
-    file.type === "application/pdf" ||
-    file.name.toLowerCase().endsWith(".pdf");
+    file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
   return isPdfType;
 }
 
@@ -134,15 +112,11 @@ function Modal({
 
 export function ExamPaperManagement({
   initialSubjects,
-  initialExamPapers,
   initialSubjectTags,
   loadError,
 }: ExamPaperManagementProps) {
   const supabase = useMemo(() => createClient(), []);
   const [subjects] = useState(initialSubjects);
-  const [examPapers, setExamPapers] = useState<ExamPaperRow[]>(
-    initialExamPapers,
-  );
   const [subjectTags] = useState<TagDefinition[]>(initialSubjectTags);
   const tagsBySubject = useMemo(() => {
     const map = new Map<number, TagDefinition[]>();
@@ -160,18 +134,19 @@ export function ExamPaperManagement({
     }
     return map;
   }, [subjectTags]);
-  const tagNameById = useMemo(() => {
+  const examBoards = useMemo(() => {
     const map = new Map<number, string>();
-    for (const tag of subjectTags) {
-      map.set(tag.id, tag.name);
+    for (const subject of subjects) {
+      if (subject.exam_board_id) {
+        const label =
+          subject.exam_board?.name ??
+          `Exam Board ${subject.exam_board_id.toString()}`;
+        map.set(subject.exam_board_id, label);
+      }
     }
-    return map;
-  }, [subjectTags]);
-  const [filters, setFilters] = useState({
-    subjectId: "",
-  });
-  const [listError, setListError] = useState<string | null>(loadError);
-  const [isLoadingList, setIsLoadingList] = useState(false);
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [subjects]);
+  const [listError] = useState<string | null>(loadError);
 
   const [createState, setCreateState] = useState({
     subjectId: "",
@@ -179,12 +154,17 @@ export function ExamPaperManagement({
     markSchemeFile: null as File | null,
   });
   const [createBusy, setCreateBusy] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
   const [createTagSelections, setCreateTagSelections] = useState<
     Record<number, string>
   >({});
 
-  const [editingPaper, setEditingPaper] = useState<ExamPaperRow | null>(null);
+  const [editingPaper, setEditingPaper] = useState<BrowserExamPaper | null>(
+    null,
+  );
   const [editState, setEditState] = useState({
     subjectId: "",
   });
@@ -197,60 +177,11 @@ export function ExamPaperManagement({
   const [editTagSelections, setEditTagSelections] = useState<
     Record<number, string>
   >({});
-  const [tagFilters, setTagFilters] = useState<Record<number, string>>({});
 
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [signedUrlCache, setSignedUrlCache] = useState<Record<string, string>>(
-    {},
-  );
+  const [listRefreshKey, setListRefreshKey] = useState(0);
 
   const resetMessage = () => setMessage(null);
-
-  const fetchSignedUrl = useCallback(
-    async (path: string) => {
-      if (!path) return null;
-      if (signedUrlCache[path]) return signedUrlCache[path];
-      const { data, error } = await supabase.storage
-        .from("exam_papers")
-        .createSignedUrl(path, 60 * 60);
-      if (error) {
-        setMessage({ type: "error", text: error.message });
-        return null;
-      }
-      const url = data?.signedUrl ?? null;
-      if (url) {
-        setSignedUrlCache((prev) => ({ ...prev, [path]: url }));
-      }
-      return url;
-    },
-    [supabase, signedUrlCache],
-  );
-
-  const loadExamPapers = useCallback(async (overrides?: Partial<typeof filters>) => {
-    const applied = { ...filters, ...(overrides ?? {}) };
-    setIsLoadingList(true);
-    setListError(null);
-    let query = supabase
-      .from("exam_papers")
-      .select(
-        "id, subject_id, year, season, paper_code, paper_label, time_zone, question_paper_path, mark_scheme_path, created_at, updated_at, subject:subjects(name, exam_board:exam_boards(name)), tag_values:exam_paper_tag_values(tag_value_id, tag_value:subject_exam_tag_values(id, value, tag_id))",
-      )
-      .order("year", { ascending: false })
-      .order("season", { ascending: false })
-      .order("paper_code", { ascending: true });
-
-    if (applied.subjectId) {
-      query = query.eq("subject_id", Number.parseInt(applied.subjectId, 10));
-    }
-
-    const { data, error } = await query;
-    if (error) {
-      setListError(error.message);
-    } else {
-      setExamPapers(data ?? []);
-    }
-    setIsLoadingList(false);
-  }, [filters, supabase]);
 
   const uploadPdf = useCallback(
     async (paperId: number, file: File, kind: PdfKind, upsert = false) => {
@@ -279,13 +210,6 @@ export function ExamPaperManagement({
     async (paths: string[]) => {
       if (!paths.length) return;
       await supabase.storage.from("exam_papers").remove(paths);
-      setSignedUrlCache((prev) => {
-        const next = { ...prev };
-        for (const path of paths) {
-          delete next[path];
-        }
-        return next;
-      });
     },
     [supabase],
   );
@@ -306,7 +230,10 @@ export function ExamPaperManagement({
       setMessage({ type: "error", text: "请上传 Question Paper PDF。" });
       return;
     }
-    if (!ensurePdf(questionFile) || (markSchemeFile && !ensurePdf(markSchemeFile))) {
+    if (
+      !ensurePdf(questionFile) ||
+      (markSchemeFile && !ensurePdf(markSchemeFile))
+    ) {
       setMessage({ type: "error", text: "仅支持上传 PDF 文件。" });
       return;
     }
@@ -377,7 +304,11 @@ export function ExamPaperManagement({
       uploaded.push(questionPath);
       let markSchemePath: string | null = null;
       if (markSchemeFile) {
-        markSchemePath = await uploadPdf(createdId, markSchemeFile, "mark-scheme");
+        markSchemePath = await uploadPdf(
+          createdId,
+          markSchemeFile,
+          "mark-scheme",
+        );
         uploaded.push(markSchemePath);
       }
 
@@ -413,7 +344,7 @@ export function ExamPaperManagement({
         }
       }
 
-      await loadExamPapers();
+      setListRefreshKey((prev) => prev + 1);
       setCreateState({
         subjectId: "",
         questionFile: null,
@@ -436,7 +367,7 @@ export function ExamPaperManagement({
     }
   };
 
-  const openEdit = (paper: ExamPaperRow) => {
+  const openEdit = (paper: BrowserExamPaper) => {
     setEditingPaper(paper);
     setEditState({
       subjectId: String(paper.subject_id),
@@ -588,7 +519,7 @@ export function ExamPaperManagement({
 
       setMessage({ type: "success", text: "已更新试卷。" });
       setEditingPaper(null);
-      await loadExamPapers();
+      setListRefreshKey((prev) => prev + 1);
     } catch (error) {
       const reason =
         error instanceof Error ? error.message : "更新失败，请稍后重试。";
@@ -598,9 +529,11 @@ export function ExamPaperManagement({
     }
   };
 
-  const handleDelete = async (paper: ExamPaperRow) => {
+  const handleDelete = async (paper: BrowserExamPaper) => {
     resetMessage();
-    if (!window.confirm(`确认删除试卷 ${paper.paper_label ?? paper.paper_code}?`)) {
+    if (
+      !window.confirm(`确认删除试卷 ${paper.paper_label ?? paper.paper_code}?`)
+    ) {
       return;
     }
     setDeletingId(paper.id);
@@ -619,21 +552,13 @@ export function ExamPaperManagement({
         throw new Error(error.message);
       }
       setMessage({ type: "success", text: "已删除试卷。" });
-      await loadExamPapers();
+      setListRefreshKey((prev) => prev + 1);
     } catch (error) {
       const reason =
         error instanceof Error ? error.message : "删除失败，请稍后重试。";
       setMessage({ type: "error", text: reason });
     } finally {
       setDeletingId(null);
-    }
-  };
-
-  const handleOpenPdf = async (path: string | null) => {
-    if (!path) return;
-    const url = await fetchSignedUrl(path);
-    if (url) {
-      window.open(url, "_blank", "noopener,noreferrer");
     }
   };
 
@@ -651,67 +576,6 @@ export function ExamPaperManagement({
     [subjects],
   );
 
-  const renderTagBadges = (paper: ExamPaperRow) => {
-    const values = paper.tag_values ?? [];
-    if (!values.length) {
-      return <span className="text-xs text-slate-500">--</span>;
-    }
-    return (
-      <div className="flex flex-wrap gap-2">
-        {values.map((entry) => {
-          const tagId = entry.tag_value?.tag_id;
-          const tagLabel = tagId ? tagNameById.get(tagId) ?? "标签" : "标签";
-          return (
-            <span
-              key={`${paper.id}-${entry.tag_value_id}`}
-              className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"
-            >
-              {tagLabel}: {entry.tag_value?.value ?? ""}
-            </span>
-          );
-        })}
-      </div>
-    );
-  };
-
-  const currentFilterTags = useMemo(() => {
-    if (!filters.subjectId) return [];
-    const list = tagsBySubject.get(Number.parseInt(filters.subjectId, 10)) ?? [];
-    return list
-      .slice()
-      .sort((a, b) => {
-        const posA = a.position ?? 0;
-        const posB = b.position ?? 0;
-        if (posA !== posB) return posA - posB;
-        return a.name.localeCompare(b.name, "zh-CN");
-      })
-      .map((tag) => ({
-        ...tag,
-        values:
-          tag.values
-            ?.slice()
-            .sort((a, b) =>
-              (a.value ?? "").localeCompare(b.value ?? "", "zh-CN"),
-            ) ?? [],
-      }));
-  }, [filters.subjectId, tagsBySubject]);
-
-  const filteredByTags = useMemo(() => {
-    if (!Object.values(tagFilters).some(Boolean)) return examPapers;
-    return examPapers.filter((paper) => {
-      for (const [tagIdStr, valueIdStr] of Object.entries(tagFilters)) {
-        if (!valueIdStr) continue;
-        const tagId = Number.parseInt(tagIdStr, 10);
-        const valueId = Number.parseInt(valueIdStr, 10);
-        const matches = paper.tag_values?.some(
-          (tv) => tv.tag_value?.tag_id === tagId && tv.tag_value_id === valueId,
-        );
-        if (!matches) return false;
-      }
-      return true;
-    });
-  }, [examPapers, tagFilters]);
-
   return (
     <div className="flex flex-1 flex-col gap-6">
       <header className="space-y-2">
@@ -728,14 +592,9 @@ export function ExamPaperManagement({
             variant="outline"
             size="sm"
             className="gap-2"
-            onClick={loadExamPapers}
-            disabled={isLoadingList}
+            onClick={() => setListRefreshKey((prev) => prev + 1)}
           >
-            {isLoadingList ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <RefreshCcw className="size-4" />
-            )}
+            <RefreshCcw className="size-4" />
             刷新
           </Button>
         </div>
@@ -761,86 +620,6 @@ export function ExamPaperManagement({
       <Card>
         <CardHeader className="border-b border-slate-100">
           <CardTitle className="flex items-center gap-2">
-            <ArrowUpDown className="size-5 text-slate-500" />
-            筛选
-          </CardTitle>
-          <CardDescription>按学科与标签组合检索试卷。</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4 pt-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-2">
-              <Label htmlFor="filter-subject">学科</Label>
-              <select
-                id="filter-subject"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none"
-                  value={filters.subjectId}
-                  onChange={(event) => {
-                    setFilters((prev) => ({ ...prev, subjectId: event.target.value }));
-                    setTagFilters({});
-                  }}
-                >
-                  <option value="">全部学科</option>
-                  {subjectOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          {currentFilterTags.length ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {currentFilterTags.map((tag) => (
-                <div className="space-y-2" key={tag.id}>
-                  <Label>{tag.name}</Label>
-                  <select
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none"
-                    value={tagFilters[tag.id] ?? ""}
-                    onChange={(event) =>
-                      setTagFilters((prev) => ({
-                        ...prev,
-                        [tag.id]: event.target.value,
-                      }))
-                    }
-                  >
-                    <option value="">全部</option>
-                    {(tag.values ?? []).map((value) => (
-                      <option key={value.id} value={value.id}>
-                        {value.value}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-            </div>
-          ) : null}
-          <div className="flex flex-wrap gap-3">
-            <Button onClick={loadExamPapers} disabled={isLoadingList}>
-              {isLoadingList ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : null}
-              {isLoadingList ? "检索中..." : "搜索"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={async () => {
-                const reset = { subjectId: "" };
-                setFilters(reset);
-                setListError(null);
-                setTagFilters({});
-                await loadExamPapers(reset);
-              }}
-            >
-              清空
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="border-b border-slate-100">
-          <CardTitle className="flex items-center gap-2">
             <Plus className="size-5 text-slate-500" />
             新增试卷
           </CardTitle>
@@ -855,15 +634,13 @@ export function ExamPaperManagement({
                   id="create-subject"
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none"
                   value={createState.subjectId}
-                  onChange={(event) =>
-                    {
-                      setCreateState((prev) => ({
-                        ...prev,
-                        subjectId: event.target.value,
-                      }));
-                      setCreateTagSelections({});
-                    }
-                  }
+                  onChange={(event) => {
+                    setCreateState((prev) => ({
+                      ...prev,
+                      subjectId: event.target.value,
+                    }));
+                    setCreateTagSelections({});
+                  }}
                 >
                   <option value="">选择学科</option>
                   {subjectOptions.map((option) => (
@@ -877,8 +654,11 @@ export function ExamPaperManagement({
 
             {createState.subjectId ? (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                {(tagsBySubject.get(Number.parseInt(createState.subjectId, 10)) ??
-                  []).map((tag) => (
+                {(
+                  tagsBySubject.get(
+                    Number.parseInt(createState.subjectId, 10),
+                  ) ?? []
+                ).map((tag) => (
                   <div key={tag.id} className="space-y-2">
                     <Label>
                       {tag.name}
@@ -908,7 +688,9 @@ export function ExamPaperManagement({
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div className="space-y-2">
-                <Label htmlFor="create-question-file">Question Paper (PDF) *</Label>
+                <Label htmlFor="create-question-file">
+                  Question Paper (PDF) *
+                </Label>
                 <Input
                   id="create-question-file"
                   type="file"
@@ -922,7 +704,9 @@ export function ExamPaperManagement({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="create-mark-file">Mark Scheme (PDF，可选)</Label>
+                <Label htmlFor="create-mark-file">
+                  Mark Scheme (PDF，可选)
+                </Label>
                 <Input
                   id="create-mark-file"
                   type="file"
@@ -967,122 +751,45 @@ export function ExamPaperManagement({
 
       <Card>
         <CardHeader className="border-b border-slate-100">
-          <CardTitle>试卷列表</CardTitle>
-          <CardDescription>
-            查看、下载、编辑或删除已上传的试卷 PDF。
-          </CardDescription>
+          <CardTitle className="flex items-center gap-2">
+            <ArrowUpDown className="size-5 text-slate-500" />
+            筛选
+          </CardTitle>
+          <CardDescription>按学科与标签组合检索试卷。</CardDescription>
         </CardHeader>
-        <CardContent className="overflow-x-auto px-0 pb-2">
-          <table className="min-w-full text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50">
-              <tr className="text-left text-slate-600">
-                <th className="px-4 py-3 font-medium">学科</th>
-                <th className="px-4 py-3 font-medium">年份</th>
-                <th className="px-4 py-3 font-medium">季节</th>
-                <th className="px-4 py-3 font-medium">Paper</th>
-                <th className="px-4 py-3 font-medium">Tags</th>
-                <th className="px-4 py-3 font-medium">Question</th>
-                <th className="px-4 py-3 font-medium">Mark Scheme</th>
-                <th className="px-4 py-3 font-medium">更新于</th>
-                <th className="px-4 py-3 font-medium">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredByTags.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="px-4 py-6 text-center text-slate-500"
-                  >
-                    暂无数据。
-                  </td>
-                </tr>
-              ) : (
-                filteredByTags.map((paper) => (
-                  <tr
-                    key={paper.id}
-                    className="border-b border-slate-100 hover:bg-slate-50/80"
-                  >
-                    <td className="px-4 py-3 text-slate-800">
-                      {subjectLabel(paper.subject)}
-                    </td>
-                    <td className="px-4 py-3">{paper.year}</td>
-                    <td className="px-4 py-3">{paper.season}</td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900">
-                        {paper.paper_code}
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        {paper.paper_label}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">{renderTagBadges(paper)}</td>
-                    <td className="px-4 py-3">
-                      {paper.question_paper_path ? (
-                        <Button
-                          variant="link"
-                          className="px-0 text-blue-600"
-                          onClick={() =>
-                            handleOpenPdf(paper.question_paper_path ?? null)
-                          }
-                        >
-                          view
-                          <ExternalLink className="ml-1 size-4" />
-                        </Button>
-                      ) : (
-                        <span className="text-xs text-slate-500">未上传</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {paper.mark_scheme_path ? (
-                        <Button
-                          variant="link"
-                          className="px-0 text-blue-600"
-                          onClick={() =>
-                            handleOpenPdf(paper.mark_scheme_path ?? null)
-                          }
-                        >
-                          view
-                          <ExternalLink className="ml-1 size-4" />
-                        </Button>
-                      ) : (
-                        <span className="text-xs text-slate-500">未上传</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {formatDate(paper.updated_at)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="icon-sm"
-                          variant="ghost"
-                          onClick={() => openEdit(paper)}
-                          aria-label="编辑"
-                        >
-                          <Pencil className="size-4" />
-                        </Button>
-                        <Button
-                          size="icon-sm"
-                          variant="ghost"
-                          className="text-red-600"
-                          onClick={() => handleDelete(paper)}
-                          disabled={deletingId === paper.id}
-                          aria-label="删除"
-                        >
-                          {deletingId === paper.id ? (
-                            <Loader2 className="size-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="size-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <CardContent className="space-y-4 pt-4">
+          <ExamPaperBrowser
+            examBoards={examBoards}
+            subjects={subjects}
+            initialTags={subjectTags}
+            refreshKey={listRefreshKey}
+            renderActions={(paper) => (
+              <div className="flex items-center gap-2">
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  onClick={() => openEdit(paper)}
+                  aria-label="编辑"
+                >
+                  <Pencil className="size-4" />
+                </Button>
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  className="text-red-600"
+                  onClick={() => handleDelete(paper)}
+                  disabled={deletingId === paper.id}
+                  aria-label="删除"
+                >
+                  {deletingId === paper.id ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="size-4" />
+                  )}
+                </Button>
+              </div>
+            )}
+          />
         </CardContent>
       </Card>
 
@@ -1093,10 +800,19 @@ export function ExamPaperManagement({
         onClose={() => setEditingPaper(null)}
         footer={
           <div className="flex items-center justify-end gap-2">
-            <Button variant="outline" onClick={() => setEditingPaper(null)} disabled={editBusy}>
+            <Button
+              variant="outline"
+              onClick={() => setEditingPaper(null)}
+              disabled={editBusy}
+            >
               取消
             </Button>
-            <Button type="submit" form="edit-paper-form" disabled={editBusy} className="gap-2">
+            <Button
+              type="submit"
+              form="edit-paper-form"
+              disabled={editBusy}
+              className="gap-2"
+            >
               {editBusy ? <Loader2 className="size-4 animate-spin" /> : null}
               保存
             </Button>
@@ -1116,15 +832,13 @@ export function ExamPaperManagement({
                   id="edit-subject"
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none"
                   value={editState.subjectId}
-                  onChange={(event) =>
-                    {
-                      setEditState((prev) => ({
-                        ...prev,
-                        subjectId: event.target.value,
-                      }));
-                      setEditTagSelections({});
-                    }
-                  }
+                  onChange={(event) => {
+                    setEditState((prev) => ({
+                      ...prev,
+                      subjectId: event.target.value,
+                    }));
+                    setEditTagSelections({});
+                  }}
                 >
                   {subjectOptions.map((option) => (
                     <option key={option.id} value={option.id}>
@@ -1142,7 +856,10 @@ export function ExamPaperManagement({
                     inputMode="numeric"
                     value={editState.year}
                     onChange={(event) =>
-                      setEditState((prev) => ({ ...prev, year: event.target.value }))
+                      setEditState((prev) => ({
+                        ...prev,
+                        year: event.target.value,
+                      }))
                     }
                   />
                 </div>
@@ -1164,8 +881,10 @@ export function ExamPaperManagement({
 
             {editState.subjectId ? (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                {(tagsBySubject.get(Number.parseInt(editState.subjectId, 10)) ??
-                  []).map((tag) => (
+                {(
+                  tagsBySubject.get(Number.parseInt(editState.subjectId, 10)) ??
+                  []
+                ).map((tag) => (
                   <div key={tag.id} className="space-y-2">
                     <Label>
                       {tag.name}
@@ -1244,7 +963,9 @@ export function ExamPaperManagement({
                     现有文件：{editingPaper.mark_scheme_path}
                   </p>
                 ) : (
-                  <p className="text-xs text-slate-500">当前未上传 Mark Scheme。</p>
+                  <p className="text-xs text-slate-500">
+                    当前未上传 Mark Scheme。
+                  </p>
                 )}
               </div>
             </div>

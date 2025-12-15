@@ -9,14 +9,12 @@ export default async function PapersPage() {
       supabase
         .from("exam_boards")
         .select("id, name, question_bank")
-        .eq("question_bank", 1)
         .order("name", { ascending: true }),
       supabase
         .from("subjects")
         .select(
           "id, name, exam_board_id, exam_board:exam_boards(id, name, question_bank)",
         )
-        .eq("exam_board.question_bank", 1)
         .order("name", { ascending: true }),
       supabase
         .from("subject_exam_tags")
@@ -28,14 +26,15 @@ export default async function PapersPage() {
         .order("name", { ascending: true }),
     ]);
 
-  const examBoardsForPapers = (examBoards ?? []).filter(
-    (board) => board.question_bank === 1,
-  );
+  const examBoardsForPapers = (examBoards ?? []).filter((board) => {
+    const qb = board.question_bank ?? 1;
+    return qb === 1;
+  });
   const allowedSubjectIds = new Set(
     (subjects ?? [])
       .filter(
         (subject) =>
-          subject.exam_board?.question_bank === 1 &&
+          (subject.exam_board?.question_bank ?? 1) === 1 &&
           examBoardsForPapers.some(
             (board) => board.id === subject.exam_board_id,
           ),

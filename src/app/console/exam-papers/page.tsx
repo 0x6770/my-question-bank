@@ -12,7 +12,9 @@ export default async function ConsoleExamPapersPage() {
   ] = await Promise.all([
     supabase
       .from("subjects")
-      .select("id, name, exam_board:exam_boards(name, question_bank)")
+      .select(
+        "id, name, exam_board_id, exam_board:exam_boards(id, name, question_bank)",
+      )
       .order("name", { ascending: true }),
     supabase
       .from("exam_papers")
@@ -32,9 +34,10 @@ export default async function ConsoleExamPapersPage() {
       .order("name", { ascending: true }),
   ]);
 
-  const filteredSubjects = (subjects ?? []).filter(
-    (subject) => subject.exam_board?.question_bank === 1,
-  );
+  const filteredSubjects = (subjects ?? []).filter((subject) => {
+    const qb = subject.exam_board?.question_bank ?? 1;
+    return qb === 1;
+  });
   const allowedSubjectIds = new Set(
     filteredSubjects.map((subject) => subject.id),
   );
