@@ -1,4 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
+import {
+  firstOrNull,
+  type SubjectWithBoard,
+  type UserAccessRow,
+} from "@/lib/supabase/relations";
 import { UserAccessManager } from "./user-access-manager";
 
 export default async function ConsoleUsersPage() {
@@ -18,11 +23,13 @@ export default async function ConsoleUsersPage() {
       .select(
         "user_id, subject:subjects(id, name, exam_board:exam_boards(name, question_bank))",
       )
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .returns<UserAccessRow[]>(),
     supabase
       .from("subjects")
       .select("id, name, exam_board:exam_boards(name, question_bank)")
-      .order("name", { ascending: true }),
+      .order("name", { ascending: true })
+      .returns<SubjectWithBoard[]>(),
   ]);
 
   const loadError =
@@ -30,17 +37,40 @@ export default async function ConsoleUsersPage() {
       ? "Failed to load users or permissions. Please try again later."
       : null;
 
-  const filteredSubjects = (subjects ?? []).filter(
+  const normalizedSubjects = (subjects ?? []).map((subject) => ({
+    ...subject,
+    exam_board: firstOrNull(subject.exam_board),
+  }));
+
+  const filteredSubjects = normalizedSubjects.filter(
     (subject) => subject.exam_board?.question_bank === 0,
   );
   const allowedSubjectIds = new Set(
     filteredSubjects.map((subject) => subject.id),
   );
 
-  const accessGrants = (accessRows ?? [])
+  const normalizedAccessRows = (accessRows ?? []).map((row) => {
+    const subject = firstOrNull(row.subject);
+    return {
+      user_id: row.user_id,
+      subject: subject
+        ? {
+            ...subject,
+            exam_board: firstOrNull(subject.exam_board),
+          }
+        : null,
+    };
+  });
+
+  const accessGrants = normalizedAccessRows
     .filter(
-      (row) =>
-        row.subject &&
+      (
+        row,
+      ): row is {
+        user_id: string;
+        subject: SubjectWithBoard;
+      } =>
+        !!row.subject &&
         row.subject.exam_board?.question_bank === 0 &&
         allowedSubjectIds.has(row.subject.id),
     )
@@ -72,7 +102,7 @@ export default async function ConsoleUsersPage() {
         </div>
         <UserAccessManager
           users={profiles ?? []}
-          subjects={subjects ?? []}
+          subjects={filteredSubjects}
           accessGrants={accessGrants}
         />
       </div>

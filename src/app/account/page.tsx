@@ -45,13 +45,18 @@ export default async function AccountPage() {
   const questionIds = Array.from(
     new Set((bookmarkRows ?? []).map((row) => row.question_id)),
   );
-  const bookmarkedAtMap = new Map<number, string>();
+  const bookmarkedAtMap = new Map<number, string | null>();
   const answerViewedMap = new Map<number, boolean>();
   const isBookmarkedMap = new Map<number, boolean>();
+  const answerViewedAtMap = new Map<number, string | null>();
   for (const row of bookmarkRows ?? []) {
-    bookmarkedAtMap.set(row.question_id, row.created_at);
+    bookmarkedAtMap.set(
+      row.question_id,
+      row.is_bookmarked ? row.created_at : null,
+    );
     answerViewedMap.set(row.question_id, Boolean(row.answer_viewed_at));
     isBookmarkedMap.set(row.question_id, row.is_bookmarked ?? false);
+    answerViewedAtMap.set(row.question_id, row.answer_viewed_at ?? null);
   }
 
   let questions: BookmarkedQuestion[] = [];
@@ -127,10 +132,11 @@ export default async function AccountPage() {
         difficulty: row.difficulty ?? 1,
         calculator: row.calculator ?? false,
         createdAt: row.created_at,
+        bookmarkedAt: bookmarkedAtMap.get(row.id) ?? null,
         chapterId: row.chapter_id ?? null,
-        chapterName: row.chapters?.name ?? null,
-        subjectId: row.chapters?.subject_id ?? null,
-        subjectName: row.chapters?.subjects?.name ?? null,
+        chapterName: row.chapters?.[0]?.name ?? null,
+        subjectId: row.chapters?.[0]?.subject_id ?? null,
+        subjectName: row.chapters?.[0]?.subjects?.[0]?.name ?? null,
         images: (row.question_images ?? [])
           .slice()
           .sort((a, b) => a.position - b.position)
@@ -162,7 +168,7 @@ export default async function AccountPage() {
         isBookmarked: true,
         isAnswerViewed: answerViewedMap.get(q.id) ?? false,
       },
-      bookmarkedAt: bookmarkedAtMap.get(q.id) ?? null,
+      bookmarkedAt: q.bookmarkedAt,
     }));
 
   const viewed = questions
@@ -173,7 +179,7 @@ export default async function AccountPage() {
         isBookmarked: isBookmarkedMap.get(q.id) ?? false,
         isAnswerViewed: true,
       },
-      viewedAt: bookmarkedAtMap.get(q.id) ?? null,
+      viewedAt: answerViewedAtMap.get(q.id) ?? null,
     }));
 
   return (

@@ -1,6 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
+import type { ExamPaper as BrowserExamPaper } from "@/components/exam-paper-browser";
 
-import { ExamPaperManagement } from "./exam-paper-management-client";
+import {
+  ExamPaperManagement,
+  type SubjectRow,
+} from "./exam-paper-management-client";
 
 export default async function ConsoleExamPapersPage() {
   const supabase = await createClient();
@@ -13,7 +17,7 @@ export default async function ConsoleExamPapersPage() {
     supabase
       .from("subjects")
       .select(
-        "id, name, exam_board_id, exam_board:exam_boards(id, name, question_bank)",
+        "id, name, created_at, exam_board_id, exam_board:exam_boards(id, name, question_bank)",
       )
       .order("name", { ascending: true }),
     supabase
@@ -34,7 +38,14 @@ export default async function ConsoleExamPapersPage() {
       .order("name", { ascending: true }),
   ]);
 
-  const filteredSubjects = (subjects ?? []).filter((subject) => {
+  const normalizedSubjects: SubjectRow[] = (subjects ?? []).map((subject) => {
+    const examBoard = Array.isArray(subject.exam_board)
+      ? subject.exam_board[0] ?? null
+      : subject.exam_board ?? null;
+    return { ...subject, exam_board: examBoard } as SubjectRow;
+  });
+
+  const filteredSubjects = normalizedSubjects.filter((subject) => {
     const qb = subject.exam_board?.question_bank ?? 1;
     return qb === 1;
   });
@@ -43,6 +54,37 @@ export default async function ConsoleExamPapersPage() {
   );
   const filteredExamPapers = (examPapers ?? []).filter((paper) =>
     allowedSubjectIds.has(paper.subject_id),
+  );
+  const normalizedExamPapers: BrowserExamPaper[] = filteredExamPapers.map(
+    (paper) => {
+      const subject = Array.isArray(paper.subject)
+        ? paper.subject[0] ?? null
+        : paper.subject ?? null;
+      const examBoard = subject && Array.isArray(subject.exam_board)
+        ? subject.exam_board[0] ?? null
+        : subject?.exam_board ?? null;
+      const normalizedTagValues =
+        paper.tag_values?.map((entry) => {
+          const tagValue = Array.isArray(entry.tag_value)
+            ? entry.tag_value[0] ?? null
+            : entry.tag_value ?? null;
+          return {
+            tag_value_id: entry.tag_value_id,
+            tag_value: tagValue
+              ? {
+                  id: tagValue.id,
+                  value: tagValue.value,
+                  tag_id: tagValue.tag_id ?? null,
+                }
+              : null,
+          };
+        }) ?? [];
+      return {
+        ...paper,
+        subject: subject ? { ...subject, exam_board: examBoard } : null,
+        tag_values: normalizedTagValues,
+      } as BrowserExamPaper;
+    },
   );
   const filteredSubjectTags = (subjectTags ?? []).filter((tag) =>
     allowedSubjectIds.has(tag.subject_id),
@@ -56,7 +98,7 @@ export default async function ConsoleExamPapersPage() {
   return (
     <ExamPaperManagement
       initialSubjects={filteredSubjects}
-      initialExamPapers={filteredExamPapers}
+      initialExamPapers={normalizedExamPapers}
       initialSubjectTags={filteredSubjectTags}
       loadError={loadError}
     />

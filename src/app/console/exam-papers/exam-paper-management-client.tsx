@@ -32,8 +32,8 @@ import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Tables } from "../../../../database.types";
 
-type SubjectRow = Tables<"subjects"> & {
-  exam_board?: { name?: string | null } | null;
+export type SubjectRow = Tables<"subjects"> & {
+  exam_board?: { id?: number | null; name?: string | null; question_bank?: number | null } | null;
 };
 
 type TagValueRow = {
@@ -54,6 +54,7 @@ type TagDefinition = {
 
 type ExamPaperManagementProps = {
   initialSubjects: SubjectRow[];
+  initialExamPapers?: BrowserExamPaper[];
   initialSubjectTags: TagDefinition[];
   loadError: string | null;
 };
@@ -113,6 +114,7 @@ function Modal({
 
 export function ExamPaperManagement({
   initialSubjects,
+  initialExamPapers,
   initialSubjectTags,
   loadError,
 }: ExamPaperManagementProps) {
@@ -310,6 +312,9 @@ export function ExamPaperManagement({
         throw new Error(insertError?.message ?? "Failed to create exam paper.");
       }
       createdId = inserted.id;
+      if (createdId === null) {
+        throw new Error("Failed to obtain exam paper id.");
+      }
 
       const questionPath = await uploadPdf(createdId, questionFile, "question");
       uploaded.push(questionPath);
@@ -386,7 +391,6 @@ export function ExamPaperManagement({
       subjectId: String(paper.subject_id),
     });
     setEditFiles({ question: null, markScheme: null });
-    setClearMarkScheme(false);
     const existingSelections: Record<number, string> = {};
     for (const entry of paper.tag_values ?? []) {
       const tagId = entry.tag_value?.tag_id;

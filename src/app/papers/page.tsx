@@ -1,4 +1,9 @@
 import { ExamPaperBrowser } from "@/components/exam-paper-browser";
+import {
+  firstOrNull,
+  type SubjectExamTagWithValues,
+  type SubjectWithBoard,
+} from "@/lib/supabase/relations";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function PapersPage() {
@@ -15,7 +20,8 @@ export default async function PapersPage() {
         .select(
           "id, name, exam_board_id, exam_board:exam_boards(id, name, question_bank)",
         )
-        .order("name", { ascending: true }),
+        .order("name", { ascending: true })
+        .returns<SubjectWithBoard[]>(),
       supabase
         .from("subject_exam_tags")
         .select(
@@ -23,15 +29,21 @@ export default async function PapersPage() {
         )
         .in("name", ["paper", "season", "year", "time zone"])
         .order("subject_id", { ascending: true })
-        .order("name", { ascending: true }),
+        .order("name", { ascending: true })
+        .returns<SubjectExamTagWithValues[]>(),
     ]);
 
   const examBoardsForPapers = (examBoards ?? []).filter((board) => {
     const qb = board.question_bank ?? 1;
     return qb === 1;
   });
+
+  const normalizedSubjects = (subjects ?? []).map((subject) => ({
+    ...subject,
+    exam_board: firstOrNull(subject.exam_board),
+  }));
   const allowedSubjectIds = new Set(
-    (subjects ?? [])
+    normalizedSubjects
       .filter(
         (subject) =>
           (subject.exam_board?.question_bank ?? 1) === 1 &&
@@ -41,7 +53,7 @@ export default async function PapersPage() {
       )
       .map((subject) => subject.id),
   );
-  const subjectsForPapers = (subjects ?? []).filter((subject) =>
+  const subjectsForPapers = normalizedSubjects.filter((subject) =>
     allowedSubjectIds.has(subject.id),
   );
   const tagsForPapers = (tags ?? []).filter((tag) =>

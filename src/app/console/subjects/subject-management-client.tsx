@@ -288,7 +288,7 @@ export function SubjectManagement({
         const { data, error } = await supabase
           .from("exam_boards")
           .insert({ name: trimmed, question_bank: questionBank })
-          .select("id, name, created_at")
+          .select("id, name, question_bank, created_at")
           .single();
         if (error || !data)
           throw new Error(error?.message ?? "Creation failed");
@@ -748,7 +748,7 @@ export function SubjectManagement({
                     setOpenSubjectId(null);
                   };
                   const handleBoardKeyDown = (
-                    event: React.KeyboardEvent<HTMLDivElement>,
+                    event: React.KeyboardEvent<HTMLButtonElement>,
                   ) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();

@@ -16,11 +16,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import type { Tables } from "../../../../../database.types";
+import type { SubjectWithBoard } from "@/lib/supabase/relations";
 
-type SubjectRow = Tables<"subjects"> & {
-  exam_board?: { name?: string | null } | null;
-};
+export type SubjectRow = SubjectWithBoard;
 
 type TagValue = {
   id: number;

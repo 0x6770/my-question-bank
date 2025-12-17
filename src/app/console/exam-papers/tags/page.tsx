@@ -1,4 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
+import {
+  firstOrNull,
+  type SubjectExamTagWithValues,
+  type SubjectWithBoard,
+} from "@/lib/supabase/relations";
 
 import { ExamPaperTagManagement } from "./tag-management-client";
 
@@ -11,8 +16,11 @@ export default async function ExamPaperTagsPage() {
   ] = await Promise.all([
     supabase
       .from("subjects")
-      .select("id, name, exam_board:exam_boards(name, question_bank)")
-      .order("name", { ascending: true }),
+      .select(
+        "id, name, created_at, exam_board_id, exam_board:exam_boards(id, name, question_bank)",
+      )
+      .order("name", { ascending: true })
+      .returns<SubjectWithBoard[]>(),
     supabase
       .from("subject_exam_tags")
       .select(
@@ -20,10 +28,16 @@ export default async function ExamPaperTagsPage() {
       )
       .order("subject_id", { ascending: true })
       .order("position", { ascending: true })
-      .order("name", { ascending: true }),
+      .order("name", { ascending: true })
+      .returns<SubjectExamTagWithValues[]>(),
   ]);
 
-  const filteredSubjects = (subjects ?? []).filter(
+  const normalizedSubjects = (subjects ?? []).map((subject) => ({
+    ...subject,
+    exam_board: firstOrNull(subject.exam_board),
+  }));
+
+  const filteredSubjects = normalizedSubjects.filter(
     (subject) => subject.exam_board?.question_bank === 1,
   );
   const allowedSubjectIds = new Set(

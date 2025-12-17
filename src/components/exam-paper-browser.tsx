@@ -6,6 +6,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import {
+  firstOrNull,
+  type ExamPaperWithRelations,
+  type SubjectExamTagWithValues,
+} from "@/lib/supabase/relations";
 import { createClient } from "@/lib/supabase/client";
 
 type ExamBoard = {
@@ -264,7 +269,8 @@ export function ExamPaperBrowser({
           )
           .eq("subject_id", subjectId)
           .in("name", DEFAULT_TAG_NAMES)
-          .order("name", { ascending: true }),
+          .order("name", { ascending: true })
+          .returns<SubjectExamTagWithValues[]>(),
         supabase
           .from("exam_papers")
           .select(
@@ -273,7 +279,8 @@ export function ExamPaperBrowser({
           .eq("subject_id", subjectId)
           .order("year", { ascending: false })
           .order("season", { ascending: false })
-          .order("paper_code", { ascending: true }),
+          .order("paper_code", { ascending: true })
+          .returns<ExamPaperWithRelations[]>(),
       ]);
 
       if (tagsResult.error || papersResult.error) {
@@ -283,12 +290,36 @@ export function ExamPaperBrowser({
             "Failed to load, please try again later.",
         );
       } else {
+        const normalizedPapers: ExamPaper[] =
+          papersResult.data?.map((paper) => {
+            const subject = firstOrNull(paper.subject);
+            const examBoard = subject ? firstOrNull(subject.exam_board) : null;
+            const normalizedTagValues =
+              paper.tag_values?.map((entry) => {
+                const tagValue = firstOrNull(entry.tag_value);
+                return {
+                  tag_value_id: entry.tag_value_id,
+                  tag_value: tagValue
+                    ? {
+                        id: tagValue.id,
+                        value: tagValue.value,
+                        tag_id: tagValue.tag_id ?? null,
+                      }
+                    : null,
+                };
+              }) ?? [];
+            return {
+              ...paper,
+              subject: subject ? { ...subject, exam_board: examBoard } : null,
+              tag_values: normalizedTagValues,
+            } as ExamPaper;
+          }) ?? [];
         setTagsBySubject((prev) => {
           const next = new Map(prev);
           next.set(subjectId, tagsResult.data ?? []);
           return next;
         });
-        setPapers(papersResult.data ?? []);
+        setPapers(normalizedPapers);
       }
       setIsLoading(false);
     },
