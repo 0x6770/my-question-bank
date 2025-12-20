@@ -15,8 +15,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
-import { cn } from "@/lib/utils";
 import type { SubjectWithBoard } from "@/lib/supabase/relations";
+import { cn } from "@/lib/utils";
 
 export type SubjectRow = SubjectWithBoard;
 

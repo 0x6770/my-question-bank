@@ -6,12 +6,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { createClient } from "@/lib/supabase/client";
 import {
-  firstOrNull,
   type ExamPaperWithRelations,
+  firstOrNull,
   type SubjectExamTagWithValues,
 } from "@/lib/supabase/relations";
-import { createClient } from "@/lib/supabase/client";
 
 type ExamBoard = {
   id: number;

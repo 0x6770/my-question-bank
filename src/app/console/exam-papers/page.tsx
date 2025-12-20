@@ -1,5 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
 import type { ExamPaper as BrowserExamPaper } from "@/components/exam-paper-browser";
+import { createClient } from "@/lib/supabase/server";
 
 import {
   ExamPaperManagement,
@@ -40,8 +40,8 @@ export default async function ConsoleExamPapersPage() {
 
   const normalizedSubjects: SubjectRow[] = (subjects ?? []).map((subject) => {
     const examBoard = Array.isArray(subject.exam_board)
-      ? subject.exam_board[0] ?? null
-      : subject.exam_board ?? null;
+      ? (subject.exam_board[0] ?? null)
+      : (subject.exam_board ?? null);
     return { ...subject, exam_board: examBoard } as SubjectRow;
   });
 
@@ -58,16 +58,17 @@ export default async function ConsoleExamPapersPage() {
   const normalizedExamPapers: BrowserExamPaper[] = filteredExamPapers.map(
     (paper) => {
       const subject = Array.isArray(paper.subject)
-        ? paper.subject[0] ?? null
-        : paper.subject ?? null;
-      const examBoard = subject && Array.isArray(subject.exam_board)
-        ? subject.exam_board[0] ?? null
-        : subject?.exam_board ?? null;
+        ? (paper.subject[0] ?? null)
+        : (paper.subject ?? null);
+      const examBoard =
+        subject && Array.isArray(subject.exam_board)
+          ? (subject.exam_board[0] ?? null)
+          : (subject?.exam_board ?? null);
       const normalizedTagValues =
         paper.tag_values?.map((entry) => {
           const tagValue = Array.isArray(entry.tag_value)
-            ? entry.tag_value[0] ?? null
-            : entry.tag_value ?? null;
+            ? (entry.tag_value[0] ?? null)
+            : (entry.tag_value ?? null);
           return {
             tag_value_id: entry.tag_value_id,
             tag_value: tagValue

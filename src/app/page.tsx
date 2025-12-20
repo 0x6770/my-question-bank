@@ -46,9 +46,10 @@ export default async function Home() {
           subjects={filteredSubjects}
           chapters={
             chapters
-              ?.filter((chapter) =>
-                chapter.subject_id != null &&
-                allowedSubjectIds.has(chapter.subject_id),
+              ?.filter(
+                (chapter) =>
+                  chapter.subject_id != null &&
+                  allowedSubjectIds.has(chapter.subject_id),
               )
               .map((chapter) => ({
                 id: chapter.id,

@@ -33,7 +33,11 @@ import { cn } from "@/lib/utils";
 import type { Tables } from "../../../../database.types";
 
 export type SubjectRow = Tables<"subjects"> & {
-  exam_board?: { id?: number | null; name?: string | null; question_bank?: number | null } | null;
+  exam_board?: {
+    id?: number | null;
+    name?: string | null;
+    question_bank?: number | null;
+  } | null;
 };
 
 type TagValueRow = {
@@ -114,7 +118,6 @@ function Modal({
 
 export function ExamPaperManagement({
   initialSubjects,
-  initialExamPapers,
   initialSubjectTags,
   loadError,
 }: ExamPaperManagementProps) {

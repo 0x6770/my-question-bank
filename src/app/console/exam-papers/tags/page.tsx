@@ -1,9 +1,9 @@
-import { createClient } from "@/lib/supabase/server";
 import {
   firstOrNull,
   type SubjectExamTagWithValues,
   type SubjectWithBoard,
 } from "@/lib/supabase/relations";
+import { createClient } from "@/lib/supabase/server";
 
 import { ExamPaperTagManagement } from "./tag-management-client";
 
