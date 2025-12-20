@@ -1,13 +1,26 @@
-import { createClient } from "@/lib/supabase/server";
 import {
   firstOrNull,
   type SubjectWithBoard,
   type UserAccessRow,
 } from "@/lib/supabase/relations";
+import { createClient } from "@/lib/supabase/server";
+import { isAdminRole } from "../types";
 import { UserAccessManager } from "./user-access-manager";
 
 export default async function ConsoleUsersPage() {
   const supabase = await createClient();
+  const { data: currentUserResult } = await supabase.auth.getUser();
+  const currentUserId = currentUserResult.user?.id ?? null;
+  const { data: currentProfile } = currentUserId
+    ? await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", currentUserId)
+        .maybeSingle()
+    : { data: null };
+  const adminRole = isAdminRole(currentProfile?.role)
+    ? currentProfile.role
+    : null;
 
   const [
     { data: profiles, error: profilesError },
@@ -83,7 +96,7 @@ export default async function ConsoleUsersPage() {
           User Management
         </h1>
         <p className="text-sm text-slate-500">
-          View and manage subjects accessible to users.
+          Create users, manage passwords, and adjust subject access.
         </p>
       </header>
 
@@ -97,13 +110,15 @@ export default async function ConsoleUsersPage() {
         <div className="border-b border-slate-100 px-6 py-4">
           <h2 className="text-lg font-semibold text-slate-800">User List</h2>
           <p className="text-sm text-slate-500">
-            Adjust subject access directly.
+            Control access and credentials.
           </p>
         </div>
         <UserAccessManager
           users={profiles ?? []}
           subjects={filteredSubjects}
           accessGrants={accessGrants}
+          adminRole={adminRole}
+          currentUserId={currentUserId}
         />
       </div>
     </div>
