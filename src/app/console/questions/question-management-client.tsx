@@ -190,7 +190,7 @@ export function QuestionManagement({
   const [chapterId, setChapterId] = useState<string>("");
   const [marks, setMarks] = useState<string>("");
   const [difficulty, setDifficulty] = useState<string>("2");
-  const [calculatorAllowed, setCalculatorAllowed] = useState(false);
+  const [calculatorAllowed, setCalculatorAllowed] = useState(true);
   const [images, setImages] = useState<FormImage[]>([]);
   const [answerImages, setAnswerImages] = useState<FormImage[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1144,18 +1144,18 @@ export function QuestionManagement({
               <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
                 <input
                   type="checkbox"
-                  checked={calculatorAllowed}
+                  checked={!calculatorAllowed}
                   onChange={(event) =>
-                    setCalculatorAllowed(event.target.checked)
+                    setCalculatorAllowed(!event.target.checked)
                   }
                   className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
                 />
                 <div className="flex flex-col">
                   <span className="font-medium text-slate-800">
-                    Calculator allowed
+                    Calculator not allowed
                   </span>
                   <span className="text-xs text-slate-500">
-                    Check if a calculator is allowed for this question.
+                    Check if a calculator is not allowed for this question.
                   </span>
                 </div>
               </label>
@@ -1472,18 +1472,18 @@ export function QuestionManagement({
                           <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
                             <input
                               type="checkbox"
-                              checked={editCalculatorAllowed}
+                              checked={!editCalculatorAllowed}
                               onChange={(event) =>
-                                setEditCalculatorAllowed(event.target.checked)
+                                setEditCalculatorAllowed(!event.target.checked)
                               }
                               className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
                             />
                             <div className="flex flex-col">
                               <span className="font-medium text-slate-800">
-                                Calculator allowed
+                                Calculator not allowed
                               </span>
                               <span className="text-xs text-slate-500">
-                                Check if a calculator is allowed for this
+                                Check if a calculator is not allowed for this
                                 question.
                               </span>
                             </div>

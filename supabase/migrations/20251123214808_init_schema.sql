@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS "public"."questions" (
     "id" bigint NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "difficulty" smallint DEFAULT '2'::smallint NOT NULL,
-    "calculator" boolean DEFAULT false NOT NULL,
+    "calculator" boolean DEFAULT true NOT NULL,
     "chapter_id" bigint NOT NULL,
     "marks" smallint NOT NULL,
     CONSTRAINT "questions_difficulty_check" CHECK (
