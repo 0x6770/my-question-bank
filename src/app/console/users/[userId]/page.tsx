@@ -63,11 +63,14 @@ export default async function ConsoleUserDetailPage({
     exam_board: firstOrNull(subject.exam_board),
   }));
 
-  const filteredSubjects = normalizedSubjects.filter(
+  const questionSubjects = normalizedSubjects.filter(
     (subject) => subject.exam_board?.question_bank === 0,
   );
+  const examPaperSubjects = normalizedSubjects.filter(
+    (subject) => subject.exam_board?.question_bank !== 0,
+  );
   const allowedSubjectIds = new Set(
-    filteredSubjects.map((subject) => subject.id),
+    normalizedSubjects.map((subject) => subject.id),
   );
 
   const normalizedAccessRows = (accessRows ?? []).map((row) => {
@@ -90,10 +93,7 @@ export default async function ConsoleUserDetailPage({
       ): row is {
         user_id: string;
         subject: SubjectWithBoard;
-      } =>
-        !!row.subject &&
-        row.subject.exam_board?.question_bank === 0 &&
-        allowedSubjectIds.has(row.subject.id),
+      } => !!row.subject && allowedSubjectIds.has(row.subject.id),
     )
     .map((row) => row.subject.id);
 
@@ -117,7 +117,8 @@ export default async function ConsoleUserDetailPage({
       {profile ? (
         <UserAccessEditor
           user={profile}
-          subjects={filteredSubjects}
+          questionSubjects={questionSubjects}
+          examPaperSubjects={examPaperSubjects}
           accessGrants={accessGrants}
           adminRole={adminRole}
           currentUserId={currentUserId}

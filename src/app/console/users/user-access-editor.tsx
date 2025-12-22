@@ -23,7 +23,8 @@ type UserRow = {
 
 type Props = {
   user: UserRow;
-  subjects: Subject[];
+  questionSubjects: Subject[];
+  examPaperSubjects: Subject[];
   accessGrants: number[];
   adminRole: AdminRole | null;
   currentUserId: string | null;
@@ -88,7 +89,8 @@ function Modal({
 
 export function UserAccessEditor({
   user,
-  subjects,
+  questionSubjects,
+  examPaperSubjects,
   accessGrants,
   adminRole,
   currentUserId,
@@ -207,6 +209,100 @@ export function UserAccessEditor({
     }
   };
 
+  const renderSubjectSection = (
+    title: string,
+    description: string,
+    subjects: Subject[],
+  ) => {
+    const authorizedCount = subjects.reduce(
+      (total, subject) => (accessSet.has(subject.id) ? total + 1 : total),
+      0,
+    );
+    const boardMap = new Map<string, Subject[]>();
+    for (const subject of subjects) {
+      const boardName = subject.exam_board?.name?.trim() || "Other";
+      if (!boardMap.has(boardName)) {
+        boardMap.set(boardName, []);
+      }
+      boardMap.get(boardName)?.push(subject);
+    }
+
+    const boardEntries = Array.from(boardMap.entries()).sort(([a], [b]) =>
+      a.localeCompare(b, "zh-CN"),
+    );
+    for (const [, list] of boardEntries) {
+      list.sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+    }
+
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 px-6 py-4">
+          <h2 className="text-lg font-semibold text-slate-800">{title}</h2>
+          <p className="text-sm text-slate-500">{description}</p>
+        </div>
+        {isAdmin ? (
+          <div className="px-6 py-6">
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm text-emerald-700">
+              Admins have full access
+              {subjects.length ? ` (total ${subjects.length})` : ""}
+            </span>
+          </div>
+        ) : (
+          <div className="space-y-3 px-6 py-6">
+            <p className="text-xs text-slate-500">
+              Select subjects to grant access:
+            </p>
+            {subjects.length === 0 ? (
+              <div className="text-sm text-slate-500">
+                No subjects available.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {boardEntries.map(([boardName, boardSubjects]) => (
+                  <div key={boardName} className="space-y-2">
+                    <p className="text-sm font-semibold text-slate-700">
+                      {boardName}
+                    </p>
+                    <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-slate-50/40">
+                      {boardSubjects.map((subject) => {
+                        const checked = accessSet.has(subject.id);
+                        const loading = busySubjectId === subject.id;
+                        return (
+                          <li
+                            key={subject.id}
+                            className={`flex items-center gap-3 px-4 py-2 text-sm ${loading ? "opacity-60" : ""}`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4"
+                              checked={checked}
+                              disabled={loading}
+                              onChange={(e) =>
+                                void handleToggle(subject.id, e.target.checked)
+                              }
+                            />
+                            <span className="text-slate-800">
+                              {subject.name}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="text-xs text-slate-500">
+              {authorizedCount === 0
+                ? "No subjects authorized"
+                : `Authorized for ${authorizedCount} subjects`}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
@@ -272,63 +368,16 @@ export function UserAccessEditor({
         </div>
       ) : null}
 
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-6 py-4">
-          <h2 className="text-lg font-semibold text-slate-800">
-            Subject Access
-          </h2>
-          <p className="text-sm text-slate-500">
-            Grant subject access for this user.
-          </p>
-        </div>
-        {isAdmin ? (
-          <div className="px-6 py-6">
-            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm text-emerald-700">
-              Admins have full access
-              {subjects.length ? ` (total ${subjects.length})` : ""}
-            </span>
-          </div>
-        ) : (
-          <div className="space-y-3 px-6 py-6">
-            <p className="text-xs text-slate-500">
-              Select subjects to grant access:
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {subjects.map((subject) => {
-                const checked = accessSet.has(subject.id);
-                const loading = busySubjectId === subject.id;
-                return (
-                  <label
-                    key={subject.id}
-                    className={`flex items-center gap-2 rounded-full border px-3 py-1 text-sm transition ${checked ? "border-sky-200 bg-sky-50 text-slate-800" : "border-slate-200 bg-white text-slate-700"} ${loading ? "opacity-60" : ""}`}
-                  >
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4"
-                      checked={checked}
-                      disabled={loading}
-                      onChange={(e) =>
-                        void handleToggle(subject.id, e.target.checked)
-                      }
-                    />
-                    <span>
-                      {subject.name}
-                      {subject.exam_board?.name
-                        ? ` · ${subject.exam_board.name}`
-                        : ""}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-            <div className="text-xs text-slate-500">
-              {accessSet.size === 0
-                ? "No subjects authorized"
-                : `Authorized for ${accessSet.size} subjects`}
-            </div>
-          </div>
-        )}
-      </div>
+      {renderSubjectSection(
+        "Question Bank Access",
+        "Manage question bank subjects for this user.",
+        questionSubjects,
+      )}
+      {renderSubjectSection(
+        "Exam Paper Access",
+        "Manage exam paper subjects for this user.",
+        examPaperSubjects,
+      )}
 
       <Modal
         open={!!modalState}
