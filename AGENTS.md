@@ -26,7 +26,7 @@
 
 ## 开发与验证
 - **Lint/格式**：`yarn lint src`（Biome）。
-- **改动后必做**：每次修改完成后依次运行 `yarn format src`、`yarn lint src`，然后用 Next.js MCP 的 `get_errors` 检查是否有报错。
+- **改动后必做**：每次修改完成后依次运行 `yarn format src`、`yarn lint src`、`yarn build`，然后用 Next.js MCP 的 `get_errors` 检查是否有报错。
 - **权限/数据验证**：运行 Supabase 迁移（`supabase db reset` 或 migrate），确认 RLS 生效；使用普通用户验证 subject/章节/题目过滤。
 - **功能验证**：题卡全屏切换、书签状态同步、Mark Scheme 点击写入答案查看；账号页收藏/已查看列表；后台授权勾选生效后刷新题库过滤。
 - **MCP 工具**（Next.js 服务器已启用 MCP，端口 3000）：
