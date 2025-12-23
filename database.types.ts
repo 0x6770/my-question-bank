@@ -113,19 +113,19 @@ export type Database = {
           created_at: string;
           id: number;
           name: string;
-          question_bank: number;
+          question_bank: Database["public"]["Enums"]["question_bank"];
         };
         Insert: {
           created_at?: string;
           id?: number;
           name: string;
-          question_bank: number;
+          question_bank: Database["public"]["Enums"]["question_bank"];
         };
         Update: {
           created_at?: string;
           id?: number;
           name?: string;
-          question_bank?: number;
+          question_bank?: Database["public"]["Enums"]["question_bank"];
         };
         Relationships: [];
       };
@@ -517,6 +517,10 @@ export type Database = {
       track_answer_view: { Args: { q_id: number }; Returns: undefined };
     };
     Enums: {
+      question_bank:
+        | "exam paper"
+        | "past paper questions"
+        | "typical questions";
       user_role: "super_admin" | "admin" | "user";
     };
     CompositeTypes: {
@@ -651,6 +655,11 @@ export const Constants = {
   },
   public: {
     Enums: {
+      question_bank: [
+        "exam paper",
+        "past paper questions",
+        "typical questions",
+      ],
       user_role: ["super_admin", "admin", "user"],
     },
   },

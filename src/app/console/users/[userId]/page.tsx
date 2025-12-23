@@ -1,3 +1,4 @@
+import { QUESTION_BANK } from "@/lib/question-bank";
 import {
   firstOrNull,
   type SubjectWithBoard,
@@ -64,10 +65,12 @@ export default async function ConsoleUserDetailPage({
   }));
 
   const questionSubjects = normalizedSubjects.filter(
-    (subject) => subject.exam_board?.question_bank === 0,
+    (subject) =>
+      subject.exam_board?.question_bank === QUESTION_BANK.TYPICAL_QUESTIONS ||
+      subject.exam_board?.question_bank === QUESTION_BANK.PAST_PAPER_QUESTIONS,
   );
   const examPaperSubjects = normalizedSubjects.filter(
-    (subject) => subject.exam_board?.question_bank !== 0,
+    (subject) => subject.exam_board?.question_bank === QUESTION_BANK.EXAM_PAPER,
   );
   const allowedSubjectIds = new Set(
     normalizedSubjects.map((subject) => subject.id),

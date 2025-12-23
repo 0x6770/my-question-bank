@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { QuestionBank } from "@/lib/question-bank";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Tables } from "../../../../database.types";
@@ -56,7 +57,7 @@ type SubjectManagementProps = {
   initialSubjects: SubjectRow[];
   initialChapters: ChapterRow[];
   loadError: string | null;
-  questionBank: number;
+  questionBank: QuestionBank;
 };
 
 const compareByName = <T extends { name: string }>(a: T, b: T) =>

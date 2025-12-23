@@ -1,3 +1,4 @@
+import { QUESTION_BANK } from "@/lib/question-bank";
 import { createClient } from "@/lib/supabase/server";
 
 import { SubjectManagement } from "./subject-management-client";
@@ -9,7 +10,7 @@ export default async function ConsoleSubjectsPage() {
     supabase
       .from("exam_boards")
       .select("id, name, question_bank, created_at")
-      .eq("question_bank", 0)
+      .eq("question_bank", QUESTION_BANK.TYPICAL_QUESTIONS)
       .order("name", { ascending: true }),
     supabase
       .from("subjects")
@@ -29,7 +30,7 @@ export default async function ConsoleSubjectsPage() {
       : null;
 
   const examBoards = (examBoardsResult.data ?? []).filter(
-    (board) => board.question_bank === 0,
+    (board) => board.question_bank === QUESTION_BANK.TYPICAL_QUESTIONS,
   );
   const allowedSubjectIds = new Set(
     (subjectsResult.data ?? [])
@@ -50,7 +51,7 @@ export default async function ConsoleSubjectsPage() {
       initialExamBoards={examBoards}
       initialSubjects={subjects}
       initialChapters={chapters}
-      questionBank={0}
+      questionBank={QUESTION_BANK.TYPICAL_QUESTIONS}
       loadError={loadError}
     />
   );

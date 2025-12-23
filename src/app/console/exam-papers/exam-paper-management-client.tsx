@@ -36,7 +36,7 @@ export type SubjectRow = Tables<"subjects"> & {
   exam_board?: {
     id?: number | null;
     name?: string | null;
-    question_bank?: number | null;
+    question_bank?: Tables<"exam_boards">["question_bank"] | null;
   } | null;
 };
 

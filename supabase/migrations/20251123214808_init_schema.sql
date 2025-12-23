@@ -29,7 +29,7 @@ ALTER TABLE "public"."chapters"
 CREATE TABLE IF NOT EXISTS "public"."exam_boards" (
     "id" bigint NOT NULL,
     "name" "text" NOT NULL,
-    "question_bank" integer NOT NULL,
+    "question_bank" "public"."question_bank" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
 );
 

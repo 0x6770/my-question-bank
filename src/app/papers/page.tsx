@@ -1,4 +1,5 @@
 import { ExamPaperBrowser } from "@/components/exam-paper-browser";
+import { QUESTION_BANK } from "@/lib/question-bank";
 import {
   firstOrNull,
   type SubjectExamTagWithValues,
@@ -34,8 +35,8 @@ export default async function PapersPage() {
     ]);
 
   const examBoardsForPapers = (examBoards ?? []).filter((board) => {
-    const qb = board.question_bank ?? 1;
-    return qb === 1;
+    const qb = board.question_bank ?? QUESTION_BANK.EXAM_PAPER;
+    return qb === QUESTION_BANK.EXAM_PAPER;
   });
 
   const normalizedSubjects = (subjects ?? []).map((subject) => ({
@@ -46,7 +47,8 @@ export default async function PapersPage() {
     normalizedSubjects
       .filter(
         (subject) =>
-          (subject.exam_board?.question_bank ?? 1) === 1 &&
+          (subject.exam_board?.question_bank ?? QUESTION_BANK.EXAM_PAPER) ===
+            QUESTION_BANK.EXAM_PAPER &&
           examBoardsForPapers.some(
             (board) => board.id === subject.exam_board_id,
           ),

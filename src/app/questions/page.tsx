@@ -1,5 +1,6 @@
 import { BackToTopButton } from "@/components/back-to-top-button";
 import { QuestionBrowser } from "@/components/question-browser";
+import { QUESTION_BANK } from "@/lib/question-bank";
 import { firstOrNull, type SubjectWithBoard } from "@/lib/supabase/relations";
 import { createClient } from "@/lib/supabase/server";
 
@@ -9,7 +10,7 @@ export default async function Home() {
   const { data: examBoards } = await supabase
     .from("exam_boards")
     .select("id, name, question_bank")
-    .eq("question_bank", 0)
+    .eq("question_bank", QUESTION_BANK.TYPICAL_QUESTIONS)
     .order("name", { ascending: true });
 
   const { data: subjects } = await supabase
@@ -17,7 +18,7 @@ export default async function Home() {
     .select(
       "id, name, exam_board_id, exam_board:exam_boards(name, question_bank)",
     )
-    .eq("exam_board.question_bank", 0)
+    .eq("exam_board.question_bank", QUESTION_BANK.TYPICAL_QUESTIONS)
     .order("name", { ascending: true })
     .returns<SubjectWithBoard[]>();
 
@@ -32,7 +33,8 @@ export default async function Home() {
   }));
 
   const filteredSubjects = normalizedSubjects.filter(
-    (subject) => subject.exam_board?.question_bank === 0,
+    (subject) =>
+      subject.exam_board?.question_bank === QUESTION_BANK.TYPICAL_QUESTIONS,
   );
   const allowedSubjectIds = new Set(
     filteredSubjects.map((subject) => subject.id),

@@ -1,4 +1,5 @@
 import type { ExamPaper as BrowserExamPaper } from "@/components/exam-paper-browser";
+import { QUESTION_BANK } from "@/lib/question-bank";
 import { createClient } from "@/lib/supabase/server";
 
 import {
@@ -46,8 +47,8 @@ export default async function ConsoleExamPapersPage() {
   });
 
   const filteredSubjects = normalizedSubjects.filter((subject) => {
-    const qb = subject.exam_board?.question_bank ?? 1;
-    return qb === 1;
+    const qb = subject.exam_board?.question_bank ?? QUESTION_BANK.EXAM_PAPER;
+    return qb === QUESTION_BANK.EXAM_PAPER;
   });
   const allowedSubjectIds = new Set(
     filteredSubjects.map((subject) => subject.id),

@@ -1,3 +1,4 @@
+import { QUESTION_BANK } from "@/lib/question-bank";
 import {
   firstOrNull,
   type SubjectExamTagWithValues,
@@ -38,7 +39,7 @@ export default async function ExamPaperTagsPage() {
   }));
 
   const filteredSubjects = normalizedSubjects.filter(
-    (subject) => subject.exam_board?.question_bank === 1,
+    (subject) => subject.exam_board?.question_bank === QUESTION_BANK.EXAM_PAPER,
   );
   const allowedSubjectIds = new Set(
     filteredSubjects.map((subject) => subject.id),
