@@ -175,6 +175,9 @@ export function QuestionCard({ question }: QuestionCardProps) {
   const hasImages =
     (question.images?.length ?? 0) > 0 ||
     (question.answerImages?.length ?? 0) > 0;
+  const showQuestionOnly = showQuestion && !showAnswer;
+  const showAnswerOnly = showAnswer && !showQuestion;
+  const showBoth = showQuestion && showAnswer;
 
   return (
     <>
@@ -337,22 +340,32 @@ export function QuestionCard({ question }: QuestionCardProps) {
                   <button
                     type="button"
                     onClick={() => {
-                      if (showQuestion && !showAnswer) return;
-                      setShowQuestion((prev) => !prev);
+                      setShowQuestion(true);
+                      setShowAnswer(false);
                     }}
-                    className={`px-3 py-1 font-medium transition ${showQuestion ? "bg-sky-100 text-slate-900" : "bg-white text-slate-600 hover:bg-slate-50"} border-r border-slate-200`}
+                    className={`px-3 py-1 font-medium transition ${showQuestionOnly ? "bg-sky-100 text-slate-900" : "bg-white text-slate-600 hover:bg-slate-50"} border-r border-slate-200`}
                   >
                     Question
                   </button>
                   <button
                     type="button"
                     onClick={() => {
-                      if (showAnswer && !showQuestion) return;
-                      setShowAnswer((prev) => !prev);
+                      setShowQuestion(false);
+                      setShowAnswer(true);
                     }}
-                    className={`px-3 py-1 font-medium transition ${showAnswer ? "bg-sky-100 text-slate-900" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+                    className={`px-3 py-1 font-medium transition ${showAnswerOnly ? "bg-sky-100 text-slate-900" : "bg-white text-slate-600 hover:bg-slate-50"} border-r border-slate-200`}
                   >
                     Answer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowQuestion(true);
+                      setShowAnswer(true);
+                    }}
+                    className={`px-3 py-1 font-medium transition ${showBoth ? "bg-sky-100 text-slate-900" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+                  >
+                    Question & Answer
                   </button>
                 </div>
                 <Button
