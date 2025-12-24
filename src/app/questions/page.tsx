@@ -20,7 +20,7 @@ export default async function Home() {
     )
     .eq("exam_board.question_bank", QUESTION_BANK.TYPICAL_QUESTIONS)
     .order("name", { ascending: true })
-    .returns<SubjectWithBoard[]>();
+    .overrideTypes<SubjectWithBoard[]>();
 
   const { data: chapters } = await supabase
     .from("chapters")

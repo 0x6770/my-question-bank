@@ -173,7 +173,8 @@ export function QuestionBrowser({
     const controller = new AbortController();
     const load = async () => {
       const isChapterSelected = hierarchySelection.startsWith("chapter:");
-      if (!isChapterSelected) {
+      const isSubjectSelected = hierarchySelection.startsWith("subject:");
+      if (!isChapterSelected && !isSubjectSelected) {
         setQuestions([]);
         setHasMore(false);
         setFetchError(null);
@@ -186,7 +187,11 @@ export function QuestionBrowser({
       try {
         const params = new URLSearchParams();
         const [, id] = hierarchySelection.split(":");
-        params.set("chapterId", id);
+        if (isChapterSelected) {
+          params.set("chapterId", id);
+        } else if (isSubjectSelected) {
+          params.set("subjectId", id);
+        }
         params.set("page", String(page));
         if (difficultySelections.size > 0) {
           params.set(
@@ -226,11 +231,23 @@ export function QuestionBrowser({
   }, [completionFilter, difficultySelections, hierarchySelection, page]);
 
   const currentLabel = useMemo(() => {
+    if (hierarchySelection.startsWith("subject:")) {
+      const [, rawId] = hierarchySelection.split(":");
+      const numericId = Number.parseInt(rawId, 10);
+      const subject = subjects.find((item) => item.id === numericId);
+      const examName =
+        subject?.exam_board_id != null
+          ? examBoards.find((exam) => exam.id === subject.exam_board_id)?.name
+          : null;
+      return subject
+        ? `${examName ? `${examName} / ` : ""}${subject.name}`
+        : "Select a subject";
+    }
     if (!hierarchySelection.startsWith("chapter:")) {
       const examName = activeExamBoardId
         ? examBoards.find((exam) => exam.id === activeExamBoardId)?.name
         : null;
-      return examName ?? "Select a chapter";
+      return examName ?? "Select a subject or chapter";
     }
     const [, rawId] = hierarchySelection.split(":");
     const numericId = Number.parseInt(rawId, 10);
@@ -275,6 +292,7 @@ export function QuestionBrowser({
 
   const filtersActive =
     hierarchySelection.startsWith("chapter:") ||
+    hierarchySelection.startsWith("subject:") ||
     difficultySelections.size > 0 ||
     completionFilter !== "all";
 
@@ -357,6 +375,12 @@ export function QuestionBrowser({
                               onFocus={() => {
                                 setActiveSubjectId(subject.id);
                                 setActiveParentChapterId(null);
+                              }}
+                              onClick={() => {
+                                setActiveSubjectId(subject.id);
+                                setActiveParentChapterId(null);
+                                selectHierarchy(`subject:${subject.id}`);
+                                setHierarchyOpen(false);
                               }}
                             >
                               <span className="flex-1 whitespace-normal text-left leading-snug break-words">
@@ -548,9 +572,10 @@ export function QuestionBrowser({
           </div>
         ) : questions.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center text-slate-500">
-            {hierarchySelection.startsWith("chapter:")
+            {hierarchySelection.startsWith("chapter:") ||
+            hierarchySelection.startsWith("subject:")
               ? "No questions match the filters."
-              : "Select a chapter to view questions."}
+              : "Select a subject or chapter to view questions."}
           </div>
         ) : (
           <>
