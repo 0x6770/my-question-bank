@@ -75,6 +75,9 @@ export function QuestionBrowser({
   const [completionFilter, setCompletionFilter] = useState<
     "all" | "completed" | "incompleted"
   >("all");
+  const [bookmarkFilter, setBookmarkFilter] = useState<"all" | "bookmarked">(
+    "all",
+  );
   const hierarchyRef = useRef<HTMLDivElement>(null);
 
   const toggleDifficulty = (value: number) => {
@@ -99,6 +102,7 @@ export function QuestionBrowser({
     setDifficultySelections(new Set());
     setActiveSubjectId(null);
     setCompletionFilter("all");
+    setBookmarkFilter("all");
     selectHierarchy("all");
   };
 
@@ -204,6 +208,9 @@ export function QuestionBrowser({
         } else if (completionFilter === "incompleted") {
           params.set("completion", "incompleted");
         }
+        if (bookmarkFilter === "bookmarked") {
+          params.set("bookmark", "bookmarked");
+        }
         const response = await fetch(`/api/questions?${params.toString()}`, {
           signal: controller.signal,
         });
@@ -228,7 +235,13 @@ export function QuestionBrowser({
 
     void load();
     return () => controller.abort();
-  }, [completionFilter, difficultySelections, hierarchySelection, page]);
+  }, [
+    bookmarkFilter,
+    completionFilter,
+    difficultySelections,
+    hierarchySelection,
+    page,
+  ]);
 
   const currentLabel = useMemo(() => {
     if (hierarchySelection.startsWith("subject:")) {
@@ -294,7 +307,8 @@ export function QuestionBrowser({
     hierarchySelection.startsWith("chapter:") ||
     hierarchySelection.startsWith("subject:") ||
     difficultySelections.size > 0 ||
-    completionFilter !== "all";
+    completionFilter !== "all" ||
+    bookmarkFilter !== "all";
 
   const visibleSubjects = useMemo(() => {
     if (activeExamBoardId == null) return subjects;
@@ -536,6 +550,37 @@ export function QuestionBrowser({
                       setCompletionFilter(
                         item.key as "all" | "completed" | "incompleted",
                       );
+                      setPage(1);
+                    }}
+                  />
+                  <span>{item.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-semibold text-slate-700">Bookmarks</p>
+            <div className="inline-flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm md:flex-nowrap md:items-center">
+              {[
+                { key: "all", label: "All" },
+                { key: "bookmarked", label: "Bookmarked" },
+              ].map((item) => (
+                <label
+                  key={item.key}
+                  className={`flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium ${
+                    bookmarkFilter === item.key
+                      ? "bg-sky-50 text-slate-900"
+                      : "text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="bookmark"
+                    className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                    checked={bookmarkFilter === item.key}
+                    onChange={() => {
+                      setBookmarkFilter(item.key as "all" | "bookmarked");
                       setPage(1);
                     }}
                   />

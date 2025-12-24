@@ -12,6 +12,7 @@ export async function GET(request: Request) {
   const difficultiesParam = searchParams.get("difficulties");
   const pageParam = searchParams.get("page");
   const completionParam = searchParams.get("completion"); // "all" | "completed" | "incompleted"
+  const bookmarkParam = searchParams.get("bookmark"); // "all" | "bookmarked"
 
   const subjectId = subjectIdParam ? Number.parseInt(subjectIdParam, 10) : null;
   const chapterId = chapterIdParam ? Number.parseInt(chapterIdParam, 10) : null;
@@ -29,6 +30,10 @@ export async function GET(request: Request) {
   const pageSize = 20;
   const offset = (safePage - 1) * pageSize;
   const fetchLimit = pageSize + 1; // +1 用于判定是否还有下一页
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const { data: chapters } = await supabase
     .from("chapters")
@@ -86,6 +91,37 @@ export async function GET(request: Request) {
     return NextResponse.json({ questions: [], hasMore: false, page: safePage });
   }
 
+  const shouldFilterBookmarks = bookmarkParam === "bookmarked";
+  let bookmarkedQuestionIds: number[] | null = null;
+  if (shouldFilterBookmarks) {
+    if (!user) {
+      return NextResponse.json({
+        questions: [],
+        hasMore: false,
+        page: safePage,
+      });
+    }
+    const { data: bookmarkRows, error: bookmarkError } = await supabase
+      .from("user_questions")
+      .select("question_id")
+      .eq("user_id", user.id)
+      .eq("is_bookmarked", true);
+    if (bookmarkError) {
+      return NextResponse.json(
+        { error: bookmarkError.message },
+        { status: 500 },
+      );
+    }
+    bookmarkedQuestionIds = (bookmarkRows ?? []).map((row) => row.question_id);
+    if (bookmarkedQuestionIds.length === 0) {
+      return NextResponse.json({
+        questions: [],
+        hasMore: false,
+        page: safePage,
+      });
+    }
+  }
+
   let query = supabase
     .from("questions")
     .select(
@@ -112,6 +148,10 @@ export async function GET(request: Request) {
 
   if (allowedChapterIds) {
     query = query.in("chapter_id", allowedChapterIds);
+  }
+
+  if (bookmarkedQuestionIds) {
+    query = query.in("id", bookmarkedQuestionIds);
   }
 
   if (difficultySet && difficultySet.size > 0) {
@@ -237,9 +277,6 @@ export async function GET(request: Request) {
   // Bookmarks for current user (if signed in)
   let bookmarksById: Record<number, boolean> = {};
   let answersViewedById: Record<number, boolean> = {};
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
   if (user && withSigned.length > 0) {
     const { data: bookmarkRows } = await supabase
       .from("user_questions")
