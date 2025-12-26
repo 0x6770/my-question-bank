@@ -8,17 +8,27 @@ Usage:
 from __future__ import annotations
 
 import argparse
+from enum import Enum
 from pathlib import Path
 
 from pydantic import Field, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from supabase import Client, create_client
 
+
+class UserRole(str, Enum):
+    """User roles matching public.user_role enum in Supabase."""
+
+    USER = "user"
+    ADMIN = "admin"
+    SUPER_ADMIN = "super_admin"
+
 # Fallback accounts matching scripts/add_user.sh
-DEFAULT_USERS: list[tuple[str, str]] = [
-    ("yujie@wang.icu", "towgux-zirda4-Ruvhyd"),
-    ("yujie@duck.com", "123456"),
-    ("wycslb@gmail.com", "zirda4"),
+# Format: (email, password, role)
+DEFAULT_USERS: list[tuple[str, str, UserRole]] = [
+    ("yujie@wang.icu", "towgux-zirda4-Ruvhyd", UserRole.SUPER_ADMIN),
+    ("yujie@duck.com", "123456", UserRole.USER),
+    ("wycslb@gmail.com", "zirda4", UserRole.SUPER_ADMIN),
 ]
 
 
@@ -57,7 +67,10 @@ def load_env(env_path: Path) -> tuple[str, str]:
     return url, secret_key
 
 
-def create_user(client: Client, email: str, password: str) -> None:
+def create_user(
+    client: Client, email: str, password: str, role: UserRole = UserRole.USER
+) -> None:
+    """Create a user and assign them a role in the public.profiles table."""
     resp = client.auth.admin.create_user(
         {
             "email": email,
@@ -68,7 +81,12 @@ def create_user(client: Client, email: str, password: str) -> None:
     user = getattr(resp, "user", None)
     user_id = getattr(user, "id", None)
     if user_id:
-        print(f"[ok] Created {email} (id={user_id})")
+        # Update the role in public.profiles
+        # The trigger handle_new_user() will create the profile with default role 'user'
+        # We need to update it if a different role is specified
+        if role != UserRole.USER:
+            client.table("profiles").update({"role": role.value}).eq("id", user_id).execute()
+        print(f"[ok] Created {email} (id={user_id}, role={role.value})")
     else:
         print(f"[warn] Sign-up attempted for {email}; check server to confirm status.")
 
@@ -78,9 +96,9 @@ def main():
     supabase_url, supabase_key = load_env(args.env)
     client = create_client(supabase_url, supabase_key)
 
-    for email, password in DEFAULT_USERS:
+    for email, password, role in DEFAULT_USERS:
         try:
-            create_user(client, email, password)
+            create_user(client, email, password, role)
         except Exception as exc:  # pragma: no cover - best-effort CLI output
             print(f"[error] Failed to create {email}: {exc}")
 
