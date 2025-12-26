@@ -44,3 +44,6 @@ next-env.d.ts
 mcp.json
 
 images/*
+
+**/skipped_exam_papers.json
+**/data/conversion_errors.json
