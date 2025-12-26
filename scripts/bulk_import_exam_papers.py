@@ -27,9 +27,39 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 from dotenv import load_dotenv
+from rich.console import Console
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
 from supabase import Client, create_client  # type: ignore
 
 logger = logging.getLogger("bulk_import_exam_papers")
+console = Console()
+
+
+def create_progress() -> Progress:
+    """创建一个美观的 rich 进度条"""
+    return Progress(
+        SpinnerColumn(),
+        TextColumn("[bold blue]{task.description}"),
+        BarColumn(bar_width=40),
+        TaskProgressColumn(),
+        MofNCompleteColumn(),
+        TextColumn("•"),
+        TimeElapsedColumn(),
+        TextColumn("•"),
+        TimeRemainingColumn(),
+        TextColumn("[green]{task.fields[success]}✓[/green] [yellow]{task.fields[skipped]}⊘[/yellow] [red]{task.fields[failed]}✗[/red]"),
+        console=console,
+        refresh_per_second=10,
+    )
 
 DEFAULT_TAGS = ["paper", "season", "year", "time zone"]
 QUESTION_BANK_EXAM_PAPERS = "exam paper"
@@ -199,12 +229,20 @@ def main():
   parser.add_argument("--subjects", default="data/database_export-myquestionbank-9gcfve68fe4574af-subjects.json")
   parser.add_argument("--pdf-dir", default="images/pdf")
   parser.add_argument("--errors", default="errors_exam_papers.json")
+  parser.add_argument("--skipped", default="skipped_exam_papers.json", help="跳过记录输出路径")
   parser.add_argument("--dry-run", action="store_true")
   parser.add_argument("--auto-create", action="store_true", help="缺失对象自动创建（非 dry-run 时生效）")
   parser.add_argument("--n-paper", "--n_paper", type=int, help="限制上传的 exam paper 数量（按成功导入计数）")
+  parser.add_argument("--verbose", "-v", action="store_true", help="显示详细日志（包括 HTTP 请求）")
   args = parser.parse_args()
 
   logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+
+  # 控制 HTTP 请求日志（httpx/httpcore）
+  if not args.verbose:
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("hpack").setLevel(logging.WARNING)
 
   env_path = Path(args.env_file)
   if env_path.exists():
@@ -217,6 +255,7 @@ def main():
   subjects_path = Path(args.subjects)
   pdf_dir = Path(args.pdf_dir)
   errors_path = Path(args.errors)
+  skipped_path = Path(args.skipped)
 
   # load legacy exams/subjects
   exams: dict[str, LegacyExam] = {}
@@ -253,6 +292,17 @@ def main():
     errors_path.parent.mkdir(parents=True, exist_ok=True)
     with errors_path.open("a", encoding="utf-8") as f:
       f.write(json.dumps({"reason": reason, "record": rec}, ensure_ascii=False) + "\n")
+
+  def append_skipped(rec: dict[str, Any], reason: str):
+    skipped_path.parent.mkdir(parents=True, exist_ok=True)
+    with skipped_path.open("a", encoding="utf-8") as f:
+      f.write(json.dumps({"reason": reason, "record": rec}, ensure_ascii=False) + "\n")
+
+  # 清空旧的错误/跳过文件
+  if errors_path.exists():
+    errors_path.unlink()
+  if skipped_path.exists():
+    skipped_path.unlink()
 
   # 将前期错误也写入 NDJSON
   for err in early_errors:
@@ -331,17 +381,21 @@ def main():
   # process records -> uploads then insert exam_papers
   pdf_missing = 0
   result = {"processed": 0, "imported": 0, "skipped": 0, "failed": 0}
-  for rec in records:
-    if args.n_paper is not None and result["imported"] >= args.n_paper:
-      logger.info("达到 n_paper 上限（%s），提前结束", args.n_paper)
-      break
-    result["processed"] += 1
+
+  def local_pdf(url: str | None) -> Optional[Path]:
+    if not url:
+      return None
+    return pdf_dir / Path(url).name
+
+  def process_single_record(rec: Record) -> str:
+    """处理单条记录，返回状态: 'imported' | 'skipped' | 'failed'"""
+    nonlocal pdf_missing
+
     subj_new = subject_old_to_new.get(rec.subject_old)
     if not subj_new:
       append_error(rec.raw, "subject unresolved")
-      result["failed"] += 1
-      continue
-    tags = tag_cache.get(subj_new, {})
+      return "failed"
+
     vals = tag_value_cache.get(subj_new, {})
     try:
       paper_tag_id = vals.get("paper", {}).get(rec.paper)
@@ -350,20 +404,13 @@ def main():
       tz_tag_id = vals.get("time zone", {}).get(rec.timezone) if rec.timezone else None
       if not (paper_tag_id and season_tag_id and year_tag_id):
         append_error(rec.raw, "tag value missing")
-        result["failed"] += 1
-        continue
-
-      def local_pdf(url: str | None) -> Optional[Path]:
-        if not url:
-          return None
-        return pdf_dir / Path(url).name
+        return "failed"
 
       qp_local = local_pdf(rec.question_url)
       ms_local = local_pdf(rec.answer_url)
       if qp_local is None:
         append_error(rec.raw, "question pdf missing (url absent)")
-        result["failed"] += 1
-        continue
+        return "failed"
       missing_files = []
       if not qp_local.exists():
         missing_files.append(str(qp_local))
@@ -371,27 +418,29 @@ def main():
         missing_files.append(str(ms_local))
       if missing_files:
         append_error(rec.raw, f"missing pdf {missing_files}")
-        result["failed"] += 1
         pdf_missing += 1
-        continue
+        return "failed"
 
       uploaded_paths: list[str] = []
       question_path = None
       mark_path = None
       if not args.dry_run and client:
-        dup = (
+        dup_query = (
           client.table("exam_papers")
           .select("id")
           .eq("subject_id", subj_new)
           .eq("year", rec.year)
           .eq("season", rec.season)
           .eq("paper_code", rec.paper)
-          .limit(1)
-          .execute()
         )
+        if rec.timezone is None:
+          dup_query = dup_query.is_("time_zone", "null")
+        else:
+          dup_query = dup_query.eq("time_zone", rec.timezone)
+        dup = dup_query.limit(1).execute()
         if dup.data:
-          result["skipped"] += 1
-          continue
+          append_skipped(rec.raw, f"duplicate: subject={subj_new} year={rec.year} season={rec.season} paper={rec.paper} tz={rec.timezone}")
+          return "skipped"
         upload_prefix = f"imports/{uuid.uuid4().hex}"
         question_path = f"{upload_prefix}/question.pdf"
         mark_path = f"{upload_prefix}/mark-scheme.pdf" if ms_local else None
@@ -399,7 +448,7 @@ def main():
           try:
             with qp_local.open("rb") as f:
               resp = client.storage.from_("exam_papers").upload(
-                question_path, f, file_options={"content-type": "application/pdf"}
+                question_path, f, file_options={"content-type": "application/pdf"}  # type: ignore
               )
             # supabase-py may return dict or object with error attribute
             if isinstance(resp, dict) and resp.get("error"):
@@ -407,35 +456,34 @@ def main():
             uploaded_paths.append(question_path)
           except Exception as exc:  # noqa: BLE001
             append_error(rec.raw, f"upload question failed: {exc}")
-            result["failed"] += 1
-            continue
+            return "failed"
         if ms_local and mark_path:
           try:
             with ms_local.open("rb") as f:
               resp = client.storage.from_("exam_papers").upload(
-                mark_path, f, file_options={"content-type": "application/pdf"}
+                mark_path, f, file_options={"content-type": "application/pdf"}  # type: ignore
               )
             if isinstance(resp, dict) and resp.get("error"):
               raise Exception(resp["error"])
             uploaded_paths.append(mark_path)
           except Exception as exc:  # noqa: BLE001
             append_error(rec.raw, f"upload mark scheme failed: {exc}")
-            result["failed"] += 1
             if uploaded_paths:
               try:
                 client.storage.from_("exam_papers").remove(uploaded_paths)
               except Exception:  # noqa: BLE001
-                logger.info("清理上传文件失败: %s", uploaded_paths)
-            continue
+                pass
+            return "failed"
       else:
-        logger.info(
-          "[dry-run] 上传/创建 exam_paper subject=%s year=%s season=%s paper=%s tz=%s",
-          subj_new,
-          rec.year,
-          rec.season,
-          rec.paper,
-          rec.timezone,
-        )
+        if args.verbose:
+          logger.info(
+            "[dry-run] 上传/创建 exam_paper subject=%s year=%s season=%s paper=%s tz=%s",
+            subj_new,
+            rec.year,
+            rec.season,
+            rec.paper,
+            rec.timezone,
+          )
 
       paper_id = None
       if not args.dry_run and client and question_path:
@@ -456,16 +504,16 @@ def main():
             )
             .execute()
           )
-          paper_id = insert_resp.data[0]["id"]
+          if insert_resp.data and isinstance(insert_resp.data, list) and insert_resp.data:
+            paper_id = insert_resp.data[0]["id"]
         except Exception as exc:  # noqa: BLE001
           append_error(rec.raw, f"create exam paper failed: {exc}")
-          result["failed"] += 1
           if uploaded_paths:
             try:
               client.storage.from_("exam_papers").remove(uploaded_paths)
             except Exception:  # noqa: BLE001
-              logger.info("清理上传文件失败: %s", uploaded_paths)
-          continue
+              pass
+          return "failed"
 
       if not args.dry_run and client and paper_id:
         tv_rows = [{"exam_paper_id": paper_id, "tag_value_id": tv} for tv in [paper_tag_id, season_tag_id, year_tag_id] if tv]
@@ -476,25 +524,48 @@ def main():
             client.table("exam_paper_tag_values").upsert(tv_rows, on_conflict="exam_paper_id,tag_value_id").execute()
           except Exception as exc:  # noqa: BLE001
             append_error(rec.raw, f"tag value upsert failed: {exc}")
-            result["failed"] += 1
             try:
               client.table("exam_papers").delete().eq("id", paper_id).execute()
             except Exception:  # noqa: BLE001
-              logger.info("回滚 exam_paper 失败: %s", paper_id)
+              pass
             if uploaded_paths:
               try:
                 client.storage.from_("exam_papers").remove(uploaded_paths)
               except Exception:  # noqa: BLE001
-                logger.info("清理上传文件失败: %s", uploaded_paths)
-            continue
+                pass
+            return "failed"
 
-      result["imported"] += 1
+      return "imported"
     except Exception as exc:  # noqa: BLE001
       append_error(rec.raw, f"异常: {exc}")
-      result["failed"] += 1
-      continue
+      return "failed"
 
-  logger.info("完成：processed=%s imported=%s skipped=%s failed=%s missing_pdf=%s", result["processed"], result["imported"], result["skipped"], result["failed"], pdf_missing)
+  # 主循环：使用 rich 进度条
+  total_records = len(records)
+  if args.n_paper:
+    total_records = min(total_records, args.n_paper)
+
+  with create_progress() as progress:
+    task_id = progress.add_task("导入试卷", total=total_records, success=0, skipped=0, failed=0)
+    for rec in records:
+      if args.n_paper is not None and result["imported"] >= args.n_paper:
+        break
+      result["processed"] += 1
+      status = process_single_record(rec)
+      result[status] += 1
+      progress.update(
+        task_id,
+        advance=1,
+        success=result["imported"],
+        skipped=result["skipped"],
+        failed=result["failed"],
+      )
+
+  console.print(
+    f"[green]完成:[/green] processed={result['processed']} "
+    f"imported={result['imported']} skipped={result['skipped']} "
+    f"failed={result['failed']} missing_pdf={pdf_missing}"
+  )
 
 
 if __name__ == "__main__":
