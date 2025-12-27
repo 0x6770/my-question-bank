@@ -144,6 +144,10 @@ export function QuestionCard({ question }: QuestionCardProps) {
       });
       if (error) throw error;
       setIsAnswerViewed(true);
+      // Open fullscreen mode and switch to Answer view
+      setFullscreenOpen(true);
+      setShowQuestion(false);
+      setShowAnswer(true);
     } catch (error) {
       setAnswerError(
         error instanceof Error
