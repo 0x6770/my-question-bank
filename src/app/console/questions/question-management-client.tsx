@@ -8,6 +8,7 @@ import {
   Plus,
   ScrollText,
   Trash2,
+  X,
 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -26,6 +27,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TreeSelect, type TreeNode } from "@/components/ui/tree-select";
 import { QUESTION_BANK, type QuestionBank } from "@/lib/question-bank";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -66,8 +68,25 @@ type Feedback =
   | { type: "success"; message: string }
   | { type: "error"; message: string };
 
+type ExamBoardRow = {
+  id: number;
+  question_bank: string;
+};
+
+type AllChapterRow = {
+  id: number;
+  name: string;
+  subject_id: number;
+  parent_chapter_id: number | null;
+  position: number;
+  subject: { id: number; name: string } | null;
+  exam_board_id: number;
+};
+
 type QuestionManagementProps = {
   initialChapters: ChapterRow[];
+  allChapters: AllChapterRow[]; // All chapters from both question banks
+  allExamBoards: ExamBoardRow[]; // All exam boards to identify question banks
   initialQuestions: QuestionSummary[];
   initialHasMore: boolean;
   questionBank: QuestionBank;
@@ -156,8 +175,99 @@ function isBlobUrl(value: string) {
   return value.startsWith("blob:");
 }
 
+// Build tree structure from chapters grouped by subject
+function buildChapterTree(
+  chapters: { id: number; label: string }[],
+  allChapters: AllChapterRow[],
+): TreeNode[] {
+  // Group chapters by subject
+  const subjectMap = new Map<
+    number,
+    { name: string; chapterIds: Set<number> }
+  >();
+
+  for (const chapter of chapters) {
+    const fullChapter = allChapters.find((ch) => ch.id === chapter.id);
+    if (!fullChapter?.subject) continue;
+
+    const subjectId = fullChapter.subject.id;
+    const subjectName = fullChapter.subject.name;
+
+    if (!subjectMap.has(subjectId)) {
+      subjectMap.set(subjectId, { name: subjectName, chapterIds: new Set() });
+    }
+    subjectMap.get(subjectId)!.chapterIds.add(chapter.id);
+  }
+
+  // Helper function to build chapter hierarchy
+  const buildChapterHierarchy = (
+    subjectId: number,
+    chapterIds: Set<number>,
+  ): TreeNode[] => {
+    // Get all chapters for this subject that are in our filtered list
+    const subjectChapters = allChapters.filter(
+      (ch) => ch.subject_id === subjectId && chapterIds.has(ch.id),
+    );
+
+    // Build a map of parent_id -> children
+    const childrenMap = new Map<number | null, AllChapterRow[]>();
+    for (const chapter of subjectChapters) {
+      const parentId = chapter.parent_chapter_id;
+      if (!childrenMap.has(parentId)) {
+        childrenMap.set(parentId, []);
+      }
+      childrenMap.get(parentId)!.push(chapter);
+    }
+
+    // Recursive function to build tree nodes
+    const buildNode = (chapter: AllChapterRow): TreeNode => {
+      const children = childrenMap.get(chapter.id) || [];
+
+      if (children.length === 0) {
+        // Leaf node - can be selected
+        return {
+          id: chapter.id,
+          label: chapter.name,
+          value: chapter.id,
+        };
+      } else {
+        // Parent node - has children, not selectable
+        return {
+          id: chapter.id,
+          label: chapter.name,
+          children: children
+            .sort((a, b) => (a.position || 0) - (b.position || 0))
+            .map(buildNode),
+        };
+      }
+    };
+
+    // Get root chapters (parent_chapter_id is null)
+    const rootChapters = childrenMap.get(null) || [];
+    return rootChapters
+      .sort((a, b) => (a.position || 0) - (b.position || 0))
+      .map(buildNode);
+  };
+
+  // Convert to tree structure
+  const tree: TreeNode[] = [];
+  for (const [subjectId, { name, chapterIds }] of subjectMap) {
+    const chapterTree = buildChapterHierarchy(subjectId, chapterIds);
+
+    tree.push({
+      id: `subject-${subjectId}`,
+      label: name,
+      children: chapterTree,
+    });
+  }
+
+  return tree.sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
+}
+
 export function QuestionManagement({
   initialChapters,
+  allChapters,
+  allExamBoards,
   initialQuestions,
   initialHasMore,
   questionBank,
@@ -183,7 +293,8 @@ export function QuestionManagement({
     setPage(1);
     setEditingQuestionId(null);
     setBusyQuestionId(null);
-    setChapterIds([]);
+    setPastPaperChapterId(null);
+    setTypicalChapterId(null);
     setMarks("");
     setDifficulty("2");
     setCalculatorAllowed(false);
@@ -208,9 +319,71 @@ export function QuestionManagement({
         .sort((a, b) => a.label.localeCompare(b.label, "zh-CN")),
     [chapterLabelById],
   );
+
+  // Filter chapters by question bank
+  const pastPaperExamBoardIds = useMemo(
+    () =>
+      allExamBoards
+        .filter((board) => board.question_bank === QUESTION_BANK.PAST_PAPER_QUESTIONS)
+        .map((board) => board.id),
+    [allExamBoards],
+  );
+
+  const typicalExamBoardIds = useMemo(
+    () =>
+      allExamBoards
+        .filter((board) => board.question_bank === QUESTION_BANK.TYPICAL_QUESTIONS)
+        .map((board) => board.id),
+    [allExamBoards],
+  );
+
+  const pastPaperChapters = useMemo(
+    () =>
+      allChapters
+        .filter((ch) =>
+          ch.exam_board_id ? pastPaperExamBoardIds.includes(ch.exam_board_id) : false,
+        )
+        .map((ch) => ({
+          id: ch.id,
+          label: chapterLabelById.get(ch.id) ?? ch.name,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label, "zh-CN")),
+    [allChapters, pastPaperExamBoardIds, chapterLabelById],
+  );
+
+  const typicalChapters = useMemo(
+    () =>
+      allChapters
+        .filter((ch) =>
+          ch.exam_board_id ? typicalExamBoardIds.includes(ch.exam_board_id) : false,
+        )
+        .map((ch) => ({
+          id: ch.id,
+          label: chapterLabelById.get(ch.id) ?? ch.name,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label, "zh-CN")),
+    [allChapters, typicalExamBoardIds, chapterLabelById],
+  );
+
+  // Build tree data for TreeSelect
+  const pastPaperTree = useMemo(
+    () => buildChapterTree(pastPaperChapters, allChapters),
+    [pastPaperChapters, allChapters],
+  );
+
+  const typicalTree = useMemo(
+    () => buildChapterTree(typicalChapters, allChapters),
+    [typicalChapters, allChapters],
+  );
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
-  const [chapterIds, setChapterIds] = useState<number[]>([]);
+
+  // Separate state for each question bank's chapter selection
+  const [pastPaperChapterId, setPastPaperChapterId] = useState<number | null>(
+    null,
+  );
+  const [typicalChapterId, setTypicalChapterId] = useState<number | null>(null);
+
   const [marks, setMarks] = useState<string>("");
   const [difficulty, setDifficulty] = useState<string>("2");
   const [calculatorAllowed, setCalculatorAllowed] = useState(true);
@@ -229,7 +402,15 @@ export function QuestionManagement({
   const [editingQuestionId, setEditingQuestionId] = useState<number | null>(
     null,
   );
-  const [editChapterIds, setEditChapterIds] = useState<number[]>([]);
+
+  // Separate state for editing each question bank's chapter selection
+  const [editPastPaperChapterId, setEditPastPaperChapterId] = useState<
+    number | null
+  >(null);
+  const [editTypicalChapterId, setEditTypicalChapterId] = useState<
+    number | null
+  >(null);
+
   const [editMarks, setEditMarks] = useState<string>("");
   const [editDifficulty, setEditDifficulty] = useState<string>("2");
   const [editCalculatorAllowed, setEditCalculatorAllowed] = useState(false);
@@ -462,7 +643,8 @@ export function QuestionManagement({
   };
 
   const resetForm = () => {
-    setChapterIds([]);
+    setPastPaperChapterId(null);
+    setTypicalChapterId(null);
     setMarks("");
     setDifficulty("2");
     setCalculatorAllowed(false);
@@ -536,6 +718,11 @@ export function QuestionManagement({
       trimmedMarks === "" ? Number.NaN : Number.parseInt(trimmedMarks, 10);
     const parsedDifficulty =
       difficulty === "" ? Number.NaN : Number.parseInt(difficulty, 10);
+
+    // Merge chapter selections from both question banks
+    const chapterIds = [pastPaperChapterId, typicalChapterId].filter(
+      (id): id is number => id !== null,
+    );
 
     if (chapterIds.length === 0) {
       setFeedback({
@@ -721,7 +908,26 @@ export function QuestionManagement({
   const beginEdit = (question: QuestionSummary) => {
     setFeedback(null);
     setEditingQuestionId(question.id);
-    setEditChapterIds(question.chapterIds);
+
+    // Separate chapterIds into two question banks
+    const pastPaperId = question.chapterIds.find((id) => {
+      const chapter = allChapters.find((ch) => ch.id === id);
+      return (
+        chapter?.exam_board_id &&
+        pastPaperExamBoardIds.includes(chapter.exam_board_id)
+      );
+    });
+    const typicalId = question.chapterIds.find((id) => {
+      const chapter = allChapters.find((ch) => ch.id === id);
+      return (
+        chapter?.exam_board_id &&
+        typicalExamBoardIds.includes(chapter.exam_board_id)
+      );
+    });
+
+    setEditPastPaperChapterId(pastPaperId ?? null);
+    setEditTypicalChapterId(typicalId ?? null);
+
     setEditMarks(String(question.marks));
     setEditDifficulty(String(question.difficulty));
     setEditCalculatorAllowed(question.calculator);
@@ -828,6 +1034,11 @@ export function QuestionManagement({
       trimmedMarks === "" ? Number.NaN : Number.parseInt(trimmedMarks, 10);
     const parsedDifficulty =
       editDifficulty === "" ? Number.NaN : Number.parseInt(editDifficulty, 10);
+
+    // Merge chapter selections from both question banks
+    const editChapterIds = [editPastPaperChapterId, editTypicalChapterId].filter(
+      (id): id is number => id !== null,
+    );
 
     if (editChapterIds.length === 0) {
       setFeedback({
@@ -1108,54 +1319,45 @@ export function QuestionManagement({
 
             <form ref={formRef} onSubmit={handleCreate} className="space-y-6">
               <CardContent className="space-y-6">
+                {/* Past Paper Questions Chapter Selection */}
                 <div className="space-y-2">
-                  <Label>Chapters (可以选择多个以添加到多个题库)</Label>
-                  <div className="max-h-64 overflow-y-auto rounded-md border border-slate-200 bg-white p-3">
-                    {chapterOptions.length === 0 ? (
-                      <p className="text-sm text-slate-500">
-                        No chapters available in this question bank
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {chapterOptions.map((chapterOption) => (
-                          <label
-                            key={chapterOption.id}
-                            className="flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 hover:bg-slate-50"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={chapterIds.includes(chapterOption.id)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setChapterIds((prev) => [
-                                    ...prev,
-                                    chapterOption.id,
-                                  ]);
-                                } else {
-                                  setChapterIds((prev) =>
-                                    prev.filter(
-                                      (id) => id !== chapterOption.id,
-                                    ),
-                                  );
-                                }
-                              }}
-                              className="mt-0.5 size-4 rounded border-slate-300 text-slate-900"
-                            />
-                            <span className="flex-1 text-sm text-slate-700">
-                              {chapterOption.label}
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  {chapterIds.length > 0 && (
-                    <p className="text-xs text-slate-600">
-                      Selected {chapterIds.length} chapter
-                      {chapterIds.length > 1 ? "s" : ""}
-                    </p>
-                  )}
+                  <Label htmlFor="past-paper-chapter">
+                    Past Paper Questions
+                    <span className="ml-2 text-xs text-slate-500">(可选)</span>
+                  </Label>
+                  <TreeSelect
+                    data={pastPaperTree}
+                    value={pastPaperChapterId}
+                    onValueChange={setPastPaperChapterId}
+                    placeholder="选择章节..."
+                  />
                 </div>
+
+                {/* Typical Questions Chapter Selection */}
+                <div className="space-y-2">
+                  <Label htmlFor="typical-chapter">
+                    Typical Questions
+                    <span className="ml-2 text-xs text-slate-500">(可选)</span>
+                  </Label>
+                  <TreeSelect
+                    data={typicalTree}
+                    value={typicalChapterId}
+                    onValueChange={setTypicalChapterId}
+                    placeholder="选择章节..."
+                  />
+                </div>
+
+                {/* Selection summary */}
+                {(pastPaperChapterId || typicalChapterId) && (
+                  <p className="text-xs text-slate-600">
+                    已选择{" "}
+                    {
+                      [pastPaperChapterId, typicalChapterId].filter(Boolean)
+                        .length
+                    }{" "}
+                    个题库
+                  </p>
+                )}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="question-marks">Marks</Label>
@@ -1470,59 +1672,51 @@ export function QuestionManagement({
                             onSubmit={handleUpdate}
                             className="space-y-4 p-4"
                           >
+                            {/* Past Paper Questions Chapter Selection */}
                             <div className="space-y-2">
-                              <Label>
-                                Chapters (可以选择多个以添加到多个题库)
+                              <Label htmlFor="edit-past-paper-chapter">
+                                Past Paper Questions
+                                <span className="ml-2 text-xs text-slate-500">
+                                  (可选)
+                                </span>
                               </Label>
-                              <div className="max-h-64 overflow-y-auto rounded-md border border-slate-200 bg-white p-3">
-                                {chapterOptions.length === 0 ? (
-                                  <p className="text-sm text-slate-500">
-                                    No chapters available in this question bank
-                                  </p>
-                                ) : (
-                                  <div className="space-y-2">
-                                    {chapterOptions.map((chapterOption) => (
-                                      <label
-                                        key={chapterOption.id}
-                                        className="flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 hover:bg-slate-50"
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={editChapterIds.includes(
-                                            chapterOption.id,
-                                          )}
-                                          onChange={(e) => {
-                                            if (e.target.checked) {
-                                              setEditChapterIds((prev) => [
-                                                ...prev,
-                                                chapterOption.id,
-                                              ]);
-                                            } else {
-                                              setEditChapterIds((prev) =>
-                                                prev.filter(
-                                                  (id) =>
-                                                    id !== chapterOption.id,
-                                                ),
-                                              );
-                                            }
-                                          }}
-                                          className="mt-0.5 size-4 rounded border-slate-300 text-slate-900"
-                                        />
-                                        <span className="flex-1 text-sm text-slate-700">
-                                          {chapterOption.label}
-                                        </span>
-                                      </label>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                              {editChapterIds.length > 0 && (
-                                <p className="text-xs text-slate-600">
-                                  Selected {editChapterIds.length} chapter
-                                  {editChapterIds.length > 1 ? "s" : ""}
-                                </p>
-                              )}
+                              <TreeSelect
+                                data={pastPaperTree}
+                                value={editPastPaperChapterId}
+                                onValueChange={setEditPastPaperChapterId}
+                                placeholder="选择章节..."
+                              />
                             </div>
+
+                            {/* Typical Questions Chapter Selection */}
+                            <div className="space-y-2">
+                              <Label htmlFor="edit-typical-chapter">
+                                Typical Questions
+                                <span className="ml-2 text-xs text-slate-500">
+                                  (可选)
+                                </span>
+                              </Label>
+                              <TreeSelect
+                                data={typicalTree}
+                                value={editTypicalChapterId}
+                                onValueChange={setEditTypicalChapterId}
+                                placeholder="选择章节..."
+                              />
+                            </div>
+
+                            {/* Selection summary */}
+                            {(editPastPaperChapterId || editTypicalChapterId) && (
+                              <p className="text-xs text-slate-600">
+                                已选择{" "}
+                                {
+                                  [
+                                    editPastPaperChapterId,
+                                    editTypicalChapterId,
+                                  ].filter(Boolean).length
+                                }{" "}
+                                个题库
+                              </p>
+                            )}
                             <div className="grid gap-4 sm:grid-cols-2">
                               <div className="space-y-2">
                                 <Label htmlFor="edit-marks">Marks</Label>
