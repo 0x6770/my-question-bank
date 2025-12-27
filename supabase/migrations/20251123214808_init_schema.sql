@@ -76,7 +76,6 @@ CREATE TABLE IF NOT EXISTS "public"."questions" (
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "difficulty" smallint DEFAULT '2'::smallint NOT NULL,
     "calculator" boolean DEFAULT true NOT NULL,
-    "chapter_id" bigint NOT NULL,
     "marks" smallint NOT NULL,
     CONSTRAINT "questions_difficulty_check" CHECK (
         ( "difficulty" >= 1 ) AND ( "difficulty" <= 4 )
@@ -165,6 +164,13 @@ ALTER TABLE "public"."user_questions"
         CACHE 1
     );
 
+-- question_chapters (多对多关联表)
+CREATE TABLE IF NOT EXISTS "public"."question_chapters" (
+    "question_id" bigint NOT NULL,
+    "chapter_id" bigint NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
 -- ========= 主键 & 唯一约束 =========
 
 ALTER TABLE ONLY "public"."exam_boards"
@@ -215,10 +221,19 @@ ALTER TABLE ONLY "public"."user_questions"
 ALTER TABLE ONLY "public"."user_questions"
     ADD CONSTRAINT "user_questions_user_id_question_id_key" UNIQUE ("user_id", "question_id");
 
+ALTER TABLE ONLY "public"."question_chapters"
+    ADD CONSTRAINT "question_chapters_pkey" PRIMARY KEY ("question_id", "chapter_id");
+
 -- ========= 索引 =========
 
 CREATE UNIQUE INDEX "question_images_question_position_key"
     ON "public"."question_images" USING "btree" ("question_id", "position");
+
+CREATE INDEX "question_chapters_question_id_idx"
+    ON "public"."question_chapters" USING "btree" ("question_id");
+
+CREATE INDEX "question_chapters_chapter_id_idx"
+    ON "public"."question_chapters" USING "btree" ("chapter_id");
 
 -- ========= 外键 =========
 
@@ -246,11 +261,6 @@ ALTER TABLE ONLY "public"."question_images"
     REFERENCES "public"."questions"("id")
     ON DELETE CASCADE;
 
-ALTER TABLE ONLY "public"."questions"
-    ADD CONSTRAINT "questions_chapter_id_fkey"
-    FOREIGN KEY ("chapter_id")
-    REFERENCES "public"."chapters"("id")
-    ON DELETE CASCADE;
 
 ALTER TABLE ONLY "public"."subjects"
     ADD CONSTRAINT "subjects_exam_board_id_fkey"
@@ -274,4 +284,16 @@ ALTER TABLE ONLY "public"."user_questions"
     ADD CONSTRAINT "user_questions_user_id_fkey"
     FOREIGN KEY ("user_id")
     REFERENCES "auth"."users"("id")
+    ON DELETE CASCADE;
+
+ALTER TABLE ONLY "public"."question_chapters"
+    ADD CONSTRAINT "question_chapters_question_id_fkey"
+    FOREIGN KEY ("question_id")
+    REFERENCES "public"."questions"("id")
+    ON DELETE CASCADE;
+
+ALTER TABLE ONLY "public"."question_chapters"
+    ADD CONSTRAINT "question_chapters_chapter_id_fkey"
+    FOREIGN KEY ("chapter_id")
+    REFERENCES "public"."chapters"("id")
     ON DELETE CASCADE;

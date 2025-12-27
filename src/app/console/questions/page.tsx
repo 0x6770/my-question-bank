@@ -1,3 +1,4 @@
+import { QUESTION_BANK, type QuestionBank } from "@/lib/question-bank";
 import { createClient } from "@/lib/supabase/server";
 import type { Tables } from "../../../../database.types";
 import { QuestionManagement } from "./question-management-client";
@@ -14,9 +15,9 @@ type ChapterRow = Pick<
 
 type QuestionSummary = {
   id: number;
-  chapterId: number | null;
-  chapterName: string | null;
-  subjectName: string | null;
+  chapterIds: number[]; // Changed from single chapterId to array
+  chapterName: string | null; // Primary chapter name for display
+  subjectName: string | null; // Primary subject name for display
   createdAt: string;
   difficulty: number;
   calculator: boolean;
@@ -33,12 +34,45 @@ type QuestionSummary = {
   }[];
 };
 
-export default async function ConsoleQuestionsPage() {
+type PageProps = {
+  searchParams: Promise<{
+    bank?: string;
+  }>;
+};
+
+export default async function ConsoleQuestionsPage(props: PageProps) {
+  const searchParams = await props.searchParams;
   const supabase = await createClient();
+
+  // Map URL parameter to question bank value, default to "past paper questions"
+  const bankParam = searchParams.bank;
+  let selectedBank: QuestionBank = QUESTION_BANK.PAST_PAPER_QUESTIONS;
+
+  if (bankParam === "typical") {
+    selectedBank = QUESTION_BANK.TYPICAL_QUESTIONS;
+  } else if (bankParam === "exam-paper") {
+    selectedBank = QUESTION_BANK.EXAM_PAPER;
+  }
+
+  // First, get exam boards for the selected question bank
+  const { data: examBoards } = await supabase
+    .from("exam_boards")
+    .select("id")
+    .eq("question_bank", selectedBank);
+
+  const examBoardIds = (examBoards ?? []).map((board) => board.id);
+
+  // Get subjects belonging to these exam boards
+  const { data: subjects } = await supabase
+    .from("subjects")
+    .select("id")
+    .in("exam_board_id", examBoardIds.length > 0 ? examBoardIds : [-1]);
+
+  const subjectIds = (subjects ?? []).map((subject) => subject.id);
 
   const [
     { data: chapters, error: chaptersError },
-    { data: questions, error: questionsError },
+    { data: questionChapters, error: qcError },
   ] = await Promise.all([
     supabase
       .from("chapters")
@@ -55,28 +89,25 @@ export default async function ConsoleQuestionsPage() {
           )
         `,
       )
+      .in("subject_id", subjectIds.length > 0 ? subjectIds : [-1])
       .order("subject_id", { ascending: true })
       .order("position", { ascending: true }),
-    supabase
-      .from("questions")
-      .select(
-        `
-          id,
-          chapter_id,
-          difficulty,
-          calculator,
-          marks,
+    supabase.from("question_chapters").select("question_id, chapter_id"),
+  ]);
+
+  // Filter chapter IDs that belong to the selected question bank
+  const chapterIds = (chapters ?? []).map((chapter) => chapter.id);
+
+  // Get questions that belong to these chapters
+  const { data: questions, error: questionsError } = await supabase
+    .from("questions")
+    .select(
+      `
+        id,
+        difficulty,
+        calculator,
+        marks,
         created_at,
-        chapter:chapter_id (
-          id,
-          name,
-          parent_chapter_id,
-          subject_id,
-          subject:subject_id (
-            id,
-            name
-          )
-        ),
         question_images (
           id,
           storage_path,
@@ -88,32 +119,44 @@ export default async function ConsoleQuestionsPage() {
           position
         )
       `,
-      )
-      .order("created_at", { ascending: false })
-      .range(0, PAGE_SIZE),
-  ]);
+    )
+    .order("created_at", { ascending: false })
+    .range(0, PAGE_SIZE);
 
-  const hasMoreInitial = (questions?.length ?? 0) > PAGE_SIZE;
+  // Build chapter map for lookup
+  const chapterMap = new Map((chapters ?? []).map((ch) => [ch.id, ch]));
+
+  // Build question_id -> chapter_ids mapping (filtered by question bank)
+  const questionToChaptersMap = new Map<number, number[]>();
+  const chapterIdSet = new Set(chapterIds);
+  for (const qc of questionChapters ?? []) {
+    // Only include relationships where chapter belongs to selected question bank
+    if (chapterIdSet.has(qc.chapter_id)) {
+      const existing = questionToChaptersMap.get(qc.question_id) ?? [];
+      existing.push(qc.chapter_id);
+      questionToChaptersMap.set(qc.question_id, existing);
+    }
+  }
+
+  // Filter questions to only include those linked to chapters in selected question bank
+  const validQuestionIds = new Set(questionToChaptersMap.keys());
+  const filteredQuestions = (questions ?? []).filter((q) =>
+    validQuestionIds.has(q.id),
+  );
+
+  const hasMoreInitial = filteredQuestions.length > PAGE_SIZE;
   const limitedQuestions = hasMoreInitial
-    ? (questions ?? []).slice(0, PAGE_SIZE)
-    : (questions ?? []);
+    ? filteredQuestions.slice(0, PAGE_SIZE)
+    : filteredQuestions;
 
   const questionSummaries: QuestionSummary[] = limitedQuestions.map(
     (question) => {
       const rawQuestion = question as unknown as {
         id: number;
-        chapter_id: number | null;
         created_at: string;
         difficulty: number;
         calculator: boolean;
         marks: number;
-        chapter: {
-          id: number;
-          name: string;
-          parent_chapter_id: number | null;
-          subject_id: number;
-          subject: { id: number; name: string } | null;
-        } | null;
         question_images: QuestionSummary["images"] | null;
         answer_images: QuestionSummary["answerImages"] | null;
       };
@@ -130,13 +173,33 @@ export default async function ConsoleQuestionsPage() {
           return a.position - b.position;
         });
 
-      const chapter = rawQuestion.chapter ?? null;
+      // Get all chapter IDs for this question
+      const chapterIds = questionToChaptersMap.get(rawQuestion.id) ?? [];
+
+      // Select primary chapter (first one) for display compatibility
+      const primaryChapterId = chapterIds[0] ?? null;
+      const primaryChapter = primaryChapterId
+        ? (chapterMap.get(primaryChapterId) ?? null)
+        : null;
+
+      type RawChapterRow = Tables<"chapters"> & {
+        subject?:
+          | Pick<SubjectRow, "id" | "name">
+          | Pick<SubjectRow, "id" | "name">[]
+          | null;
+      };
+
+      const subject = primaryChapter
+        ? Array.isArray((primaryChapter as unknown as RawChapterRow).subject)
+          ? ((primaryChapter as unknown as RawChapterRow).subject?.[0] ?? null)
+          : ((primaryChapter as unknown as RawChapterRow).subject ?? null)
+        : null;
 
       return {
         id: rawQuestion.id,
-        chapterId: rawQuestion.chapter_id,
-        chapterName: chapter?.name ?? null,
-        subjectName: chapter?.subject?.name ?? null,
+        chapterIds, // Array of all chapter IDs
+        chapterName: primaryChapter?.name ?? null,
+        subjectName: subject?.name ?? null,
         createdAt: rawQuestion.created_at,
         difficulty: rawQuestion.difficulty,
         calculator: rawQuestion.calculator,
@@ -175,8 +238,9 @@ export default async function ConsoleQuestionsPage() {
       initialChapters={chapterSummaries}
       initialQuestions={questionSummaries}
       initialHasMore={hasMoreInitial}
+      questionBank={selectedBank}
       loadError={
-        chaptersError || questionsError
+        chaptersError || questionsError || qcError
           ? "Failed to load question data. Please try again later."
           : null
       }

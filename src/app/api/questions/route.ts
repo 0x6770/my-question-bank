@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { QUESTION_BANK, type QuestionBank } from "@/lib/question-bank";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "../../../../database.types";
 
@@ -13,9 +14,18 @@ export async function GET(request: Request) {
   const pageParam = searchParams.get("page");
   const completionParam = searchParams.get("completion"); // "all" | "completed" | "incompleted"
   const bookmarkParam = searchParams.get("bookmark"); // "all" | "bookmarked"
+  const bankParam = searchParams.get("bank"); // "typical" | "past-paper" | "exam-paper"
 
   const subjectId = subjectIdParam ? Number.parseInt(subjectIdParam, 10) : null;
   const chapterId = chapterIdParam ? Number.parseInt(chapterIdParam, 10) : null;
+
+  // Map URL parameter to question bank value, default to "past paper questions"
+  let selectedBank: QuestionBank = QUESTION_BANK.PAST_PAPER_QUESTIONS;
+  if (bankParam === "typical") {
+    selectedBank = QUESTION_BANK.TYPICAL_QUESTIONS;
+  } else if (bankParam === "exam-paper") {
+    selectedBank = QUESTION_BANK.EXAM_PAPER;
+  }
   const difficultySet =
     difficultiesParam && difficultiesParam.length > 0
       ? new Set(
@@ -35,17 +45,37 @@ export async function GET(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: chapters } = await supabase
+  // Get exam boards for the selected question bank
+  const { data: examBoards } = await supabase
+    .from("exam_boards")
+    .select("id")
+    .eq("question_bank", selectedBank);
+
+  const examBoardIds = (examBoards ?? []).map((board) => board.id);
+
+  // Get subjects belonging to these exam boards
+  const { data: allSubjects } = await supabase
+    .from("subjects")
+    .select("id, name, exam_board_id");
+
+  const subjects = (allSubjects ?? []).filter((subject) =>
+    examBoardIds.includes(subject.exam_board_id),
+  );
+
+  const subjectIds = subjects.map((subject) => subject.id);
+
+  // Get chapters belonging to these subjects
+  const { data: allChapters } = await supabase
     .from("chapters")
     .select("id, name, subject_id, parent_chapter_id");
 
-  const { data: subjects } = await supabase.from("subjects").select("id, name");
-
-  const chapterMap = new Map(
-    (chapters ?? []).map((chapter) => [chapter.id, chapter]),
+  const chapters = (allChapters ?? []).filter((chapter) =>
+    subjectIds.includes(chapter.subject_id),
   );
+
+  const chapterMap = new Map(chapters.map((chapter) => [chapter.id, chapter]));
   const subjectMap = new Map(
-    (subjects ?? []).map((subject) => [subject.id, subject.name]),
+    subjects.map((subject) => [subject.id, subject.name]),
   );
 
   const childChapterMap = new Map<number, number[]>();
@@ -122,12 +152,35 @@ export async function GET(request: Request) {
     }
   }
 
+  // 第一步：通过 question_chapters 找到符合条件的 question_ids
+  let questionIdsQuery = supabase
+    .from("question_chapters")
+    .select("question_id");
+
+  if (allowedChapterIds) {
+    questionIdsQuery = questionIdsQuery.in("chapter_id", allowedChapterIds);
+  }
+
+  const { data: questionChapterRows, error: qcError } = await questionIdsQuery;
+
+  if (qcError) {
+    return NextResponse.json({ error: qcError.message }, { status: 500 });
+  }
+
+  const matchingQuestionIds = Array.from(
+    new Set((questionChapterRows ?? []).map((row) => row.question_id)),
+  );
+
+  if (matchingQuestionIds.length === 0) {
+    return NextResponse.json({ questions: [], hasMore: false, page: safePage });
+  }
+
+  // 第二步：查询题目详情
   let query = supabase
     .from("questions")
     .select(
       `
         id,
-        chapter_id,
         marks,
         difficulty,
         calculator,
@@ -144,11 +197,8 @@ export async function GET(request: Request) {
         )
       `,
     )
+    .in("id", matchingQuestionIds)
     .range(offset, offset + fetchLimit - 1);
-
-  if (allowedChapterIds) {
-    query = query.in("chapter_id", allowedChapterIds);
-  }
 
   if (bookmarkedQuestionIds) {
     query = query.in("id", bookmarkedQuestionIds);
@@ -171,7 +221,10 @@ export async function GET(request: Request) {
     );
   }
 
-  type QuestionRow = Database["public"]["Tables"]["questions"]["Row"] & {
+  type QuestionRow = Omit<
+    Database["public"]["Tables"]["questions"]["Row"],
+    "chapter_id"
+  > & {
     question_images:
       | {
           id: number;
@@ -187,6 +240,21 @@ export async function GET(request: Request) {
         }[]
       | null;
   };
+
+  // 第三步：获取每个题目的所有 chapters
+  const questionIds = (questions ?? []).map((q) => (q as QuestionRow).id);
+  const { data: allQuestionChapters } = await supabase
+    .from("question_chapters")
+    .select("question_id, chapter_id")
+    .in("question_id", questionIds);
+
+  // 构建 questionId -> chapterIds[] 映射
+  const questionToChaptersMap = new Map<number, number[]>();
+  for (const qc of allQuestionChapters ?? []) {
+    const existing = questionToChaptersMap.get(qc.question_id) ?? [];
+    existing.push(qc.chapter_id);
+    questionToChaptersMap.set(qc.question_id, existing);
+  }
 
   const questionImagePaths = new Set<string>();
   const answerImagePaths = new Set<string>();
@@ -212,8 +280,25 @@ export async function GET(request: Request) {
       answerImagePaths.add(image.storage_path);
     }
 
-    const chapter = row.chapter_id
-      ? (chapterMap.get(row.chapter_id) ?? null)
+    // 获取这个题目的所有 chapters
+    const questionChapterIds = questionToChaptersMap.get(row.id) ?? [];
+
+    // 选择第一个在查询范围内的 chapter 作为"主要" chapter 显示
+    // （为了向后兼容，前端期望有 chapterId/chapterName）
+    let primaryChapterId: number | null = null;
+    if (allowedChapterIds) {
+      // 如果有查询范围，优先选择范围内的第一个
+      primaryChapterId =
+        questionChapterIds.find((cid) => allowedChapterIds.includes(cid)) ??
+        questionChapterIds[0] ??
+        null;
+    } else {
+      // 否则选择第一个
+      primaryChapterId = questionChapterIds[0] ?? null;
+    }
+
+    const chapter = primaryChapterId
+      ? (chapterMap.get(primaryChapterId) ?? null)
       : null;
     const subjectIdFromChapter = chapter?.subject_id ?? null;
 
@@ -223,7 +308,8 @@ export async function GET(request: Request) {
       difficulty: row.difficulty,
       calculator: row.calculator,
       createdAt: row.created_at,
-      chapterId: row.chapter_id ?? null,
+      chapterIds: questionChapterIds, // Array of all chapter IDs
+      chapterId: primaryChapterId, // Keep for backward compatibility
       chapterName: chapter?.name ?? null,
       subjectId: subjectIdFromChapter,
       subjectName:

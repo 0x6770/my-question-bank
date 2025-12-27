@@ -41,6 +41,125 @@ CREATE OR REPLACE FUNCTION "public"."in_roles"(VARIADIC "roles" "public"."user_r
   );
 $$;
 
+-- 原子性更新题目和章节关联
+CREATE OR REPLACE FUNCTION "public"."update_question_with_chapters"(
+  "p_question_id" bigint,
+  "p_marks" smallint,
+  "p_difficulty" smallint,
+  "p_calculator" boolean,
+  "p_chapter_ids" bigint[]
+) RETURNS void
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+  v_question_banks text[];
+  v_chapter_count integer;
+BEGIN
+  -- 验证参数
+  IF p_marks <= 0 THEN
+    RAISE EXCEPTION 'marks must be greater than 0';
+  END IF;
+
+  IF p_difficulty < 1 OR p_difficulty > 4 THEN
+    RAISE EXCEPTION 'difficulty must be between 1 and 4';
+  END IF;
+
+  -- 如果提供了 chapter_ids，检查约束：所有 chapter 必须属于不同的 question_bank
+  v_chapter_count := coalesce(array_length(p_chapter_ids, 1), 0);
+
+  IF v_chapter_count > 0 THEN
+    SELECT array_agg(DISTINCT eb.question_bank)
+    INTO v_question_banks
+    FROM unnest(p_chapter_ids) AS chapter_id
+    JOIN chapters c ON c.id = chapter_id
+    JOIN subjects s ON s.id = c.subject_id
+    JOIN exam_boards eb ON eb.id = s.exam_board_id;
+
+    -- 如果有重复的 question_bank，抛出错误
+    IF array_length(v_question_banks, 1) != v_chapter_count THEN
+      RAISE EXCEPTION 'A question cannot belong to multiple chapters in the same question bank';
+    END IF;
+  END IF;
+
+  -- 在事务中执行所有操作（函数本身就在事务中）
+
+  -- 1. 更新 questions 表
+  UPDATE questions
+  SET
+    marks = p_marks,
+    difficulty = p_difficulty,
+    calculator = p_calculator
+  WHERE id = p_question_id;
+
+  -- 2. 删除旧的 chapter 关联
+  DELETE FROM question_chapters
+  WHERE question_id = p_question_id;
+
+  -- 3. 插入新的 chapter 关联
+  IF v_chapter_count > 0 THEN
+    INSERT INTO question_chapters (question_id, chapter_id)
+    SELECT p_question_id, unnest(p_chapter_ids);
+  END IF;
+END;
+$$;
+
+-- 创建新题目并关联章节（用于批量导入）
+CREATE OR REPLACE FUNCTION "public"."create_question_with_chapters"(
+  "p_marks" smallint,
+  "p_difficulty" smallint,
+  "p_calculator" boolean,
+  "p_chapter_ids" bigint[]
+) RETURNS bigint
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+  v_question_id bigint;
+  v_question_banks text[];
+  v_chapter_count integer;
+BEGIN
+  -- 验证参数
+  IF p_marks <= 0 THEN
+    RAISE EXCEPTION 'marks must be greater than 0';
+  END IF;
+
+  IF p_difficulty < 1 OR p_difficulty > 4 THEN
+    RAISE EXCEPTION 'difficulty must be between 1 and 4';
+  END IF;
+
+  -- 如果提供了 chapter_ids，检查约束：所有 chapter 必须属于不同的 question_bank
+  v_chapter_count := coalesce(array_length(p_chapter_ids, 1), 0);
+
+  IF v_chapter_count > 0 THEN
+    SELECT array_agg(DISTINCT eb.question_bank)
+    INTO v_question_banks
+    FROM unnest(p_chapter_ids) AS chapter_id
+    JOIN chapters c ON c.id = chapter_id
+    JOIN subjects s ON s.id = c.subject_id
+    JOIN exam_boards eb ON eb.id = s.exam_board_id;
+
+    -- 如果有重复的 question_bank，抛出错误
+    IF array_length(v_question_banks, 1) != v_chapter_count THEN
+      RAISE EXCEPTION 'A question cannot belong to multiple chapters in the same question bank';
+    END IF;
+  END IF;
+
+  -- 1. 创建题目
+  INSERT INTO questions (marks, difficulty, calculator)
+  VALUES (p_marks, p_difficulty, p_calculator)
+  RETURNING id INTO v_question_id;
+
+  -- 2. 插入 chapter 关联
+  IF v_chapter_count > 0 THEN
+    INSERT INTO question_chapters (question_id, chapter_id)
+    SELECT v_question_id, unnest(p_chapter_ids);
+  END IF;
+
+  RETURN v_question_id;
+END;
+$$;
+
 -- ========== RLS: ENABLE + POLICIES ==========
 
 -- profiles
@@ -271,3 +390,35 @@ CREATE POLICY "user_questions.update" ON "public"."user_questions"
     FOR UPDATE
     USING (("user_id" = "auth"."uid"()))
     WITH CHECK (("user_id" = "auth"."uid"()));
+
+-- question_chapters
+ALTER TABLE "public"."question_chapters" ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "question_chapters.select" ON "public"."question_chapters"
+    FOR SELECT
+    USING (true);
+
+CREATE POLICY "question_chapters.insert" ON "public"."question_chapters"
+    FOR INSERT
+    WITH CHECK ("public"."in_roles"(VARIADIC ARRAY[
+        'admin'::"public"."user_role",
+        'super_admin'::"public"."user_role"
+    ]));
+
+CREATE POLICY "question_chapters.update" ON "public"."question_chapters"
+    FOR UPDATE
+    USING ("public"."in_roles"(VARIADIC ARRAY[
+        'admin'::"public"."user_role",
+        'super_admin'::"public"."user_role"
+    ]))
+    WITH CHECK ("public"."in_roles"(VARIADIC ARRAY[
+        'admin'::"public"."user_role",
+        'super_admin'::"public"."user_role"
+    ]));
+
+CREATE POLICY "question_chapters.delete" ON "public"."question_chapters"
+    FOR DELETE
+    USING ("public"."in_roles"(VARIADIC ARRAY[
+        'admin'::"public"."user_role",
+        'super_admin'::"public"."user_role"
+    ]));

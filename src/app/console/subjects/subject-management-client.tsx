@@ -11,6 +11,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   type ReactNode,
   useCallback,
@@ -29,7 +30,8 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { QuestionBank } from "@/lib/question-bank";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { QUESTION_BANK, type QuestionBank } from "@/lib/question-bank";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Tables } from "../../../../database.types";
@@ -151,6 +153,8 @@ export function SubjectManagement({
   loadError,
   questionBank,
 }: SubjectManagementProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = useMemo(() => createClient(), []);
   const [examBoards, setExamBoards] =
     useState<ExamBoardRow[]>(initialExamBoards);
@@ -168,6 +172,15 @@ export function SubjectManagement({
   const [busySubjectId, setBusySubjectId] = useState<number | null>(null);
   const [busyChapterId, setBusyChapterId] = useState<number | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
+
+  // Update state when props change (e.g., when switching question bank tabs)
+  useEffect(() => {
+    setExamBoards(initialExamBoards);
+    setSubjects(initialSubjects);
+    setChapters(initialChapters);
+    setSelectedBoardId(initialExamBoards[0]?.id ?? null);
+    setOpenSubjectId(null);
+  }, [initialExamBoards, initialSubjects, initialChapters]);
 
   const sortedExamBoards = useMemo(
     () => examBoards.slice().sort(compareByName),
@@ -695,11 +708,29 @@ export function SubjectManagement({
     );
   };
 
+  const handleBankChange = (value: string) => {
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    if (value === "typical") {
+      params.delete("bank"); // default, so remove param
+    } else {
+      params.set("bank", value);
+    }
+    const query = params.toString();
+    router.push(`/console/subjects${query ? `?${query}` : ""}`);
+  };
+
+  const currentBankTab =
+    questionBank === QUESTION_BANK.PAST_PAPER_QUESTIONS
+      ? "past-paper"
+      : questionBank === QUESTION_BANK.EXAM_PAPER
+        ? "exam-paper"
+        : "typical";
+
   return (
     <div className="flex flex-1 flex-col gap-6">
       <ToastStack toasts={toasts} />
       <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-1.5">
+        <div className="space-y-3">
           <h1 className="text-2xl font-semibold tracking-tight">
             Subject Management
           </h1>
@@ -707,6 +738,12 @@ export function SubjectManagement({
             Select an exam board on the left and manage its subjects/chapters on
             the right.
           </p>
+          <Tabs value={currentBankTab} onValueChange={handleBankChange}>
+            <TabsList>
+              <TabsTrigger value="past-paper">Past Paper Questions</TabsTrigger>
+              <TabsTrigger value="typical">Typical Questions</TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={openCreateBoard} className="gap-2">

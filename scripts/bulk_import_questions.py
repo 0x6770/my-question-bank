@@ -78,7 +78,8 @@ def create_progress() -> Progress:
         console=console,
         refresh_per_second=10,
     )
-QUESTION_BANK_FOR_QUESTIONS = "typical questions"
+# 默认题库类型（可通过命令行参数覆盖）
+DEFAULT_QUESTION_BANK = "past paper questions"
 LEGACY_QUESTION_BANK_FOR_QUESTIONS = 0
 
 
@@ -765,9 +766,13 @@ def build_output_item(
             ))
         # 注意：这里不返回None，允许chapterId为null继续转换
 
+    # 支持多个 chapter_ids（数组格式）
+    # 如果 chapter_id 存在，将其放入数组；否则使用空数组
+    chapter_ids = [chapter_id] if chapter_id is not None else []
+
     item = {
-        "chapterId": chapter_id,
-        "chapterName": chapter_name,
+        "chapterIds": chapter_ids,  # 改为数组，支持多个 chapter
+        "chapterName": chapter_name,  # 保留用于调试/日志
         "marks": properties.get("mark"),
         "difficulty": obj.get("difficulty") or 1,
         "calculator": bool(obj.get("calculator", True)),
@@ -1048,15 +1053,17 @@ def upload_items(
         """Upload a single item. Returns True if successful."""
         nonlocal success, failed
 
-        chapter_id = item.get("chapterId")
-        if chapter_id is None:
-            error_msg = "上传需要 chapterId，请提供 --chapter-map 或使用 --sync-db 生成映射。"
+        chapter_ids = item.get("chapterIds") or []
+
+        # 验证：至少需要一个 chapter
+        if not chapter_ids or len(chapter_ids) == 0:
+            error_msg = "上传需要至少一个 chapterId，请提供 --chapter-map 或使用 --sync-db 生成映射。"
             if error_report:
                 error_report.add_error(ConversionError(
                     source_id=item.get("meta", {}).get("sourceId", f"item_{item_idx}"),
                     error_type=ErrorType.VALIDATION_ERROR,
                     message=error_msg,
-                    context={"item_index": item_idx, "chapter_id": chapter_id},
+                    context={"item_index": item_idx, "chapter_ids": chapter_ids},
                 ))
                 failed += 1
                 return False
@@ -1070,26 +1077,27 @@ def upload_items(
         a_imgs = item.get("answerImages") or []
 
         try:
-            q_resp = (
-                supabase.table("questions")
-                .insert(
-                    {
-                        "chapter_id": chapter_id,
-                        "marks": marks,
-                        "difficulty": difficulty,
-                        "calculator": calculator,
-                    }
-                )
-                .execute()
-            )
+            # 使用 RPC 函数创建题目并关联章节（原子性操作）
+            q_resp = supabase.rpc(
+                "create_question_with_chapters",
+                {
+                    "p_marks": marks,
+                    "p_difficulty": difficulty,
+                    "p_calculator": calculator,
+                    "p_chapter_ids": chapter_ids,
+                }
+            ).execute()
+
             q_error = getattr(q_resp, "error", None)
             q_data = getattr(q_resp, "data", None)
-            if q_error or not q_data or not isinstance(q_data, list) or len(q_data) == 0:
+            if q_error:
                 message = getattr(q_error, "message", None) or "创建 question 失败"
                 raise RuntimeError(message)
-            q_id = q_data[0].get('id')
+
+            # RPC 返回的是 question_id（bigint）
+            q_id = q_data
             if q_id is None:
-                raise RuntimeError("创建 question 失败: 返回数据中没有 id 字段")
+                raise RuntimeError("创建 question 失败: RPC 未返回 question_id")
 
             uploaded_q: list[dict[str, Any]] = []
             uploaded_a: list[dict[str, Any]] = []
@@ -1267,6 +1275,13 @@ def parse_args() -> argparse.Namespace:
         help="直接指定subject ID（逗号分隔），跳过交互选择",
     )
     parser.add_argument(
+        "--question-bank",
+        type=str,
+        choices=["typical questions", "past paper questions", "exam paper"],
+        default=None,
+        help="题库类型（默认：past paper questions）",
+    )
+    parser.add_argument(
         "--questions-file",
         type=Path,
         default=None,
@@ -1430,6 +1445,7 @@ def main():
             "total_questions": chosen["total"],
             "chapters": chosen["chapters"],
             "years": chosen["years"],
+            "chapter_map": {},  # 每个subject独立的chapter映射
         })
 
     # 显示每个subject的配置信息
@@ -1481,6 +1497,10 @@ def main():
     error_report = ErrorReport()
     show_progress = not args.no_progress
 
+    # 确定题库类型
+    question_bank_type = args.question_bank or DEFAULT_QUESTION_BANK
+    logger.info(f"题库类型: {question_bank_type}")
+
     # subject_id -> database_id 映射（在 sync_db 模式下填充）
     subject_db_mappings: dict[str, int] = {}
 
@@ -1512,7 +1532,7 @@ def main():
             # 处理exam_board
             question_bank_value = resolve_question_bank_value(
                 supabase_client,
-                QUESTION_BANK_FOR_QUESTIONS,
+                question_bank_type,
                 LEGACY_QUESTION_BANK_FOR_QUESTIONS,
             )
 
@@ -1766,11 +1786,13 @@ def main():
                         ))
                         continue
 
-            # 更新全局chapter_map（如果提供了外部映射，优先使用）
-            if not chapter_map:  # 如果未提供外部映射，使用数据库映射
-                # 确保类型兼容：local_chapter_map -> dict[str, int]
-                typed_local_map = {str(k): int(v) for k, v in local_chapter_map.items()}
-                chapter_map.update(typed_local_map)
+            # 将本subject的chapter_map存储到subject_configs中
+            # 找到对应的config并更新其chapter_map
+            for cfg in subject_configs:
+                if cfg["subject_id"] == subject_id:
+                    # 确保类型兼容：local_chapter_map -> dict[str, int]
+                    cfg["chapter_map"] = {str(k): int(v) for k, v in local_chapter_map.items()}
+                    break
 
         logger.info(f"数据库同步完成: {len(subject_db_mappings)}/{len(subject_configs)} 个subject同步成功")
 
@@ -1787,13 +1809,18 @@ def main():
 
         # 如果有数据库映射，使用数据库中的subject_id
         db_subject_id = subject_db_mappings.get(subject_id)
-        effective_chapter_map = chapter_map
+
+        # 使用当前subject专属的chapter_map，如果没有则回退到全局chapter_map
+        subject_chapter_map = config.get("chapter_map", {})
+        if not subject_chapter_map and chapter_map:
+            # 如果提供了全局chapter_map（通过--chapter-map参数），使用它
+            subject_chapter_map = chapter_map
 
         converted, missing_images = convert_subject(
             subject_id=subject_id,
             questions_path=questions_path,
             image_root=image_root,
-            chapter_map=effective_chapter_map,
+            chapter_map=subject_chapter_map,
             limit=limit,  # 注意：这里的limit是所有subject共享的
             error_report=error_report,
             show_progress=show_progress,
@@ -1827,27 +1854,33 @@ def main():
                 "Error: Upload requires Supabase configuration, please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.")
             return
 
-        # 检查是否有缺少chapterId的题目
-        missing_chapter_items = [i for i, item in enumerate(all_converted) if item.get("chapterId") is None]
+        # 检查是否有缺少 chapterIds 的题目
+        missing_chapter_items = [
+            i for i, item in enumerate(all_converted)
+            if not item.get("chapterIds") or len(item.get("chapterIds", [])) == 0
+        ]
         if missing_chapter_items:
-            logger.warning(f"Warning: {len(missing_chapter_items)} questions are missing chapterId")
+            logger.warning(f"Warning: {len(missing_chapter_items)} questions are missing chapterIds")
             if error_report:
                 for idx in missing_chapter_items[:10]:  # 只报告前10个
                     item = all_converted[idx]
                     error_report.add_error(ConversionError(
                         source_id=item.get("meta", {}).get("sourceId", f"item_{idx+1}"),
                         error_type=ErrorType.VALIDATION_ERROR,
-                        message="Missing chapterId, cannot upload",
+                        message="Missing chapterIds, cannot upload",
                         context={"item_index": idx + 1, "subject": item.get("meta", {}).get("subject")},
                     ))
             logger.warning("These questions will be skipped during upload")
-            # 过滤掉缺少chapterId的题目
-            upload_items_list = [item for item in all_converted if item.get("chapterId") is not None]
+            # 过滤掉缺少 chapterIds 的题目
+            upload_items_list = [
+                item for item in all_converted
+                if item.get("chapterIds") and len(item.get("chapterIds", [])) > 0
+            ]
         else:
             upload_items_list = all_converted
 
         if not upload_items_list:
-            logger.error("Error: No valid questions to upload (all questions are missing chapterId)")
+            logger.error("Error: No valid questions to upload (all questions are missing chapterIds)")
             return
 
         logger.info(
@@ -1882,7 +1915,7 @@ def main():
 
     if not chapter_map and not args.sync_db:
         logger.warning(
-            "Warning: No chapter-map provided, chapterId will be null, only chapterName is preserved. Please map chapter IDs before import.")
+            "Warning: No chapter-map provided, chapterIds will be empty, only chapterName is preserved. Please map chapter IDs before import.")
     if all_missing_images:
         missing_list = ", ".join(sorted(list(all_missing_images))[:10])  # 只显示前10个
         logger.warning(

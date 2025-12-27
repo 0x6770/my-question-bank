@@ -10,6 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QuestionCard } from "@/components/question-card";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,8 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { QUESTION_BANK, type QuestionBank } from "@/lib/question-bank";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Tables } from "../../../../database.types";
@@ -38,9 +41,9 @@ type ChapterRow = Pick<
 
 type QuestionSummary = {
   id: number;
-  chapterId: number | null;
-  chapterName: string | null;
-  subjectName: string | null;
+  chapterIds: number[]; // Array of chapter IDs (supports multiple question banks)
+  chapterName: string | null; // Primary chapter name for display
+  subjectName: string | null; // Primary subject name for display
   createdAt: string;
   difficulty: number;
   calculator: boolean;
@@ -67,6 +70,7 @@ type QuestionManagementProps = {
   initialChapters: ChapterRow[];
   initialQuestions: QuestionSummary[];
   initialHasMore: boolean;
+  questionBank: QuestionBank;
   loadError: string | null;
 };
 
@@ -86,7 +90,7 @@ type QuestionApiResponse = {
     difficulty: number;
     calculator: boolean;
     createdAt: string;
-    chapterId: number | null;
+    chapterIds: number[]; // Array of chapter IDs
     chapterName?: string | null;
     subjectName?: string | null;
     subjectId?: number | null;
@@ -156,21 +160,45 @@ export function QuestionManagement({
   initialChapters,
   initialQuestions,
   initialHasMore,
+  questionBank,
   loadError,
 }: QuestionManagementProps) {
+  const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [signedUrlCache, setSignedUrlCache] = useState<Record<string, string>>(
     {},
   );
 
+  const [chapters, setChapters] = useState<ChapterRow[]>(initialChapters);
+  const [questions, setQuestions] =
+    useState<QuestionSummary[]>(initialQuestions);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(initialHasMore);
+
+  // Update state when props change (e.g., when switching question bank tabs)
+  useEffect(() => {
+    setChapters(initialChapters);
+    setQuestions(initialQuestions);
+    setHasMore(initialHasMore);
+    setPage(1);
+    setEditingQuestionId(null);
+    setBusyQuestionId(null);
+    setChapterIds([]);
+    setMarks("");
+    setDifficulty("2");
+    setCalculatorAllowed(false);
+    setImages([]);
+    setAnswerImages([]);
+  }, [initialChapters, initialQuestions, initialHasMore]);
+
   const chapterMap = useMemo(
-    () => new Map(initialChapters.map((chapter) => [chapter.id, chapter])),
-    [initialChapters],
+    () => new Map(chapters.map((chapter) => [chapter.id, chapter])),
+    [chapters],
   );
 
   const chapterLabelById = useMemo(
-    () => buildChapterLabelMap(initialChapters),
-    [initialChapters],
+    () => buildChapterLabelMap(chapters),
+    [chapters],
   );
 
   const chapterOptions = useMemo(
@@ -180,14 +208,9 @@ export function QuestionManagement({
         .sort((a, b) => a.label.localeCompare(b.label, "zh-CN")),
     [chapterLabelById],
   );
-
-  const [questions, setQuestions] =
-    useState<QuestionSummary[]>(initialQuestions);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(initialHasMore);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
-  const [chapterId, setChapterId] = useState<string>("");
+  const [chapterIds, setChapterIds] = useState<number[]>([]);
   const [marks, setMarks] = useState<string>("");
   const [difficulty, setDifficulty] = useState<string>("2");
   const [calculatorAllowed, setCalculatorAllowed] = useState(true);
@@ -206,7 +229,7 @@ export function QuestionManagement({
   const [editingQuestionId, setEditingQuestionId] = useState<number | null>(
     null,
   );
-  const [editChapterId, setEditChapterId] = useState<string>("");
+  const [editChapterIds, setEditChapterIds] = useState<number[]>([]);
   const [editMarks, setEditMarks] = useState<string>("");
   const [editDifficulty, setEditDifficulty] = useState<string>("2");
   const [editCalculatorAllowed, setEditCalculatorAllowed] = useState(false);
@@ -215,7 +238,6 @@ export function QuestionManagement({
   const [isUpdating, setIsUpdating] = useState(false);
 
   const formRef = useRef<HTMLFormElement>(null);
-  const chapterSelectRef = useRef<HTMLSelectElement>(null);
   const imageIdRef = useRef(0);
   const editImageIdRef = useRef(0);
   const answerImageIdRef = useRef(0);
@@ -231,8 +253,10 @@ export function QuestionManagement({
   const mapApiQuestions = useCallback(
     (apiQuestions: QuestionApiResponse["questions"]): QuestionSummary[] =>
       apiQuestions.map((item) => {
-        const chapter = item.chapterId
-          ? (chapterMap.get(item.chapterId) ?? null)
+        // Use first chapter as primary for display
+        const primaryChapterId = item.chapterIds[0] ?? null;
+        const chapter = primaryChapterId
+          ? (chapterMap.get(primaryChapterId) ?? null)
           : null;
         const resolvedChapterName = item.chapterName ?? chapter?.name ?? null;
         const resolvedSubjectName =
@@ -240,7 +264,7 @@ export function QuestionManagement({
 
         return {
           id: item.id,
-          chapterId: item.chapterId,
+          chapterIds: item.chapterIds,
           chapterName: resolvedChapterName,
           subjectName: resolvedSubjectName,
           createdAt: item.createdAt,
@@ -263,6 +287,12 @@ export function QuestionManagement({
       }),
     [chapterMap],
   );
+
+  const getTabValue = (bank: QuestionBank): string => {
+    if (bank === QUESTION_BANK.TYPICAL_QUESTIONS) return "typical";
+    if (bank === QUESTION_BANK.EXAM_PAPER) return "exam-paper";
+    return "past-paper";
+  };
 
   const primeSignedUrlCache = useCallback((list: QuestionSummary[]) => {
     const nextCache: Record<string, string> = {};
@@ -289,7 +319,10 @@ export function QuestionManagement({
       setIsLoadingQuestions(true);
       setListError(null);
       try {
-        const response = await fetch(`/api/questions?page=${safePage}`);
+        const bankValue = getTabValue(questionBank);
+        const response = await fetch(
+          `/api/questions?page=${safePage}&bank=${bankValue}`,
+        );
         if (!response.ok) {
           throw new Error(
             "Failed to load question list, please try again later.",
@@ -316,7 +349,7 @@ export function QuestionManagement({
         setIsLoadingQuestions(false);
       }
     },
-    [mapApiQuestions, primeSignedUrlCache],
+    [mapApiQuestions, primeSignedUrlCache, questionBank],
   );
 
   useEffect(() => {
@@ -429,13 +462,12 @@ export function QuestionManagement({
   };
 
   const resetForm = () => {
-    setChapterId("");
+    setChapterIds([]);
     setMarks("");
     setDifficulty("2");
     setCalculatorAllowed(false);
     setImages([]);
     setAnswerImages([]);
-    chapterSelectRef.current?.focus();
   };
 
   const handleAddImageFiles = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -499,18 +531,16 @@ export function QuestionManagement({
   const handleCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const chosenChapterId =
-      chapterId === "" ? null : Number.parseInt(chapterId, 10);
     const trimmedMarks = marks.trim();
     const parsedMarks =
       trimmedMarks === "" ? Number.NaN : Number.parseInt(trimmedMarks, 10);
     const parsedDifficulty =
       difficulty === "" ? Number.NaN : Number.parseInt(difficulty, 10);
 
-    if (!chosenChapterId) {
+    if (chapterIds.length === 0) {
       setFeedback({
         type: "error",
-        message: "Please select a chapter.",
+        message: "Please select at least one chapter.",
       });
       return;
     }
@@ -558,18 +588,18 @@ export function QuestionManagement({
       return;
     }
 
-    const { data: question, error: insertError } = await supabase
-      .from("questions")
-      .insert({
-        chapter_id: chosenChapterId,
-        difficulty: parsedDifficulty,
-        calculator: calculatorAllowed,
-        marks: parsedMarks,
-      })
-      .select("id, chapter_id, created_at, marks, difficulty, calculator")
-      .single();
+    // Use database function to create question with multiple chapters
+    const { data: createdQuestionId, error: insertError } = await supabase.rpc(
+      "create_question_with_chapters",
+      {
+        p_marks: parsedMarks,
+        p_difficulty: parsedDifficulty,
+        p_calculator: calculatorAllowed,
+        p_chapter_ids: chapterIds,
+      },
+    );
 
-    if (insertError || !question) {
+    if (insertError || !createdQuestionId) {
       setIsSubmitting(false);
       setFeedback({
         type: "error",
@@ -578,8 +608,6 @@ export function QuestionManagement({
       });
       return;
     }
-
-    const createdQuestionId = question.id;
     let insertedImages: QuestionSummary["images"] | null = null;
     let insertedAnswerImages: QuestionSummary["answerImages"] | null = null;
 
@@ -641,34 +669,12 @@ export function QuestionManagement({
       });
     }
 
-    const chapter = chosenChapterId
-      ? (chapterMap.get(chosenChapterId) ?? null)
-      : null;
-
-    const newQuestion: QuestionSummary = {
-      id: createdQuestionId,
-      chapterId: question.chapter_id,
-      chapterName: chapter?.name ?? null,
-      subjectName: chapter?.subject?.name ?? null,
-      createdAt: question.created_at,
-      difficulty: question.difficulty,
-      calculator: question.calculator,
-      marks: question.marks,
-      images: insertedImages ?? [],
-      answerImages: insertedAnswerImages ?? [],
-    };
-
     setFeedback({
       type: "success",
       message: "Question created successfully.",
     });
     setIsSubmitting(false);
     resetForm();
-    setQuestions((prev) => {
-      const next = [newQuestion, ...prev];
-      setHasMore((prevHasMore) => prevHasMore || next.length > PAGE_SIZE);
-      return next.slice(0, PAGE_SIZE);
-    });
     setPage(1);
     void loadQuestionsPage(1);
   };
@@ -715,7 +721,7 @@ export function QuestionManagement({
   const beginEdit = (question: QuestionSummary) => {
     setFeedback(null);
     setEditingQuestionId(question.id);
-    setEditChapterId(question.chapterId ? String(question.chapterId) : "");
+    setEditChapterIds(question.chapterIds);
     setEditMarks(String(question.marks));
     setEditDifficulty(String(question.difficulty));
     setEditCalculatorAllowed(question.calculator);
@@ -817,18 +823,16 @@ export function QuestionManagement({
       return;
     }
 
-    const chosenChapterId =
-      editChapterId === "" ? null : Number.parseInt(editChapterId, 10);
     const trimmedMarks = editMarks.trim();
     const parsedMarks =
       trimmedMarks === "" ? Number.NaN : Number.parseInt(trimmedMarks, 10);
     const parsedDifficulty =
       editDifficulty === "" ? Number.NaN : Number.parseInt(editDifficulty, 10);
 
-    if (!chosenChapterId) {
+    if (editChapterIds.length === 0) {
       setFeedback({
         type: "error",
-        message: "Please select a chapter.",
+        message: "Please select at least one chapter.",
       });
       return;
     }
@@ -876,19 +880,19 @@ export function QuestionManagement({
       return;
     }
 
-    const { data: questionRow, error: updateError } = await supabase
-      .from("questions")
-      .update({
-        chapter_id: chosenChapterId,
-        difficulty: parsedDifficulty,
-        calculator: editCalculatorAllowed,
-        marks: parsedMarks,
-      })
-      .eq("id", editingQuestionId)
-      .select("id, chapter_id, created_at, marks, difficulty, calculator")
-      .single();
+    // Use database function to update question with multiple chapters
+    const { error: updateError } = await supabase.rpc(
+      "update_question_with_chapters",
+      {
+        p_question_id: editingQuestionId,
+        p_marks: parsedMarks,
+        p_difficulty: parsedDifficulty,
+        p_calculator: editCalculatorAllowed,
+        p_chapter_ids: editChapterIds,
+      },
+    );
 
-    if (updateError || !questionRow) {
+    if (updateError) {
       setIsUpdating(false);
       setFeedback({
         type: "error",
@@ -980,34 +984,13 @@ export function QuestionManagement({
       });
     }
 
-    const chapter = chosenChapterId
-      ? (chapterMap.get(chosenChapterId) ?? null)
-      : null;
-
-    setQuestions((prev) =>
-      prev.map((item) =>
-        item.id === editingQuestionId
-          ? {
-              ...item,
-              chapterId: questionRow.chapter_id,
-              chapterName: chapter?.name ?? null,
-              subjectName: chapter?.subject?.name ?? null,
-              difficulty: questionRow.difficulty,
-              calculator: questionRow.calculator,
-              marks: questionRow.marks,
-              images: nextImages,
-              answerImages: nextAnswerImages,
-            }
-          : item,
-      ),
-    );
-
     setFeedback({
       type: "success",
       message: "Question updated.",
     });
     setIsUpdating(false);
     cancelEdit();
+    void loadQuestionsPage(page);
   };
 
   const handlePrevPage = () => {
@@ -1020,18 +1003,13 @@ export function QuestionManagement({
     void loadQuestionsPage(page + 1);
   };
 
-  const scrollToForm = () => {
-    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    chapterSelectRef.current?.focus();
-  };
-
   const buildQuestionCardData = (question: QuestionSummary) => ({
     id: question.id,
     marks: question.marks,
     difficulty: question.difficulty,
     calculator: question.calculator,
     createdAt: question.createdAt,
-    chapterId: question.chapterId,
+    chapterId: question.chapterIds[0] ?? null,
     chapterName: question.chapterName,
     subjectName: question.subjectName,
     images: question.images
@@ -1054,672 +1032,790 @@ export function QuestionManagement({
       })),
   });
 
-  return (
-    <div className="flex flex-1 flex-col gap-6">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Question Management
-          </h1>
-          <p className="text-sm text-slate-500">
-            Create questions, upload images, and link chapters to build the
-            bank.
-          </p>
-        </div>
-        <Button onClick={scrollToForm} className="gap-2">
-          <Plus className="size-4" />
-          New Question
-        </Button>
-      </header>
+  const handleTabChange = (value: string) => {
+    router.push(`/console/questions?bank=${value}`);
+  };
 
+  // Auto-dismiss feedback messages after 3 seconds
+  useEffect(() => {
+    if (!feedback) return;
+    const timer = setTimeout(() => {
+      setFeedback(null);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [feedback]);
+
+  return (
+    <>
       {feedback ? (
-        <div
-          className={cn(
-            "rounded-xl border px-4 py-3 text-sm",
-            feedback.type === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-              : "border-red-200 bg-red-50 text-red-700",
-          )}
-        >
-          {feedback.message}
+        <div className="pointer-events-none fixed left-0 right-0 top-0 z-50 flex justify-center p-4">
+          <div
+            className={cn(
+              "pointer-events-auto rounded-lg px-6 py-3 text-sm font-medium shadow-lg",
+              feedback.type === "success"
+                ? "border border-green-200 bg-green-50 text-green-800"
+                : "border border-red-200 bg-red-50 text-red-800",
+            )}
+          >
+            {feedback.message}
+          </div>
         </div>
       ) : null}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Create New Question</CardTitle>
-          <CardDescription>
-            Choose a chapter and upload images in display order.
-          </CardDescription>
-        </CardHeader>
-
-        <form ref={formRef} onSubmit={handleCreate} className="space-y-6">
-          <CardContent className="space-y-6">
+      <Tabs
+        value={getTabValue(questionBank)}
+        onValueChange={handleTabChange}
+        className="flex flex-1 flex-col gap-6"
+      >
+        <div className="flex flex-1 flex-col gap-6">
+          <header className="flex flex-wrap items-center justify-between gap-4">
             <div className="space-y-2">
-              <Label htmlFor="question-chapter">Chapter</Label>
-              <select
-                id="question-chapter"
-                ref={chapterSelectRef}
-                value={chapterId}
-                onChange={(event) => setChapterId(event.target.value)}
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200"
-              >
-                <option value="">Select a chapter</option>
-                {chapterOptions.map((chapterOption) => (
-                  <option key={chapterOption.id} value={chapterOption.id}>
-                    {chapterOption.label}
-                  </option>
-                ))}
-              </select>
+              <h1 className="text-2xl font-semibold tracking-tight">
+                Question Management
+              </h1>
+              <p className="text-sm text-slate-500">
+                Create questions, upload images, and link chapters to build the
+                bank.
+              </p>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="question-marks">Marks</Label>
-                <Input
-                  id="question-marks"
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={marks}
-                  onChange={(event) => setMarks(event.target.value)}
-                  placeholder="Enter marks (positive integer)"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="question-difficulty">Difficulty</Label>
-                <select
-                  id="question-difficulty"
-                  value={difficulty}
-                  onChange={(event) => setDifficulty(event.target.value)}
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200"
-                >
-                  <option value="1">Easy (1)</option>
-                  <option value="2">Medium (2)</option>
-                  <option value="3">Hard (3)</option>
-                  <option value="4">Challenge (4)</option>
-                </select>
-              </div>
-            </div>
-            <div className="space-y-4">
-              <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
-                <input
-                  type="checkbox"
-                  checked={!calculatorAllowed}
-                  onChange={(event) =>
-                    setCalculatorAllowed(!event.target.checked)
-                  }
-                  className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
-                />
-                <div className="flex flex-col">
-                  <span className="font-medium text-slate-800">
-                    Calculator not allowed
-                  </span>
-                  <span className="text-xs text-slate-500">
-                    Check if a calculator is not allowed for this question.
-                  </span>
-                </div>
-              </label>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <Label htmlFor="question-image">Question Images</Label>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <Input
-                    id="question-image"
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleAddImageFiles}
-                    className="max-w-xl flex-1"
-                  />
-                </div>
-                <p className="mt-1 text-xs text-slate-500">
-                  Select one or more images to upload; they display in list
-                  order and can be reordered.
-                </p>
-              </div>
-
-              {images.length > 0 ? (
-                <ul className="space-y-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
-                  {images.map((image, index) => (
-                    <li
-                      key={image.id}
-                      className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:gap-3"
-                    >
-                      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500 self-start">
-                        {index + 1}
-                      </span>
-                      <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
-                        <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
-                          <Image
-                            src={
-                              resolveImageSrc(image.storagePath ?? image.url) ??
-                              image.url
-                            }
-                            alt={`Preview ${index + 1}`}
-                            width={1200}
-                            height={675}
-                            className="h-full w-full object-contain"
-                            sizes="(max-width: 768px) 100vw, 640px"
-                            unoptimized
-                          />
-                        </div>
-                      </div>
-                      <div className="ml-auto flex items-start gap-1 pt-1 sm:ml-0">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => moveImage(index, "up")}
-                          disabled={index === 0}
-                          aria-label="Move image up"
-                        >
-                          <ArrowUp className="size-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => moveImage(index, "down")}
-                          disabled={index === images.length - 1}
-                          aria-label="Move image down"
-                        >
-                          <ArrowDown className="size-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => handleRemoveImage(index)}
-                          aria-label="Remove image"
-                        >
-                          <Trash2 className="size-4 text-red-500" />
-                        </Button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <Label htmlFor="answer-image">Answer Images</Label>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <Input
-                    id="answer-image"
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleAddAnswerImageFiles}
-                    className="max-w-xl flex-1"
-                  />
-                </div>
-                <p className="mt-1 text-xs text-slate-500">
-                  Upload answer images; they display in list order and can be
-                  reordered.
-                </p>
-              </div>
-
-              {answerImages.length > 0 ? (
-                <ul className="space-y-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
-                  {answerImages.map((image, index) => (
-                    <li
-                      key={image.id}
-                      className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:gap-3"
-                    >
-                      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500 self-start">
-                        {index + 1}
-                      </span>
-                      <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
-                        <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
-                          <Image
-                            src={image.storagePath ?? image.url}
-                            alt={`Answer preview ${index + 1}`}
-                            width={1200}
-                            height={675}
-                            className="h-full w-full object-contain"
-                            sizes="(max-width: 768px) 100vw, 640px"
-                            unoptimized
-                          />
-                        </div>
-                      </div>
-                      <div className="ml-auto flex items-start gap-1 pt-1 sm:ml-0">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => moveAnswerImage(index, "up")}
-                          disabled={index === 0}
-                          aria-label="Move answer image up"
-                        >
-                          <ArrowUp className="size-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => moveAnswerImage(index, "down")}
-                          disabled={index === answerImages.length - 1}
-                          aria-label="Move answer image down"
-                        >
-                          <ArrowDown className="size-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => handleRemoveAnswerImage(index)}
-                          aria-label="Remove answer image"
-                        >
-                          <Trash2 className="size-4 text-red-500" />
-                        </Button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-          </CardContent>
-          <CardFooter className="gap-3 border-t border-slate-200">
-            <Button type="submit" disabled={isSubmitting} className="gap-2">
-              {isSubmitting ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : null}
-              Create
-            </Button>
             <Button
-              type="button"
-              variant="outline"
-              onClick={resetForm}
-              disabled={isSubmitting}
+              onClick={() =>
+                formRef.current?.scrollIntoView({
+                  behavior: "smooth",
+                  block: "start",
+                })
+              }
+              className="gap-2"
             >
-              Cancel
+              <Plus className="size-4" />
+              New Question
             </Button>
-          </CardFooter>
-        </form>
-      </Card>
+          </header>
 
-      <section className="space-y-4">
-        <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
-          <ScrollText className="size-4" />
-          <span>Question List</span>
-        </div>
-        {listError ? (
-          <div className="flex flex-1 items-center justify-center rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            {listError}
-          </div>
-        ) : null}
-        {isLoadingQuestions ? (
-          <div className="flex flex-1 items-center justify-center rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
-            Loading questions...
-          </div>
-        ) : questions.length === 0 ? (
-          <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
-            No questions yet. Create the first one above.
-          </div>
-        ) : (
-          <>
-            <div className="space-y-4">
-              {questions.map((question) => {
-                const questionCardData = buildQuestionCardData(question);
-                return (
-                  <Card key={question.id} className="border-slate-200">
-                    <CardHeader className="border-b border-slate-100">
-                      <CardTitle className="text-base font-semibold text-slate-800">
-                        Question #{question.id}
-                      </CardTitle>
-                      <CardDescription className="flex flex-wrap items-center gap-3 text-xs">
-                        <span>
-                          Created at:{formatDateTime(question.createdAt)}
-                        </span>
-                      </CardDescription>
-                      <CardAction className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon-sm"
-                          title="Edit question"
-                          onClick={() => beginEdit(question)}
-                          disabled={
-                            isUpdating && editingQuestionId === question.id
-                          }
-                        >
-                          {isUpdating && editingQuestionId === question.id ? (
-                            <Loader2 className="size-4 animate-spin" />
-                          ) : (
-                            <Pencil className="size-4" />
-                          )}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon-sm"
-                          title="Delete question"
-                          onClick={() => handleDelete(question.id)}
-                          disabled={busyQuestionId === question.id}
-                        >
-                          {busyQuestionId === question.id ? (
-                            <Loader2 className="size-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="size-4 text-red-500" />
-                          )}
-                        </Button>
-                      </CardAction>
-                    </CardHeader>
-                    {editingQuestionId !== question.id ? (
-                      <div className="border-t border-slate-100 bg-slate-50/60">
-                        <div className="px-4 py-4">
-                          <QuestionCard question={questionCardData} />
-                        </div>
-                      </div>
-                    ) : null}
-                    {editingQuestionId === question.id ? (
-                      <form onSubmit={handleUpdate} className="space-y-4 p-4">
-                        <div className="grid gap-4 sm:grid-cols-2">
-                          <div className="space-y-2">
-                            <Label htmlFor="edit-chapter">Chapter</Label>
-                            <select
-                              id="edit-chapter"
-                              value={editChapterId}
-                              onChange={(event) =>
-                                setEditChapterId(event.target.value)
-                              }
-                              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200"
-                            >
-                              <option value="">Select a chapter</option>
-                              {chapterOptions.map((chapterOption) => (
-                                <option
-                                  key={chapterOption.id}
-                                  value={chapterOption.id}
-                                >
-                                  {chapterOption.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="edit-marks">Marks</Label>
-                            <Input
-                              id="edit-marks"
-                              type="number"
-                              min={1}
-                              step={1}
-                              value={editMarks}
-                              onChange={(event) =>
-                                setEditMarks(event.target.value)
-                              }
-                              placeholder="Enter marks (positive integer)"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="edit-difficulty">Difficulty</Label>
-                            <select
-                              id="edit-difficulty"
-                              value={editDifficulty}
-                              onChange={(event) =>
-                                setEditDifficulty(event.target.value)
-                              }
-                              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200"
-                            >
-                              <option value="1">Easy (1)</option>
-                              <option value="2">Medium (2)</option>
-                              <option value="3">Hard (3)</option>
-                              <option value="4">Challenge (4)</option>
-                            </select>
-                          </div>
-                          <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
+          <TabsList>
+            <TabsTrigger value="past-paper">Past Paper Questions</TabsTrigger>
+            <TabsTrigger value="typical">Typical Questions</TabsTrigger>
+          </TabsList>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Create New Question</CardTitle>
+              <CardDescription>
+                Choose one or more chapters and upload images in display order.
+                You can add a question to multiple question banks by selecting
+                chapters from different banks.
+              </CardDescription>
+            </CardHeader>
+
+            <form ref={formRef} onSubmit={handleCreate} className="space-y-6">
+              <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <Label>Chapters (可以选择多个以添加到多个题库)</Label>
+                  <div className="max-h-64 overflow-y-auto rounded-md border border-slate-200 bg-white p-3">
+                    {chapterOptions.length === 0 ? (
+                      <p className="text-sm text-slate-500">
+                        No chapters available in this question bank
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {chapterOptions.map((chapterOption) => (
+                          <label
+                            key={chapterOption.id}
+                            className="flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 hover:bg-slate-50"
+                          >
                             <input
                               type="checkbox"
-                              checked={!editCalculatorAllowed}
-                              onChange={(event) =>
-                                setEditCalculatorAllowed(!event.target.checked)
-                              }
-                              className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                              checked={chapterIds.includes(chapterOption.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setChapterIds((prev) => [
+                                    ...prev,
+                                    chapterOption.id,
+                                  ]);
+                                } else {
+                                  setChapterIds((prev) =>
+                                    prev.filter(
+                                      (id) => id !== chapterOption.id,
+                                    ),
+                                  );
+                                }
+                              }}
+                              className="mt-0.5 size-4 rounded border-slate-300 text-slate-900"
                             />
-                            <div className="flex flex-col">
-                              <span className="font-medium text-slate-800">
-                                Calculator not allowed
-                              </span>
-                              <span className="text-xs text-slate-500">
-                                Check if a calculator is not allowed for this
-                                question.
-                              </span>
-                            </div>
+                            <span className="flex-1 text-sm text-slate-700">
+                              {chapterOption.label}
+                            </span>
                           </label>
-                        </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {chapterIds.length > 0 && (
+                    <p className="text-xs text-slate-600">
+                      Selected {chapterIds.length} chapter
+                      {chapterIds.length > 1 ? "s" : ""}
+                    </p>
+                  )}
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="question-marks">Marks</Label>
+                    <Input
+                      id="question-marks"
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={marks}
+                      onChange={(event) => setMarks(event.target.value)}
+                      placeholder="Enter marks (positive integer)"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="question-difficulty">Difficulty</Label>
+                    <select
+                      id="question-difficulty"
+                      value={difficulty}
+                      onChange={(event) => setDifficulty(event.target.value)}
+                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200"
+                    >
+                      <option value="1">Easy (1)</option>
+                      <option value="2">Medium (2)</option>
+                      <option value="3">Hard (3)</option>
+                      <option value="4">Challenge (4)</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
+                    <input
+                      type="checkbox"
+                      checked={!calculatorAllowed}
+                      onChange={(event) =>
+                        setCalculatorAllowed(!event.target.checked)
+                      }
+                      className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                    />
+                    <div className="flex flex-col">
+                      <span className="font-medium text-slate-800">
+                        Calculator not allowed
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        Check if a calculator is not allowed for this question.
+                      </span>
+                    </div>
+                  </label>
+                </div>
 
-                        <div className="space-y-3">
-                          <div>
-                            <Label htmlFor="edit-image">
-                              Images (Vertical Stack)
-                            </Label>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              <Input
-                                id="edit-image"
-                                type="file"
-                                accept="image/*"
-                                multiple
-                                onChange={handleEditAddImageFiles}
-                                className="max-w-xl flex-1"
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="question-image">Question Images</Label>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Input
+                        id="question-image"
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleAddImageFiles}
+                        className="max-w-xl flex-1"
+                      />
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Select one or more images to upload; they display in list
+                      order and can be reordered.
+                    </p>
+                  </div>
+
+                  {images.length > 0 ? (
+                    <ul className="space-y-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
+                      {images.map((image, index) => (
+                        <li
+                          key={image.id}
+                          className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:gap-3"
+                        >
+                          <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500 self-start">
+                            {index + 1}
+                          </span>
+                          <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
+                            <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
+                              <Image
+                                src={
+                                  resolveImageSrc(
+                                    image.storagePath ?? image.url,
+                                  ) ?? image.url
+                                }
+                                alt={`Preview ${index + 1}`}
+                                width={1200}
+                                height={675}
+                                className="h-full w-full object-contain"
+                                sizes="(max-width: 768px) 100vw, 640px"
+                                unoptimized
                               />
                             </div>
-                            <p className="mt-1 text-xs text-slate-500">
-                              Select one or more images to upload; they display
-                              in list order and can be reordered.
-                            </p>
                           </div>
+                          <div className="ml-auto flex items-start gap-1 pt-1 sm:ml-0">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => moveImage(index, "up")}
+                              disabled={index === 0}
+                              aria-label="Move image up"
+                            >
+                              <ArrowUp className="size-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => moveImage(index, "down")}
+                              disabled={index === images.length - 1}
+                              aria-label="Move image down"
+                            >
+                              <ArrowDown className="size-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => handleRemoveImage(index)}
+                              aria-label="Remove image"
+                            >
+                              <Trash2 className="size-4 text-red-500" />
+                            </Button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
 
-                          {editImages.length > 0 ? (
-                            <ul className="space-y-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
-                              {editImages.map((image, index) => (
-                                <li
-                                  key={image.id}
-                                  className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:gap-3"
-                                >
-                                  <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500 self-start">
-                                    {index + 1}
-                                  </span>
-                                  <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
-                                    <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
-                                      <Image
-                                        src={
-                                          resolveImageSrc(
-                                            image.storagePath ?? image.url,
-                                          ) ?? image.url
-                                        }
-                                        alt={`Preview ${index + 1}`}
-                                        width={1200}
-                                        height={675}
-                                        className="h-full w-full object-contain"
-                                        sizes="(max-width: 768px) 100vw, 640px"
-                                        unoptimized
-                                      />
-                                    </div>
-                                  </div>
-                                  <div className="ml-auto flex items-start gap-1 pt-1 sm:ml-0">
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon-sm"
-                                      onClick={() => moveEditImage(index, "up")}
-                                      disabled={index === 0}
-                                      aria-label="Move image up"
-                                    >
-                                      <ArrowUp className="size-4" />
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon-sm"
-                                      onClick={() =>
-                                        moveEditImage(index, "down")
-                                      }
-                                      disabled={index === editImages.length - 1}
-                                      aria-label="Move image down"
-                                    >
-                                      <ArrowDown className="size-4" />
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon-sm"
-                                      onClick={() =>
-                                        handleEditRemoveImage(index)
-                                      }
-                                      aria-label="Remove image"
-                                    >
-                                      <Trash2 className="size-4 text-red-500" />
-                                    </Button>
-                                  </div>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : null}
-                        </div>
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="answer-image">Answer Images</Label>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Input
+                        id="answer-image"
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleAddAnswerImageFiles}
+                        className="max-w-xl flex-1"
+                      />
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Upload answer images; they display in list order and can
+                      be reordered.
+                    </p>
+                  </div>
 
-                        <div className="space-y-3">
-                          <div>
-                            <Label htmlFor="edit-answer-image">
-                              Answer Images
-                            </Label>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              <Input
-                                id="edit-answer-image"
-                                type="file"
-                                accept="image/*"
-                                multiple
-                                onChange={handleEditAddAnswerImageFiles}
-                                className="max-w-xl flex-1"
+                  {answerImages.length > 0 ? (
+                    <ul className="space-y-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
+                      {answerImages.map((image, index) => (
+                        <li
+                          key={image.id}
+                          className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:gap-3"
+                        >
+                          <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500 self-start">
+                            {index + 1}
+                          </span>
+                          <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
+                            <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
+                              <Image
+                                src={image.storagePath ?? image.url}
+                                alt={`Answer preview ${index + 1}`}
+                                width={1200}
+                                height={675}
+                                className="h-full w-full object-contain"
+                                sizes="(max-width: 768px) 100vw, 640px"
+                                unoptimized
                               />
                             </div>
-                            <p className="mt-1 text-xs text-slate-500">
-                              Upload answer images; they display in list order
-                              and can be reordered.
-                            </p>
                           </div>
+                          <div className="ml-auto flex items-start gap-1 pt-1 sm:ml-0">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => moveAnswerImage(index, "up")}
+                              disabled={index === 0}
+                              aria-label="Move answer image up"
+                            >
+                              <ArrowUp className="size-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => moveAnswerImage(index, "down")}
+                              disabled={index === answerImages.length - 1}
+                              aria-label="Move answer image down"
+                            >
+                              <ArrowDown className="size-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => handleRemoveAnswerImage(index)}
+                              aria-label="Remove answer image"
+                            >
+                              <Trash2 className="size-4 text-red-500" />
+                            </Button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              </CardContent>
+              <CardFooter className="gap-3 border-t border-slate-200">
+                <Button type="submit" disabled={isSubmitting} className="gap-2">
+                  {isSubmitting ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : null}
+                  Create
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={resetForm}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </Button>
+              </CardFooter>
+            </form>
+          </Card>
 
-                          {editAnswerImages.length > 0 ? (
-                            <ul className="space-y-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
-                              {editAnswerImages.map((image, index) => (
-                                <li
-                                  key={image.id}
-                                  className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:gap-3"
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
+              <ScrollText className="size-4" />
+              <span>Question List</span>
+            </div>
+            {listError ? (
+              <div className="flex flex-1 items-center justify-center rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                {listError}
+              </div>
+            ) : null}
+            {isLoadingQuestions ? (
+              <div className="flex flex-1 items-center justify-center rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
+                Loading questions...
+              </div>
+            ) : questions.length === 0 ? (
+              <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
+                No questions yet. Create the first one above.
+              </div>
+            ) : (
+              <>
+                <div className="space-y-4">
+                  {questions.map((question) => {
+                    const questionCardData = buildQuestionCardData(question);
+                    return (
+                      <Card
+                        key={question.id}
+                        id={`question-${question.id}`}
+                        className="border-slate-200"
+                      >
+                        <CardHeader className="border-b border-slate-100">
+                          <CardTitle className="text-base font-semibold text-slate-800">
+                            Question #{question.id}
+                          </CardTitle>
+                          <CardDescription className="flex flex-wrap items-center gap-3 text-xs">
+                            <span>
+                              Created at:{formatDateTime(question.createdAt)}
+                            </span>
+                          </CardDescription>
+                          <CardAction className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon-sm"
+                              title="Edit question"
+                              onClick={() => beginEdit(question)}
+                              disabled={
+                                isUpdating && editingQuestionId === question.id
+                              }
+                            >
+                              {isUpdating &&
+                              editingQuestionId === question.id ? (
+                                <Loader2 className="size-4 animate-spin" />
+                              ) : (
+                                <Pencil className="size-4" />
+                              )}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon-sm"
+                              title="Delete question"
+                              onClick={() => handleDelete(question.id)}
+                              disabled={busyQuestionId === question.id}
+                            >
+                              {busyQuestionId === question.id ? (
+                                <Loader2 className="size-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="size-4 text-red-500" />
+                              )}
+                            </Button>
+                          </CardAction>
+                        </CardHeader>
+                        {editingQuestionId !== question.id ? (
+                          <div className="border-t border-slate-100 bg-slate-50/60">
+                            <div className="px-4 py-4">
+                              <QuestionCard question={questionCardData} />
+                            </div>
+                          </div>
+                        ) : null}
+                        {editingQuestionId === question.id ? (
+                          <form
+                            onSubmit={handleUpdate}
+                            className="space-y-4 p-4"
+                          >
+                            <div className="space-y-2">
+                              <Label>
+                                Chapters (可以选择多个以添加到多个题库)
+                              </Label>
+                              <div className="max-h-64 overflow-y-auto rounded-md border border-slate-200 bg-white p-3">
+                                {chapterOptions.length === 0 ? (
+                                  <p className="text-sm text-slate-500">
+                                    No chapters available in this question bank
+                                  </p>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {chapterOptions.map((chapterOption) => (
+                                      <label
+                                        key={chapterOption.id}
+                                        className="flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 hover:bg-slate-50"
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={editChapterIds.includes(
+                                            chapterOption.id,
+                                          )}
+                                          onChange={(e) => {
+                                            if (e.target.checked) {
+                                              setEditChapterIds((prev) => [
+                                                ...prev,
+                                                chapterOption.id,
+                                              ]);
+                                            } else {
+                                              setEditChapterIds((prev) =>
+                                                prev.filter(
+                                                  (id) =>
+                                                    id !== chapterOption.id,
+                                                ),
+                                              );
+                                            }
+                                          }}
+                                          className="mt-0.5 size-4 rounded border-slate-300 text-slate-900"
+                                        />
+                                        <span className="flex-1 text-sm text-slate-700">
+                                          {chapterOption.label}
+                                        </span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              {editChapterIds.length > 0 && (
+                                <p className="text-xs text-slate-600">
+                                  Selected {editChapterIds.length} chapter
+                                  {editChapterIds.length > 1 ? "s" : ""}
+                                </p>
+                              )}
+                            </div>
+                            <div className="grid gap-4 sm:grid-cols-2">
+                              <div className="space-y-2">
+                                <Label htmlFor="edit-marks">Marks</Label>
+                                <Input
+                                  id="edit-marks"
+                                  type="number"
+                                  min={1}
+                                  step={1}
+                                  value={editMarks}
+                                  onChange={(event) =>
+                                    setEditMarks(event.target.value)
+                                  }
+                                  placeholder="Enter marks (positive integer)"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="edit-difficulty">
+                                  Difficulty
+                                </Label>
+                                <select
+                                  id="edit-difficulty"
+                                  value={editDifficulty}
+                                  onChange={(event) =>
+                                    setEditDifficulty(event.target.value)
+                                  }
+                                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200"
                                 >
-                                  <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500 self-start">
-                                    {index + 1}
+                                  <option value="1">Easy (1)</option>
+                                  <option value="2">Medium (2)</option>
+                                  <option value="3">Hard (3)</option>
+                                  <option value="4">Challenge (4)</option>
+                                </select>
+                              </div>
+                              <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
+                                <input
+                                  type="checkbox"
+                                  checked={!editCalculatorAllowed}
+                                  onChange={(event) =>
+                                    setEditCalculatorAllowed(
+                                      !event.target.checked,
+                                    )
+                                  }
+                                  className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                                />
+                                <div className="flex flex-col">
+                                  <span className="font-medium text-slate-800">
+                                    Calculator not allowed
                                   </span>
-                                  <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
-                                    <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
-                                      <Image
-                                        src={
-                                          resolveImageSrc(
-                                            image.storagePath ?? image.url,
-                                          ) ?? image.url
-                                        }
-                                        alt={`Answer preview ${index + 1}`}
-                                        width={1200}
-                                        height={675}
-                                        className="h-full w-full object-contain"
-                                        sizes="(max-width: 768px) 100vw, 640px"
-                                        unoptimized
-                                      />
-                                    </div>
-                                  </div>
-                                  <div className="ml-auto flex items-start gap-1 pt-1 sm:ml-0">
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon-sm"
-                                      onClick={() =>
-                                        moveEditAnswerImage(index, "up")
-                                      }
-                                      disabled={index === 0}
-                                      aria-label="Move answer image up"
-                                    >
-                                      <ArrowUp className="size-4" />
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon-sm"
-                                      onClick={() =>
-                                        moveEditAnswerImage(index, "down")
-                                      }
-                                      disabled={
-                                        index === editAnswerImages.length - 1
-                                      }
-                                      aria-label="Move answer image down"
-                                    >
-                                      <ArrowDown className="size-4" />
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon-sm"
-                                      onClick={() =>
-                                        handleEditRemoveAnswerImage(index)
-                                      }
-                                      aria-label="Remove answer image"
-                                    >
-                                      <Trash2 className="size-4 text-red-500" />
-                                    </Button>
-                                  </div>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : null}
-                        </div>
+                                  <span className="text-xs text-slate-500">
+                                    Check if a calculator is not allowed for
+                                    this question.
+                                  </span>
+                                </div>
+                              </label>
+                            </div>
 
-                        <div className="flex items-center gap-3 border-t border-slate-200 pt-4">
-                          <Button
-                            type="submit"
-                            disabled={isUpdating}
-                            className="gap-2"
-                          >
-                            {isUpdating ? (
-                              <Loader2 className="size-4 animate-spin" />
-                            ) : null}
-                            Save changes
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={cancelEdit}
-                            disabled={isUpdating}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      </form>
-                    ) : null}
-                  </Card>
-                );
-              })}
-            </div>
-            <div className="flex items-center justify-end gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handlePrevPage}
-                disabled={page <= 1 || isLoadingQuestions}
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-slate-600">Page {page}</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleNextPage}
-                disabled={!hasMore || isLoadingQuestions}
-              >
-                Next
-              </Button>
-            </div>
-          </>
-        )}
-      </section>
-    </div>
+                            <div className="space-y-3">
+                              <div>
+                                <Label htmlFor="edit-image">
+                                  Images (Vertical Stack)
+                                </Label>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <Input
+                                    id="edit-image"
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={handleEditAddImageFiles}
+                                    className="max-w-xl flex-1"
+                                  />
+                                </div>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  Select one or more images to upload; they
+                                  display in list order and can be reordered.
+                                </p>
+                              </div>
+
+                              {editImages.length > 0 ? (
+                                <ul className="space-y-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
+                                  {editImages.map((image, index) => (
+                                    <li
+                                      key={image.id}
+                                      className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:gap-3"
+                                    >
+                                      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500 self-start">
+                                        {index + 1}
+                                      </span>
+                                      <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
+                                        <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
+                                          <Image
+                                            src={
+                                              resolveImageSrc(
+                                                image.storagePath ?? image.url,
+                                              ) ?? image.url
+                                            }
+                                            alt={`Preview ${index + 1}`}
+                                            width={1200}
+                                            height={675}
+                                            className="h-full w-full object-contain"
+                                            sizes="(max-width: 768px) 100vw, 640px"
+                                            unoptimized
+                                          />
+                                        </div>
+                                      </div>
+                                      <div className="ml-auto flex items-start gap-1 pt-1 sm:ml-0">
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon-sm"
+                                          onClick={() =>
+                                            moveEditImage(index, "up")
+                                          }
+                                          disabled={index === 0}
+                                          aria-label="Move image up"
+                                        >
+                                          <ArrowUp className="size-4" />
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon-sm"
+                                          onClick={() =>
+                                            moveEditImage(index, "down")
+                                          }
+                                          disabled={
+                                            index === editImages.length - 1
+                                          }
+                                          aria-label="Move image down"
+                                        >
+                                          <ArrowDown className="size-4" />
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon-sm"
+                                          onClick={() =>
+                                            handleEditRemoveImage(index)
+                                          }
+                                          aria-label="Remove image"
+                                        >
+                                          <Trash2 className="size-4 text-red-500" />
+                                        </Button>
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : null}
+                            </div>
+
+                            <div className="space-y-3">
+                              <div>
+                                <Label htmlFor="edit-answer-image">
+                                  Answer Images
+                                </Label>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <Input
+                                    id="edit-answer-image"
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={handleEditAddAnswerImageFiles}
+                                    className="max-w-xl flex-1"
+                                  />
+                                </div>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  Upload answer images; they display in list
+                                  order and can be reordered.
+                                </p>
+                              </div>
+
+                              {editAnswerImages.length > 0 ? (
+                                <ul className="space-y-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
+                                  {editAnswerImages.map((image, index) => (
+                                    <li
+                                      key={image.id}
+                                      className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:gap-3"
+                                    >
+                                      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500 self-start">
+                                        {index + 1}
+                                      </span>
+                                      <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
+                                        <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
+                                          <Image
+                                            src={
+                                              resolveImageSrc(
+                                                image.storagePath ?? image.url,
+                                              ) ?? image.url
+                                            }
+                                            alt={`Answer preview ${index + 1}`}
+                                            width={1200}
+                                            height={675}
+                                            className="h-full w-full object-contain"
+                                            sizes="(max-width: 768px) 100vw, 640px"
+                                            unoptimized
+                                          />
+                                        </div>
+                                      </div>
+                                      <div className="ml-auto flex items-start gap-1 pt-1 sm:ml-0">
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon-sm"
+                                          onClick={() =>
+                                            moveEditAnswerImage(index, "up")
+                                          }
+                                          disabled={index === 0}
+                                          aria-label="Move answer image up"
+                                        >
+                                          <ArrowUp className="size-4" />
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon-sm"
+                                          onClick={() =>
+                                            moveEditAnswerImage(index, "down")
+                                          }
+                                          disabled={
+                                            index ===
+                                            editAnswerImages.length - 1
+                                          }
+                                          aria-label="Move answer image down"
+                                        >
+                                          <ArrowDown className="size-4" />
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon-sm"
+                                          onClick={() =>
+                                            handleEditRemoveAnswerImage(index)
+                                          }
+                                          aria-label="Remove answer image"
+                                        >
+                                          <Trash2 className="size-4 text-red-500" />
+                                        </Button>
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : null}
+                            </div>
+
+                            <div className="flex items-center gap-3 border-t border-slate-200 pt-4">
+                              <Button
+                                type="submit"
+                                disabled={isUpdating}
+                                className="gap-2"
+                              >
+                                {isUpdating ? (
+                                  <Loader2 className="size-4 animate-spin" />
+                                ) : null}
+                                Save changes
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={cancelEdit}
+                                disabled={isUpdating}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </form>
+                        ) : null}
+                      </Card>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center justify-end gap-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePrevPage}
+                    disabled={page <= 1 || isLoadingQuestions}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-slate-600">Page {page}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleNextPage}
+                    disabled={!hasMore || isLoadingQuestions}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </>
+            )}
+          </section>
+        </div>
+      </Tabs>
+    </>
   );
 }

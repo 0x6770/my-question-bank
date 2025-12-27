@@ -1,16 +1,33 @@
 import { BackToTopButton } from "@/components/back-to-top-button";
 import { QuestionBrowser } from "@/components/question-browser";
-import { QUESTION_BANK } from "@/lib/question-bank";
+import { QUESTION_BANK, type QuestionBank } from "@/lib/question-bank";
 import { firstOrNull, type SubjectWithBoard } from "@/lib/supabase/relations";
 import { createClient } from "@/lib/supabase/server";
 
-export default async function Home() {
+type PageProps = {
+  searchParams: Promise<{
+    bank?: string;
+  }>;
+};
+
+export default async function Home(props: PageProps) {
+  const searchParams = await props.searchParams;
   const supabase = await createClient();
+
+  // Map URL parameter to question bank value, default to "typical questions"
+  const bankParam = searchParams.bank;
+  let selectedBank: QuestionBank = QUESTION_BANK.TYPICAL_QUESTIONS;
+
+  if (bankParam === "past-paper") {
+    selectedBank = QUESTION_BANK.PAST_PAPER_QUESTIONS;
+  } else if (bankParam === "exam-paper") {
+    selectedBank = QUESTION_BANK.EXAM_PAPER;
+  }
 
   const { data: examBoards } = await supabase
     .from("exam_boards")
     .select("id, name, question_bank")
-    .eq("question_bank", QUESTION_BANK.TYPICAL_QUESTIONS)
+    .eq("question_bank", selectedBank)
     .order("name", { ascending: true });
 
   const { data: subjects } = await supabase
@@ -18,7 +35,7 @@ export default async function Home() {
     .select(
       "id, name, exam_board_id, exam_board:exam_boards(name, question_bank)",
     )
-    .eq("exam_board.question_bank", QUESTION_BANK.TYPICAL_QUESTIONS)
+    .eq("exam_board.question_bank", selectedBank)
     .order("name", { ascending: true })
     .overrideTypes<SubjectWithBoard[]>();
 
@@ -33,8 +50,7 @@ export default async function Home() {
   }));
 
   const filteredSubjects = normalizedSubjects.filter(
-    (subject) =>
-      subject.exam_board?.question_bank === QUESTION_BANK.TYPICAL_QUESTIONS,
+    (subject) => subject.exam_board?.question_bank === selectedBank,
   );
   const allowedSubjectIds = new Set(
     filteredSubjects.map((subject) => subject.id),

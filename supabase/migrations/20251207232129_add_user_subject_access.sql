@@ -67,7 +67,7 @@ create policy "chapters.select by access" on public.chapters
     )
   );
 
--- Questions: require admin/super_admin or access to the question's subject via its chapter
+-- Questions: require admin/super_admin or access to the question's subject via its chapters
 create policy "questions.select by access" on public.questions
   for select
   to authenticated
@@ -75,9 +75,10 @@ create policy "questions.select by access" on public.questions
     public.in_roles(VARIADIC ARRAY['admin'::public.user_role, 'super_admin'::public.user_role])
     or exists (
       select 1
-      from public.chapters c
+      from public.question_chapters qc
+      join public.chapters c on c.id = qc.chapter_id
       join public.user_subject_access usa on usa.subject_id = c.subject_id
-      where c.id = public.questions.chapter_id
+      where qc.question_id = public.questions.id
         and usa.user_id = auth.uid()
     )
   );

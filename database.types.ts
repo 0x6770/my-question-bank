@@ -233,6 +233,39 @@ export type Database = {
         };
         Relationships: [];
       };
+      question_chapters: {
+        Row: {
+          chapter_id: number;
+          created_at: string;
+          question_id: number;
+        };
+        Insert: {
+          chapter_id: number;
+          created_at?: string;
+          question_id: number;
+        };
+        Update: {
+          chapter_id?: number;
+          created_at?: string;
+          question_id?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "question_chapters_chapter_id_fkey";
+            columns: ["chapter_id"];
+            isOneToOne: false;
+            referencedRelation: "chapters";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "question_chapters_question_id_fkey";
+            columns: ["question_id"];
+            isOneToOne: false;
+            referencedRelation: "questions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       question_images: {
         Row: {
           created_at: string;
@@ -268,7 +301,6 @@ export type Database = {
       questions: {
         Row: {
           calculator: boolean;
-          chapter_id: number;
           created_at: string;
           difficulty: number;
           id: number;
@@ -276,7 +308,6 @@ export type Database = {
         };
         Insert: {
           calculator?: boolean;
-          chapter_id: number;
           created_at?: string;
           difficulty?: number;
           id?: number;
@@ -284,21 +315,12 @@ export type Database = {
         };
         Update: {
           calculator?: boolean;
-          chapter_id?: number;
           created_at?: string;
           difficulty?: number;
           id?: number;
           marks?: number;
         };
-        Relationships: [
-          {
-            foreignKeyName: "questions_chapter_id_fkey";
-            columns: ["chapter_id"];
-            isOneToOne: false;
-            referencedRelation: "chapters";
-            referencedColumns: ["id"];
-          },
-        ];
+        Relationships: [];
       };
       subject_exam_tag_values: {
         Row: {
@@ -509,12 +531,31 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      create_question_with_chapters: {
+        Args: {
+          p_calculator: boolean;
+          p_chapter_ids: number[];
+          p_difficulty: number;
+          p_marks: number;
+        };
+        Returns: number;
+      };
       has_role: { Args: { target: string }; Returns: boolean };
       in_roles: {
         Args: { roles: Database["public"]["Enums"]["user_role"][] };
         Returns: boolean;
       };
       track_answer_view: { Args: { q_id: number }; Returns: undefined };
+      update_question_with_chapters: {
+        Args: {
+          p_calculator: boolean;
+          p_chapter_ids: number[];
+          p_difficulty: number;
+          p_marks: number;
+          p_question_id: number;
+        };
+        Returns: undefined;
+      };
     };
     Enums: {
       question_bank:
