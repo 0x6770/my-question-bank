@@ -741,7 +741,7 @@ export function SubjectManagement({
           <Tabs value={currentBankTab} onValueChange={handleBankChange}>
             <TabsList>
               <TabsTrigger value="past-paper">Past Paper Questions</TabsTrigger>
-              <TabsTrigger value="typical">Typical Questions</TabsTrigger>
+              <TabsTrigger value="typical">Topical Questions</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>

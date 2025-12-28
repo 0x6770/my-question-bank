@@ -8,7 +8,6 @@ import {
   Plus,
   ScrollText,
   Trash2,
-  X,
 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -26,8 +25,8 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { TreeSelect, type TreeNode } from "@/components/ui/tree-select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { type TreeNode, TreeSelect } from "@/components/ui/tree-select";
 import { QUESTION_BANK, type QuestionBank } from "@/lib/question-bank";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -100,7 +99,7 @@ type FormImage = {
   file?: File;
 };
 
-const PAGE_SIZE = 20;
+const _PAGE_SIZE = 20;
 
 type QuestionApiResponse = {
   questions: Array<{
@@ -196,7 +195,7 @@ function buildChapterTree(
     if (!subjectMap.has(subjectId)) {
       subjectMap.set(subjectId, { name: subjectName, chapterIds: new Set() });
     }
-    subjectMap.get(subjectId)!.chapterIds.add(chapter.id);
+    subjectMap.get(subjectId)?.chapterIds.add(chapter.id);
   }
 
   // Helper function to build chapter hierarchy
@@ -216,7 +215,7 @@ function buildChapterTree(
       if (!childrenMap.has(parentId)) {
         childrenMap.set(parentId, []);
       }
-      childrenMap.get(parentId)!.push(chapter);
+      childrenMap.get(parentId)?.push(chapter);
     }
 
     // Recursive function to build tree nodes
@@ -312,7 +311,7 @@ export function QuestionManagement({
     [chapters],
   );
 
-  const chapterOptions = useMemo(
+  const _chapterOptions = useMemo(
     () =>
       Array.from(chapterLabelById.entries())
         .map(([id, label]) => ({ id, label }))
@@ -324,7 +323,9 @@ export function QuestionManagement({
   const pastPaperExamBoardIds = useMemo(
     () =>
       allExamBoards
-        .filter((board) => board.question_bank === QUESTION_BANK.PAST_PAPER_QUESTIONS)
+        .filter(
+          (board) => board.question_bank === QUESTION_BANK.PAST_PAPER_QUESTIONS,
+        )
         .map((board) => board.id),
     [allExamBoards],
   );
@@ -332,7 +333,9 @@ export function QuestionManagement({
   const typicalExamBoardIds = useMemo(
     () =>
       allExamBoards
-        .filter((board) => board.question_bank === QUESTION_BANK.TYPICAL_QUESTIONS)
+        .filter(
+          (board) => board.question_bank === QUESTION_BANK.TOPICAL_QUESTIONS,
+        )
         .map((board) => board.id),
     [allExamBoards],
   );
@@ -341,7 +344,9 @@ export function QuestionManagement({
     () =>
       allChapters
         .filter((ch) =>
-          ch.exam_board_id ? pastPaperExamBoardIds.includes(ch.exam_board_id) : false,
+          ch.exam_board_id
+            ? pastPaperExamBoardIds.includes(ch.exam_board_id)
+            : false,
         )
         .map((ch) => ({
           id: ch.id,
@@ -355,7 +360,9 @@ export function QuestionManagement({
     () =>
       allChapters
         .filter((ch) =>
-          ch.exam_board_id ? typicalExamBoardIds.includes(ch.exam_board_id) : false,
+          ch.exam_board_id
+            ? typicalExamBoardIds.includes(ch.exam_board_id)
+            : false,
         )
         .map((ch) => ({
           id: ch.id,
@@ -469,11 +476,11 @@ export function QuestionManagement({
     [chapterMap],
   );
 
-  const getTabValue = (bank: QuestionBank): string => {
-    if (bank === QUESTION_BANK.TYPICAL_QUESTIONS) return "typical";
+  const getTabValue = useCallback((bank: QuestionBank): string => {
+    if (bank === QUESTION_BANK.TOPICAL_QUESTIONS) return "typical";
     if (bank === QUESTION_BANK.EXAM_PAPER) return "exam-paper";
     return "past-paper";
-  };
+  }, []);
 
   const primeSignedUrlCache = useCallback((list: QuestionSummary[]) => {
     const nextCache: Record<string, string> = {};
@@ -530,7 +537,7 @@ export function QuestionManagement({
         setIsLoadingQuestions(false);
       }
     },
-    [mapApiQuestions, primeSignedUrlCache, questionBank],
+    [mapApiQuestions, primeSignedUrlCache, questionBank, getTabValue],
   );
 
   useEffect(() => {
@@ -795,8 +802,8 @@ export function QuestionManagement({
       });
       return;
     }
-    let insertedImages: QuestionSummary["images"] | null = null;
-    let insertedAnswerImages: QuestionSummary["answerImages"] | null = null;
+    let _insertedImages: QuestionSummary["images"] | null = null;
+    let _insertedAnswerImages: QuestionSummary["answerImages"] | null = null;
 
     if (readyImages.length > 0) {
       const { data: imageRows, error: imageError } = await supabase
@@ -822,7 +829,7 @@ export function QuestionManagement({
         return;
       }
 
-      insertedImages = (imageRows ?? []).slice().sort((a, b) => {
+      _insertedImages = (imageRows ?? []).slice().sort((a, b) => {
         return a.position - b.position;
       });
     }
@@ -851,7 +858,7 @@ export function QuestionManagement({
         return;
       }
 
-      insertedAnswerImages = (answerRows ?? []).slice().sort((a, b) => {
+      _insertedAnswerImages = (answerRows ?? []).slice().sort((a, b) => {
         return a.position - b.position;
       });
     }
@@ -1036,9 +1043,10 @@ export function QuestionManagement({
       editDifficulty === "" ? Number.NaN : Number.parseInt(editDifficulty, 10);
 
     // Merge chapter selections from both question banks
-    const editChapterIds = [editPastPaperChapterId, editTypicalChapterId].filter(
-      (id): id is number => id !== null,
-    );
+    const editChapterIds = [
+      editPastPaperChapterId,
+      editTypicalChapterId,
+    ].filter((id): id is number => id !== null);
 
     if (editChapterIds.length === 0) {
       setFeedback({
@@ -1135,8 +1143,8 @@ export function QuestionManagement({
       return;
     }
 
-    let nextImages: QuestionSummary["images"] = [];
-    let nextAnswerImages: QuestionSummary["answerImages"] = [];
+    let _nextImages: QuestionSummary["images"] = [];
+    let _nextAnswerImages: QuestionSummary["answerImages"] = [];
 
     if (readyImages.length > 0) {
       const { data: newImages, error: insertImagesError } = await supabase
@@ -1161,7 +1169,7 @@ export function QuestionManagement({
         return;
       }
 
-      nextImages = (newImages ?? []).slice().sort((a, b) => {
+      _nextImages = (newImages ?? []).slice().sort((a, b) => {
         return a.position - b.position;
       });
     }
@@ -1190,7 +1198,7 @@ export function QuestionManagement({
         return;
       }
 
-      nextAnswerImages = (newAnswerImages ?? []).slice().sort((a, b) => {
+      _nextAnswerImages = (newAnswerImages ?? []).slice().sort((a, b) => {
         return a.position - b.position;
       });
     }
@@ -1304,7 +1312,7 @@ export function QuestionManagement({
 
           <TabsList>
             <TabsTrigger value="past-paper">Past Paper Questions</TabsTrigger>
-            <TabsTrigger value="typical">Typical Questions</TabsTrigger>
+            <TabsTrigger value="typical">Topical Questions</TabsTrigger>
           </TabsList>
 
           <Card>
@@ -1333,10 +1341,10 @@ export function QuestionManagement({
                   />
                 </div>
 
-                {/* Typical Questions Chapter Selection */}
+                {/* Topical Questions Chapter Selection */}
                 <div className="space-y-2">
                   <Label htmlFor="typical-chapter">
-                    Typical Questions
+                    Topical Questions
                     <span className="ml-2 text-xs text-slate-500">(可选)</span>
                   </Label>
                   <TreeSelect
@@ -1688,10 +1696,10 @@ export function QuestionManagement({
                               />
                             </div>
 
-                            {/* Typical Questions Chapter Selection */}
+                            {/* Topical Questions Chapter Selection */}
                             <div className="space-y-2">
                               <Label htmlFor="edit-typical-chapter">
-                                Typical Questions
+                                Topical Questions
                                 <span className="ml-2 text-xs text-slate-500">
                                   (可选)
                                 </span>
@@ -1705,7 +1713,8 @@ export function QuestionManagement({
                             </div>
 
                             {/* Selection summary */}
-                            {(editPastPaperChapterId || editTypicalChapterId) && (
+                            {(editPastPaperChapterId ||
+                              editTypicalChapterId) && (
                               <p className="text-xs text-slate-600">
                                 已选择{" "}
                                 {

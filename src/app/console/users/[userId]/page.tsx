@@ -66,7 +66,7 @@ export default async function ConsoleUserDetailPage({
 
   const questionSubjects = normalizedSubjects.filter(
     (subject) =>
-      subject.exam_board?.question_bank === QUESTION_BANK.TYPICAL_QUESTIONS ||
+      subject.exam_board?.question_bank === QUESTION_BANK.TOPICAL_QUESTIONS ||
       subject.exam_board?.question_bank === QUESTION_BANK.PAST_PAPER_QUESTIONS,
   );
   const examPaperSubjects = normalizedSubjects.filter(

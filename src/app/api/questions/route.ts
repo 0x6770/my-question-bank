@@ -22,7 +22,7 @@ export async function GET(request: Request) {
   // Map URL parameter to question bank value, default to "past paper questions"
   let selectedBank: QuestionBank = QUESTION_BANK.PAST_PAPER_QUESTIONS;
   if (bankParam === "typical") {
-    selectedBank = QUESTION_BANK.TYPICAL_QUESTIONS;
+    selectedBank = QUESTION_BANK.TOPICAL_QUESTIONS;
   } else if (bankParam === "exam-paper") {
     selectedBank = QUESTION_BANK.EXAM_PAPER;
   }

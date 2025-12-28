@@ -10,7 +10,7 @@ export default async function Home() {
   const { data: examBoards } = await supabase
     .from("exam_boards")
     .select("id, name, question_bank")
-    .eq("question_bank", QUESTION_BANK.TYPICAL_QUESTIONS)
+    .eq("question_bank", QUESTION_BANK.TOPICAL_QUESTIONS)
     .order("name", { ascending: true });
 
   const { data: subjects } = await supabase
@@ -18,7 +18,7 @@ export default async function Home() {
     .select(
       "id, name, exam_board_id, exam_board:exam_boards(name, question_bank)",
     )
-    .eq("exam_board.question_bank", QUESTION_BANK.TYPICAL_QUESTIONS)
+    .eq("exam_board.question_bank", QUESTION_BANK.TOPICAL_QUESTIONS)
     .order("name", { ascending: true })
     .returns<SubjectWithBoard[]>();
 
@@ -34,7 +34,7 @@ export default async function Home() {
 
   const filteredSubjects = normalizedSubjects.filter(
     (subject) =>
-      subject.exam_board?.question_bank === QUESTION_BANK.TYPICAL_QUESTIONS,
+      subject.exam_board?.question_bank === QUESTION_BANK.TOPICAL_QUESTIONS,
   );
   const allowedSubjectIds = new Set(
     filteredSubjects.map((subject) => subject.id),

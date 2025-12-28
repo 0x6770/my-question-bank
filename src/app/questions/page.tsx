@@ -14,9 +14,9 @@ export default async function Home(props: PageProps) {
   const searchParams = await props.searchParams;
   const supabase = await createClient();
 
-  // Map URL parameter to question bank value, default to "typical questions"
+  // Map URL parameter to question bank value, default to "topical questions"
   const bankParam = searchParams.bank;
-  let selectedBank: QuestionBank = QUESTION_BANK.TYPICAL_QUESTIONS;
+  let selectedBank: QuestionBank = QUESTION_BANK.TOPICAL_QUESTIONS;
 
   if (bankParam === "past-paper") {
     selectedBank = QUESTION_BANK.PAST_PAPER_QUESTIONS;
@@ -58,9 +58,11 @@ export default async function Home(props: PageProps) {
 
   // Map question bank to URL parameter format for API
   const questionBankParam =
-    selectedBank === QUESTION_BANK.PAST_PAPER_QUESTIONS ? "past-paper" :
-    selectedBank === QUESTION_BANK.EXAM_PAPER ? "exam-paper" :
-    "typical";
+    selectedBank === QUESTION_BANK.PAST_PAPER_QUESTIONS
+      ? "past-paper"
+      : selectedBank === QUESTION_BANK.EXAM_PAPER
+        ? "exam-paper"
+        : "typical";
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-12 sm:px-6 lg:px-8">

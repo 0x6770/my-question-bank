@@ -49,36 +49,35 @@ export default async function ConsoleQuestionsPage(props: PageProps) {
   let selectedBank: QuestionBank = QUESTION_BANK.PAST_PAPER_QUESTIONS;
 
   if (bankParam === "typical") {
-    selectedBank = QUESTION_BANK.TYPICAL_QUESTIONS;
+    selectedBank = QUESTION_BANK.TOPICAL_QUESTIONS;
   } else if (bankParam === "exam-paper") {
     selectedBank = QUESTION_BANK.EXAM_PAPER;
   }
 
-  // Get ALL exam boards (for both Past Paper and Typical question banks)
+  // Get ALL exam boards (for both Past Paper and Topical question banks)
   // This allows the form to select chapters from either question bank
   const { data: allExamBoards } = await supabase
     .from("exam_boards")
     .select("id, question_bank")
     .in("question_bank", [
       QUESTION_BANK.PAST_PAPER_QUESTIONS,
-      QUESTION_BANK.TYPICAL_QUESTIONS,
+      QUESTION_BANK.TOPICAL_QUESTIONS,
     ]);
 
   // Get exam boards for the CURRENT selected question bank (for filtering display list)
   const currentBankExamBoards = (allExamBoards ?? []).filter(
     (board) => board.question_bank === selectedBank,
   );
-  const currentBankExamBoardIds = currentBankExamBoards.map((board) => board.id);
+  const currentBankExamBoardIds = currentBankExamBoards.map(
+    (board) => board.id,
+  );
 
   // Get ALL subjects for all exam boards (for form selection)
   const allExamBoardIds = (allExamBoards ?? []).map((board) => board.id);
   const { data: allSubjects } = await supabase
     .from("subjects")
     .select("id, exam_board_id")
-    .in(
-      "exam_board_id",
-      allExamBoardIds.length > 0 ? allExamBoardIds : [-1],
-    );
+    .in("exam_board_id", allExamBoardIds.length > 0 ? allExamBoardIds : [-1]);
 
   // Get subjects for current question bank only (for filtering display list)
   const currentBankSubjects = (allSubjects ?? []).filter((subject) =>
@@ -148,9 +147,23 @@ export default async function ConsoleQuestionsPage(props: PageProps) {
     .limit(PAGE_SIZE + 1);
 
   // Extract unique questions from the joined result
-  const questionMap = new Map();
+  type QuestionRow = {
+    id: number;
+    difficulty: number;
+    calculator: boolean;
+    marks: number;
+    created_at: string;
+    question_images:
+      | { id: number; storage_path: string; position: number }[]
+      | null;
+    answer_images:
+      | { id: number; storage_path: string; position: number }[]
+      | null;
+  };
+
+  const questionMap = new Map<number, QuestionRow>();
   for (const row of questionsData ?? []) {
-    const q = (row as any).questions;
+    const q = (row as unknown as { questions: QuestionRow }).questions;
     if (q && !questionMap.has(q.id)) {
       questionMap.set(q.id, q);
     }
@@ -161,7 +174,7 @@ export default async function ConsoleQuestionsPage(props: PageProps) {
   const chapterMap = new Map((chapters ?? []).map((ch) => [ch.id, ch]));
 
   // Now fetch question_chapters ONLY for the questions we're displaying
-  const questionIds = questions.map((q: any) => q.id);
+  const questionIds = questions.map((q) => q.id);
   const { data: questionChapters, error: qcError } = await supabase
     .from("question_chapters")
     .select("question_id, chapter_id")
@@ -318,7 +331,11 @@ export default async function ConsoleQuestionsPage(props: PageProps) {
           : rawSubject
         : null;
 
-      if (!subjectData || !("exam_board_id" in subjectData) || typeof subjectData.exam_board_id !== "number") {
+      if (
+        !subjectData ||
+        !("exam_board_id" in subjectData) ||
+        typeof subjectData.exam_board_id !== "number"
+      ) {
         return null;
       }
 

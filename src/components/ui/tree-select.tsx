@@ -2,8 +2,8 @@
 
 import { ChevronDown, ChevronRight, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Button } from "./button";
 import { cn } from "@/lib/utils";
+import { Button } from "./button";
 
 export type TreeNode = {
   id: number | string;
@@ -47,7 +47,11 @@ export function TreeSelect({
         return currentPath.join(" > ");
       }
       if (node.children) {
-        const result = getSelectedLabel(node.children, targetValue, currentPath);
+        const result = getSelectedLabel(
+          node.children,
+          targetValue,
+          currentPath,
+        );
         if (result) return result;
       }
     }
@@ -103,9 +107,10 @@ export function TreeSelect({
 
     return (
       <div key={node.id}>
-        <div
+        <button
+          type="button"
           className={cn(
-            "flex items-center gap-1 px-2 py-1.5 text-sm cursor-pointer hover:bg-slate-100 rounded",
+            "flex items-center gap-1 px-2 py-1.5 text-sm cursor-pointer hover:bg-slate-100 rounded w-full text-left",
             isSelected && "bg-slate-100 font-medium",
           )}
           style={{ paddingLeft: `${level * 12 + 8}px` }}
@@ -129,7 +134,7 @@ export function TreeSelect({
             <span className="w-4 flex-shrink-0" />
           )}
           <span className="flex-1 truncate">{node.label}</span>
-        </div>
+        </button>
         {hasChildren && isExpanded && (
           <div>
             {node.children?.map((child) => renderNode(child, level + 1))}
@@ -174,9 +179,7 @@ export function TreeSelect({
         <div className="absolute z-50 mt-1 w-full rounded-md border border-slate-200 bg-white shadow-lg max-h-80 overflow-y-auto">
           <div className="p-1">
             {data.length === 0 ? (
-              <div className="px-3 py-2 text-sm text-slate-500">
-                无可用选项
-              </div>
+              <div className="px-3 py-2 text-sm text-slate-500">无可用选项</div>
             ) : (
               data.map((node) => renderNode(node, 0))
             )}

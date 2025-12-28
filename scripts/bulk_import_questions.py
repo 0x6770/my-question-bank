@@ -1277,7 +1277,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--question-bank",
         type=str,
-        choices=["typical questions", "past paper questions", "exam paper"],
+        choices=["topical questions", "past paper questions", "exam paper"],
         default=None,
         help="题库类型（默认：past paper questions）",
     )

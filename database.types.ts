@@ -561,7 +561,7 @@ export type Database = {
       question_bank:
         | "exam paper"
         | "past paper questions"
-        | "typical questions";
+        | "topical questions";
       user_role: "super_admin" | "admin" | "user";
     };
     CompositeTypes: {
@@ -699,7 +699,7 @@ export const Constants = {
       question_bank: [
         "exam paper",
         "past paper questions",
-        "typical questions",
+        "topical questions",
       ],
       user_role: ["super_admin", "admin", "user"],
     },

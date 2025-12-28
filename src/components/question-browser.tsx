@@ -244,6 +244,7 @@ export function QuestionBrowser({
     difficultySelections,
     hierarchySelection,
     page,
+    questionBank,
   ]);
 
   const currentLabel = useMemo(() => {

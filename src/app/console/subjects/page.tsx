@@ -13,9 +13,9 @@ export default async function ConsoleSubjectsPage(props: PageProps) {
   const searchParams = await props.searchParams;
   const supabase = await createClient();
 
-  // Map URL parameter to question bank value, default to "typical questions"
+  // Map URL parameter to question bank value, default to "topical questions"
   const bankParam = searchParams.bank;
-  let selectedBank: QuestionBank = QUESTION_BANK.TYPICAL_QUESTIONS;
+  let selectedBank: QuestionBank = QUESTION_BANK.TOPICAL_QUESTIONS;
 
   if (bankParam === "past-paper") {
     selectedBank = QUESTION_BANK.PAST_PAPER_QUESTIONS;

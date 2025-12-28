@@ -92,7 +92,7 @@ export function AppNavbarClient({
 
   const questionBankOptions = useMemo(
     () => [
-      { href: "/questions?bank=typical", label: "Typical Questions" },
+      { href: "/questions?bank=typical", label: "Topical Questions" },
       { href: "/questions?bank=past-paper", label: "Past Paper Questions" },
     ],
     [],

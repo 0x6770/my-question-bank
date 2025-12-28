@@ -15,5 +15,5 @@ CREATE TYPE "public"."user_role" AS ENUM (
 CREATE TYPE "public"."question_bank" AS ENUM (
     'exam paper',
     'past paper questions',
-    'typical questions'
+    'topical questions'
 );
