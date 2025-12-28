@@ -1671,7 +1671,7 @@ export function QuestionManagement({
                         {editingQuestionId !== question.id ? (
                           <div className="border-t border-slate-100 bg-slate-50/60">
                             <div className="px-4 py-4">
-                              <QuestionCard question={questionCardData} />
+                              <QuestionCard question={questionCardData} disableInteractions />
                             </div>
                           </div>
                         ) : null}

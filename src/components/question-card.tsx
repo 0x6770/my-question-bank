@@ -37,6 +37,7 @@ type QuestionCardProps = {
     isBookmarked?: boolean;
     isAnswerViewed?: boolean;
   };
+  disableInteractions?: boolean;
 };
 
 const difficultyMeta: Record<
@@ -69,7 +70,7 @@ const difficultyMeta: Record<
   },
 };
 
-export function QuestionCard({ question }: QuestionCardProps) {
+export function QuestionCard({ question, disableInteractions = false }: QuestionCardProps) {
   const supabase = useMemo(() => createClient(), []);
   const [userId, setUserId] = useState<string | null>(null);
   const [bookmarking, setBookmarking] = useState(false);
@@ -257,7 +258,7 @@ export function QuestionCard({ question }: QuestionCardProps) {
                   isBookmarked ? "Remove bookmark" : "Bookmark question"
                 }
                 onClick={toggleBookmark}
-                disabled={bookmarking}
+                disabled={disableInteractions || bookmarking}
               >
                 <Bookmark
                   className={`size-5 ${isBookmarked ? "fill-sky-500 text-sky-600" : ""}`}
@@ -278,7 +279,7 @@ export function QuestionCard({ question }: QuestionCardProps) {
                 variant="outline"
                 className="w-full justify-between gap-3 rounded border-sky-100 bg-sky-50 px-4 py-4 text-slate-800 hover:bg-sky-100"
                 onClick={handleViewAnswer}
-                disabled={viewingAnswer}
+                disabled={disableInteractions || viewingAnswer}
               >
                 <div className="flex items-center gap-3">
                   <FileText className="size-4" />
@@ -288,6 +289,7 @@ export function QuestionCard({ question }: QuestionCardProps) {
               <Button
                 variant="outline"
                 className="w-full justify-between gap-3 rounded border-sky-100 bg-sky-50 px-4 py-4 text-slate-800 hover:bg-sky-100"
+                disabled={disableInteractions}
               >
                 <div className="flex items-center gap-3">
                   <Sparkles className="size-4" />
