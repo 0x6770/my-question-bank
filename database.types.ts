@@ -212,6 +212,75 @@ export type Database = {
           },
         ];
       };
+      generated_paper_questions: {
+        Row: {
+          created_at: string | null;
+          id: number;
+          paper_id: number;
+          position: number;
+          question_id: number;
+        };
+        Insert: {
+          created_at?: string | null;
+          id?: number;
+          paper_id: number;
+          position: number;
+          question_id: number;
+        };
+        Update: {
+          created_at?: string | null;
+          id?: number;
+          paper_id?: number;
+          position?: number;
+          question_id?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "generated_paper_questions_paper_id_fkey";
+            columns: ["paper_id"];
+            isOneToOne: false;
+            referencedRelation: "generated_papers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "generated_paper_questions_question_id_fkey";
+            columns: ["question_id"];
+            isOneToOne: false;
+            referencedRelation: "questions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      generated_papers: {
+        Row: {
+          created_at: string | null;
+          id: number;
+          question_bank: string;
+          show_answers: boolean | null;
+          title: string;
+          updated_at: string | null;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string | null;
+          id?: number;
+          question_bank: string;
+          show_answers?: boolean | null;
+          title?: string;
+          updated_at?: string | null;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string | null;
+          id?: number;
+          question_bank?: string;
+          show_answers?: boolean | null;
+          title?: string;
+          updated_at?: string | null;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       profiles: {
         Row: {
           created_at: string;
@@ -452,6 +521,27 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      user_paper_quotas: {
+        Row: {
+          papers_generated: number;
+          quota_reset_at: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          papers_generated?: number;
+          quota_reset_at?: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          papers_generated?: number;
+          quota_reset_at?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
       };
       user_questions: {
         Row: {

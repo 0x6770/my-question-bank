@@ -102,6 +102,7 @@ export function AppNavbarClient({
     () => [
       { href: "/account", label: "Account" },
       { href: "/papers", label: "Exam Paper" },
+      { href: "/paper-builder", label: "Paper Builder" },
     ],
     [],
   );
