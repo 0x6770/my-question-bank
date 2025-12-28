@@ -164,7 +164,7 @@ export function SubjectManagement({
     initialExamBoards[0]?.id ?? null,
   );
   const [openSubjectId, setOpenSubjectId] = useState<number | null>(null);
-  const [boardQuery, setBoardQuery] = useState("");
+  const [subjectChapterQuery, setSubjectChapterQuery] = useState("");
   const [modalState, setModalState] = useState<ModalState | null>(null);
   const [modalName, setModalName] = useState("");
   const [modalBusy, setModalBusy] = useState(false);
@@ -239,16 +239,62 @@ export function SubjectManagement({
     }
   }, [loadError, pushToast]);
 
-  const filteredBoards = sortedExamBoards.filter((board) =>
-    board.name.toLowerCase().includes(boardQuery.toLowerCase()),
-  );
-
   const selectedBoard =
     selectedBoardId == null
       ? null
-      : (filteredBoards.find((board) => board.id === selectedBoardId) ??
-        sortedExamBoards.find((board) => board.id === selectedBoardId) ??
-        null);
+      : sortedExamBoards.find((board) => board.id === selectedBoardId) ?? null;
+
+  // Filter subjects and chapters by search query
+  const filteredChapters = useMemo(() => {
+    if (!subjectChapterQuery.trim()) return chapters;
+    const query = subjectChapterQuery.toLowerCase();
+    return chapters.filter((chapter) =>
+      chapter.name.toLowerCase().includes(query),
+    );
+  }, [chapters, subjectChapterQuery]);
+
+  const filteredSubjects = useMemo(() => {
+    if (!selectedBoard) return [];
+    const boardSubjects = subjectsByBoard.get(selectedBoard.id) ?? [];
+    if (!subjectChapterQuery.trim()) return boardSubjects;
+    const query = subjectChapterQuery.toLowerCase();
+
+    // Find subjects that either:
+    // 1. Have a matching name, OR
+    // 2. Have at least one matching chapter
+    const subjectsWithMatchingChapters = new Set(
+      filteredChapters.map((ch) => ch.subject_id)
+    );
+
+    return boardSubjects.filter((subject) =>
+      subject.name.toLowerCase().includes(query) ||
+      subjectsWithMatchingChapters.has(subject.id)
+    );
+  }, [selectedBoard, subjectsByBoard, subjectChapterQuery, filteredChapters]);
+
+  const filteredRootChaptersBySubject = useMemo(() => {
+    const map = new Map<number, ChapterRow[]>();
+    for (const chapter of filteredChapters) {
+      if (chapter.parent_chapter_id != null) continue;
+      if (!map.has(chapter.subject_id)) map.set(chapter.subject_id, []);
+      map.get(chapter.subject_id)?.push(chapter);
+    }
+    for (const list of map.values()) list.sort(compareChapters);
+    return map;
+  }, [filteredChapters]);
+
+  const filteredChapterChildrenMap = useMemo(() => {
+    const map = new Map<number, ChapterRow[]>();
+    for (const chapter of filteredChapters) {
+      if (chapter.parent_chapter_id == null) continue;
+      if (!map.has(chapter.parent_chapter_id)) {
+        map.set(chapter.parent_chapter_id, []);
+      }
+      map.get(chapter.parent_chapter_id)?.push(chapter);
+    }
+    for (const list of map.values()) list.sort(compareChapters);
+    return map;
+  }, [filteredChapters]);
 
   const openCreateBoard = () => {
     setModalState({ type: "createBoard" });
@@ -614,7 +660,7 @@ export function SubjectManagement({
         )}
       >
         {chaptersList.map((chapter, index) => {
-          const children = chapterChildrenMap.get(chapter.id) ?? [];
+          const children = filteredChapterChildrenMap.get(chapter.id) ?? [];
           const isBusy = busyChapterId === chapter.id;
           const orderLabel = `${index + 1}.`;
           return (
@@ -762,22 +808,13 @@ export function SubjectManagement({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="board-search">Search</Label>
-              <Input
-                id="board-search"
-                placeholder="Enter keywords..."
-                value={boardQuery}
-                onChange={(event) => setBoardQuery(event.target.value)}
-              />
-            </div>
-            {filteredBoards.length === 0 ? (
+            {sortedExamBoards.length === 0 ? (
               <div className="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
-                No matching exam boards.
+                No exam boards found.
               </div>
             ) : (
               <ul className="space-y-2">
-                {filteredBoards.map((board) => {
+                {sortedExamBoards.map((board) => {
                   const boardSubjects = subjectsByBoard.get(board.id) ?? [];
                   const isSelected = selectedBoardId === board.id;
                   const isBusy = busyExamBoardId === board.id;
@@ -878,6 +915,17 @@ export function SubjectManagement({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {selectedBoard != null ? (
+              <div className="space-y-2">
+                <Label htmlFor="subject-chapter-search">Search</Label>
+                <Input
+                  id="subject-chapter-search"
+                  placeholder="Search subjects or chapters..."
+                  value={subjectChapterQuery}
+                  onChange={(event) => setSubjectChapterQuery(event.target.value)}
+                />
+              </div>
+            ) : null}
             {selectedBoard == null ? (
               <div className="rounded-lg border border-dashed border-slate-200 px-6 py-10 text-center text-sm text-slate-500">
                 Please select an exam board on the left.
@@ -890,8 +938,8 @@ export function SubjectManagement({
                       {selectedBoard.name}
                     </p>
                     <p className="text-xs text-slate-500">
-                      {subjectsByBoard.get(selectedBoard.id)?.length ?? 0}{" "}
-                      subjects
+                      {filteredSubjects.length}{" "}
+                      {subjectChapterQuery.trim() ? "matching" : ""} subjects
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -907,20 +955,21 @@ export function SubjectManagement({
                   </div>
                 </div>
 
-                {(subjectsByBoard.get(selectedBoard.id) ?? []).length === 0 ? (
+                {filteredSubjects.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-slate-200 px-6 py-10 text-center text-sm text-slate-500">
-                    No subjects yet. Click "New Subject" to start.
+                    {subjectChapterQuery.trim()
+                      ? "No matching subjects or chapters found."
+                      : "No subjects yet. Click \"New Subject\" to start."}
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {(subjectsByBoard.get(selectedBoard.id) ?? []).map(
-                      (subject) => {
-                        const roots =
-                          rootChaptersBySubject.get(subject.id) ?? [];
-                        const totalChapters =
-                          chapters.filter(
-                            (chapter) => chapter.subject_id === subject.id,
-                          ).length ?? 0;
+                    {filteredSubjects.map((subject) => {
+                      const roots =
+                        filteredRootChaptersBySubject.get(subject.id) ?? [];
+                      const totalChapters =
+                        filteredChapters.filter(
+                          (chapter) => chapter.subject_id === subject.id,
+                        ).length ?? 0;
                         const isOpen = openSubjectId === subject.id;
                         const isBusy = busySubjectId === subject.id;
                         const toggleSubject = () =>

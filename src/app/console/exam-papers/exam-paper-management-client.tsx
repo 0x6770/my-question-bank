@@ -28,6 +28,13 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Tables } from "../../../../database.types";
@@ -695,25 +702,27 @@ export function ExamPaperManagement({
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="create-subject">Subject *</Label>
-                <select
-                  id="create-subject"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none"
+                <Select
                   value={createState.subjectId}
-                  onChange={(event) => {
+                  onValueChange={(value) => {
                     setCreateState((prev) => ({
                       ...prev,
-                      subjectId: event.target.value,
+                      subjectId: value,
                     }));
                     setCreateTagSelections({});
                   }}
                 >
-                  <option value="">Select a subject</option>
-                  {subjectOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger id="create-subject">
+                    <SelectValue placeholder="Select a subject" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {subjectOptions.map((option) => (
+                      <SelectItem key={option.id} value={option.id.toString()}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -729,23 +738,26 @@ export function ExamPaperManagement({
                       {tag.name}
                       {tag.required ? " *" : ""}
                     </Label>
-                    <select
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none"
-                      value={createTagSelections[tag.id] ?? ""}
-                      onChange={(event) =>
+                    <Select
+                      value={createTagSelections[tag.id]?.toString()}
+                      onValueChange={(value) =>
                         setCreateTagSelections((prev) => ({
                           ...prev,
-                          [tag.id]: event.target.value,
+                          [tag.id]: value,
                         }))
                       }
                     >
-                      <option value="">Select a value</option>
-                      {(tag.values ?? []).map((value) => (
-                        <option key={value.id} value={value.id}>
-                          {value.value}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a value" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(tag.values ?? []).map((value) => (
+                          <SelectItem key={value.id} value={value.id.toString()}>
+                            {value.value}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 ))}
               </div>
@@ -999,23 +1011,26 @@ export function ExamPaperManagement({
                       {tag.name}
                       {tag.required ? " *" : ""}
                     </Label>
-                    <select
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none"
-                      value={editTagSelections[tag.id] ?? ""}
-                      onChange={(event) =>
+                    <Select
+                      value={editTagSelections[tag.id]?.toString()}
+                      onValueChange={(value) =>
                         setEditTagSelections((prev) => ({
                           ...prev,
-                          [tag.id]: event.target.value,
+                          [tag.id]: value,
                         }))
                       }
                     >
-                      <option value="">Select a value</option>
-                      {(tag.values ?? []).map((value) => (
-                        <option key={value.id} value={value.id}>
-                          {value.value}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a value" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(tag.values ?? []).map((value) => (
+                          <SelectItem key={value.id} value={value.id.toString()}>
+                            {value.value}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 ))}
               </div>

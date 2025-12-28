@@ -5,6 +5,13 @@ import { useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Card,
   CardAction,
   CardContent,
@@ -339,25 +346,27 @@ export function TagManagement({ initialTags, loadError }: TagManagementProps) {
                 Parent Tag{" "}
                 <span className="text-muted-foreground">(Optional)</span>
               </Label>
-              <select
-                id="parent-tag"
-                className="border-input h-9 w-full rounded-md border bg-white px-3 text-sm shadow-xs outline-none transition focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+              <Select
                 value={formParentId}
-                onChange={(event) => {
-                  setFormParentId(event.target.value);
+                onValueChange={(value) => {
+                  setFormParentId(value);
                   if (formFeedback) {
                     setFormFeedback(null);
                   }
                 }}
                 disabled={isSubmitting}
               >
-                <option value="">None (Root Level)</option>
-                {parentOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger id="parent-tag">
+                  <SelectValue placeholder="None (Root Level)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {parentOptions.map((option) => (
+                    <SelectItem key={option.id} value={option.id.toString()}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </CardContent>
           <CardFooter className="border-t justify-end gap-3">

@@ -25,6 +25,13 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type TreeNode, TreeSelect } from "@/components/ui/tree-select";
 import { QUESTION_BANK, type QuestionBank } from "@/lib/question-bank";
@@ -1381,17 +1388,20 @@ export function QuestionManagement({
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="question-difficulty">Difficulty</Label>
-                    <select
-                      id="question-difficulty"
+                    <Select
                       value={difficulty}
-                      onChange={(event) => setDifficulty(event.target.value)}
-                      className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200"
+                      onValueChange={setDifficulty}
                     >
-                      <option value="1">Easy (1)</option>
-                      <option value="2">Medium (2)</option>
-                      <option value="3">Hard (3)</option>
-                      <option value="4">Challenge (4)</option>
-                    </select>
+                      <SelectTrigger id="question-difficulty">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">Easy (1)</SelectItem>
+                        <SelectItem value="2">Medium (2)</SelectItem>
+                        <SelectItem value="3">Hard (3)</SelectItem>
+                        <SelectItem value="4">Challenge (4)</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <div className="space-y-4">
@@ -1745,19 +1755,20 @@ export function QuestionManagement({
                                 <Label htmlFor="edit-difficulty">
                                   Difficulty
                                 </Label>
-                                <select
-                                  id="edit-difficulty"
+                                <Select
                                   value={editDifficulty}
-                                  onChange={(event) =>
-                                    setEditDifficulty(event.target.value)
-                                  }
-                                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200"
+                                  onValueChange={setEditDifficulty}
                                 >
-                                  <option value="1">Easy (1)</option>
-                                  <option value="2">Medium (2)</option>
-                                  <option value="3">Hard (3)</option>
-                                  <option value="4">Challenge (4)</option>
-                                </select>
+                                  <SelectTrigger id="edit-difficulty">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="1">Easy (1)</SelectItem>
+                                    <SelectItem value="2">Medium (2)</SelectItem>
+                                    <SelectItem value="3">Hard (3)</SelectItem>
+                                    <SelectItem value="4">Challenge (4)</SelectItem>
+                                  </SelectContent>
+                                </Select>
                               </div>
                               <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
                                 <input

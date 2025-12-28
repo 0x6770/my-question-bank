@@ -6,6 +6,13 @@ import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -323,22 +330,24 @@ export function ExamPaperTagManagement({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
             <div className="space-y-2 sm:w-80">
               <Label htmlFor="subject-select">Subject</Label>
-              <select
-                id="subject-select"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none"
+              <Select
                 value={selectedSubjectId}
-                onChange={(event) => {
-                  setSelectedSubjectId(event.target.value);
+                onValueChange={(value) => {
+                  setSelectedSubjectId(value);
                   resetMessage();
                 }}
               >
-                <option value="">Select Subject</option>
-                {subjectOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger id="subject-select">
+                  <SelectValue placeholder="Select Subject" />
+                </SelectTrigger>
+                <SelectContent>
+                  {subjectOptions.map((option) => (
+                    <SelectItem key={option.id} value={option.id.toString()}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </CardContent>
