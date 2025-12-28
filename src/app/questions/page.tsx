@@ -56,6 +56,12 @@ export default async function Home(props: PageProps) {
     filteredSubjects.map((subject) => subject.id),
   );
 
+  // Map question bank to URL parameter format for API
+  const questionBankParam =
+    selectedBank === QUESTION_BANK.PAST_PAPER_QUESTIONS ? "past-paper" :
+    selectedBank === QUESTION_BANK.EXAM_PAPER ? "exam-paper" :
+    "typical";
+
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-12 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -76,6 +82,7 @@ export default async function Home(props: PageProps) {
                 parentChapterId: chapter.parent_chapter_id ?? null,
               })) ?? []
           }
+          questionBank={questionBankParam}
         />
       </div>
       <BackToTopButton />

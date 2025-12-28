@@ -15,6 +15,7 @@ type QuestionBrowserProps = {
     subjectId: number | null;
     parentChapterId: number | null;
   }[];
+  questionBank: string; // "typical" | "past-paper" | "exam-paper"
 };
 
 type QuestionResult = {
@@ -54,6 +55,7 @@ export function QuestionBrowser({
   examBoards,
   subjects,
   chapters,
+  questionBank,
 }: QuestionBrowserProps) {
   const [hierarchySelection, setHierarchySelection] = useState<string>("all");
   const [difficultySelections, setDifficultySelections] = useState<Set<number>>(
@@ -211,6 +213,7 @@ export function QuestionBrowser({
         if (bookmarkFilter === "bookmarked") {
           params.set("bookmark", "bookmarked");
         }
+        params.set("bank", questionBank);
         const response = await fetch(`/api/questions?${params.toString()}`, {
           signal: controller.signal,
         });
@@ -347,15 +350,9 @@ export function QuestionBrowser({
                           type="button"
                           onMouseEnter={() => {
                             setActiveExamBoardId(exam.id);
-                            setActiveSubjectId(null);
-                            setActiveParentChapterId(null);
-                            setHierarchySelection("all");
                           }}
                           onFocus={() => {
                             setActiveExamBoardId(exam.id);
-                            setActiveSubjectId(null);
-                            setActiveParentChapterId(null);
-                            setHierarchySelection("all");
                           }}
                           className={`flex w-full items-start gap-3 px-3 py-2 text-left text-sm font-semibold ${activeExamBoardId === exam.id ? "bg-slate-50 text-slate-900" : "text-slate-700 hover:bg-slate-50"}`}
                         >
