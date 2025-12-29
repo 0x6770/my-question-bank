@@ -790,6 +790,7 @@ export function SubjectManagement({
             <TabsList>
               <TabsTrigger value="past-paper">Past Paper Questions</TabsTrigger>
               <TabsTrigger value="typical">Topical Questions</TabsTrigger>
+              <TabsTrigger value="exam-paper">Exam Paper</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
