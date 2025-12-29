@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "../../../../database.types";
@@ -36,6 +37,39 @@ type Paper = {
 type PageProps = {
   params: Promise<{ id: string }>;
 };
+
+export async function generateMetadata(props: PageProps): Promise<Metadata> {
+  const supabase = await createClient();
+  const params = await props.params;
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return {};
+  }
+
+  const paperId = Number.parseInt(params.id, 10);
+
+  if (!Number.isFinite(paperId)) {
+    return {};
+  }
+
+  const { data: paperData } = await supabase
+    .from("generated_papers")
+    .select("title")
+    .eq("id", paperId)
+    .single();
+
+  if (!paperData?.title) {
+    return {};
+  }
+
+  return {
+    title: paperData.title,
+  };
+}
 
 export default async function PaperViewPage(props: PageProps) {
   const supabase = await createClient();
@@ -133,7 +167,10 @@ export default async function PaperViewPage(props: PageProps) {
 
     // Create a map of question ID to question data
     const questionMap = new Map(
-      (questionsData ?? []).map((q) => [(q as QuestionRow).id, q as QuestionRow]),
+      (questionsData ?? []).map((q) => [
+        (q as QuestionRow).id,
+        q as QuestionRow,
+      ]),
     );
 
     const questionImagePaths = new Set<string>();

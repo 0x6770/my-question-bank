@@ -50,9 +50,7 @@ export default async function PaperBuilderPage() {
     .order("position", { ascending: true });
 
   // Build subject map for lookups
-  const subjectMap = new Map(
-    (subjects ?? []).map((s) => [s.id, s]),
-  );
+  const subjectMap = new Map((subjects ?? []).map((s) => [s.id, s]));
 
   // Attach subject info to chapters
   const chapters: ChapterRow[] = (rawChapters ?? []).map((ch) => ({

@@ -70,7 +70,10 @@ const difficultyMeta: Record<
   },
 };
 
-export function QuestionCard({ question, disableInteractions = false }: QuestionCardProps) {
+export function QuestionCard({
+  question,
+  disableInteractions = false,
+}: QuestionCardProps) {
   const supabase = useMemo(() => createClient(), []);
   const [userId, setUserId] = useState<string | null>(null);
   const [bookmarking, setBookmarking] = useState(false);

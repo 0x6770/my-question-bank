@@ -122,7 +122,7 @@ export function AppNavbarClient({
     isQuestionsPage && pathname?.includes("bank=past-paper");
 
   return (
-    <header className="sticky top-0 z-50 border-b bg-background px-4 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-50 border-b bg-background px-4 sm:px-6 lg:px-8 print:hidden">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 py-3">
         <nav className="flex items-center gap-4 text-sm font-semibold text-slate-700">
           {otherNavItems.map((item) => {

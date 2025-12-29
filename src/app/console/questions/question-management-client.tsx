@@ -1388,10 +1388,7 @@ export function QuestionManagement({
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="question-difficulty">Difficulty</Label>
-                    <Select
-                      value={difficulty}
-                      onValueChange={setDifficulty}
-                    >
+                    <Select value={difficulty} onValueChange={setDifficulty}>
                       <SelectTrigger id="question-difficulty">
                         <SelectValue />
                       </SelectTrigger>
@@ -1681,7 +1678,10 @@ export function QuestionManagement({
                         {editingQuestionId !== question.id ? (
                           <div className="border-t border-slate-100 bg-slate-50/60">
                             <div className="px-4 py-4">
-                              <QuestionCard question={questionCardData} disableInteractions />
+                              <QuestionCard
+                                question={questionCardData}
+                                disableInteractions
+                              />
                             </div>
                           </div>
                         ) : null}
@@ -1764,9 +1764,13 @@ export function QuestionManagement({
                                   </SelectTrigger>
                                   <SelectContent>
                                     <SelectItem value="1">Easy (1)</SelectItem>
-                                    <SelectItem value="2">Medium (2)</SelectItem>
+                                    <SelectItem value="2">
+                                      Medium (2)
+                                    </SelectItem>
                                     <SelectItem value="3">Hard (3)</SelectItem>
-                                    <SelectItem value="4">Challenge (4)</SelectItem>
+                                    <SelectItem value="4">
+                                      Challenge (4)
+                                    </SelectItem>
                                   </SelectContent>
                                 </Select>
                               </div>

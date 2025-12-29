@@ -100,24 +100,25 @@ export function PaperViewClient({ paper }: PaperViewClientProps) {
 
       {/* Paper Content - Printable */}
       <div ref={printRef} className="container mx-auto px-6 py-8 max-w-4xl">
-        {/* Paper Header */}
-        <div className="mb-8 pb-6 border-b-2 border-gray-300">
-          <h1 className="text-3xl font-bold mb-2">{paper.title}</h1>
-          <div className="text-sm text-gray-600 space-y-1">
-            <p>Question Bank: {paper.question_bank}</p>
-            <p>Total Questions: {paper.questions.length}</p>
-            <p>
-              Total Marks:{" "}
-              {paper.questions.reduce((sum, q) => sum + q.marks, 0)}
-            </p>
-            <p>
-              Created:{" "}
-              {new Date(paper.created_at).toLocaleDateString("en-US", {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
-            </p>
+        {/* Cover Page */}
+        <div className="cover-page flex min-h-[60vh] flex-col justify-center">
+          <div className="mb-8 pb-6 border-b-2 border-gray-300">
+            <h1 className="text-3xl font-bold mb-2">{paper.title}</h1>
+            <div className="text-sm text-gray-600 space-y-1">
+              <p>Total Questions: {paper.questions.length}</p>
+              <p>
+                Total Marks:{" "}
+                {paper.questions.reduce((sum, q) => sum + q.marks, 0)}
+              </p>
+              <p>
+                Created:{" "}
+                {new Date(paper.created_at).toLocaleDateString("en-US", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -136,7 +137,8 @@ export function PaperViewClient({ paper }: PaperViewClientProps) {
                   </span>
                 </div>
                 <div className="text-xs text-gray-500 print:hidden">
-                  Difficulty: {question.difficulty} | {question.calculator ? "Calculator" : "No Calculator"}
+                  Difficulty: {question.difficulty} |{" "}
+                  {question.calculator ? "Calculator" : "No Calculator"}
                 </div>
               </div>
 
@@ -194,6 +196,12 @@ export function PaperViewClient({ paper }: PaperViewClientProps) {
           body {
             margin: 0;
             padding: 0;
+          }
+
+          .cover-page {
+            min-height: auto;
+            page-break-after: always;
+            break-after: page;
           }
 
           .page-break-inside-avoid {

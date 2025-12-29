@@ -242,7 +242,8 @@ export function SubjectManagement({
   const selectedBoard =
     selectedBoardId == null
       ? null
-      : sortedExamBoards.find((board) => board.id === selectedBoardId) ?? null;
+      : (sortedExamBoards.find((board) => board.id === selectedBoardId) ??
+        null);
 
   // Filter subjects and chapters by search query
   const filteredChapters = useMemo(() => {
@@ -263,12 +264,13 @@ export function SubjectManagement({
     // 1. Have a matching name, OR
     // 2. Have at least one matching chapter
     const subjectsWithMatchingChapters = new Set(
-      filteredChapters.map((ch) => ch.subject_id)
+      filteredChapters.map((ch) => ch.subject_id),
     );
 
-    return boardSubjects.filter((subject) =>
-      subject.name.toLowerCase().includes(query) ||
-      subjectsWithMatchingChapters.has(subject.id)
+    return boardSubjects.filter(
+      (subject) =>
+        subject.name.toLowerCase().includes(query) ||
+        subjectsWithMatchingChapters.has(subject.id),
     );
   }, [selectedBoard, subjectsByBoard, subjectChapterQuery, filteredChapters]);
 
@@ -922,7 +924,9 @@ export function SubjectManagement({
                   id="subject-chapter-search"
                   placeholder="Search subjects or chapters..."
                   value={subjectChapterQuery}
-                  onChange={(event) => setSubjectChapterQuery(event.target.value)}
+                  onChange={(event) =>
+                    setSubjectChapterQuery(event.target.value)
+                  }
                 />
               </div>
             ) : null}
@@ -959,7 +963,7 @@ export function SubjectManagement({
                   <div className="rounded-lg border border-dashed border-slate-200 px-6 py-10 text-center text-sm text-slate-500">
                     {subjectChapterQuery.trim()
                       ? "No matching subjects or chapters found."
-                      : "No subjects yet. Click \"New Subject\" to start."}
+                      : 'No subjects yet. Click "New Subject" to start.'}
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -970,93 +974,87 @@ export function SubjectManagement({
                         filteredChapters.filter(
                           (chapter) => chapter.subject_id === subject.id,
                         ).length ?? 0;
-                        const isOpen = openSubjectId === subject.id;
-                        const isBusy = busySubjectId === subject.id;
-                        const toggleSubject = () =>
-                          setOpenSubjectId(isOpen ? null : subject.id);
-                        return (
-                          <div
-                            key={subject.id}
-                            className="rounded-xl border border-slate-200 bg-white shadow-sm"
-                          >
-                            <div className="flex items-center justify-between gap-2 px-4 py-3">
-                              <button
+                      const isOpen = openSubjectId === subject.id;
+                      const isBusy = busySubjectId === subject.id;
+                      const toggleSubject = () =>
+                        setOpenSubjectId(isOpen ? null : subject.id);
+                      return (
+                        <div
+                          key={subject.id}
+                          className="rounded-xl border border-slate-200 bg-white shadow-sm"
+                        >
+                          <div className="flex items-center justify-between gap-2 px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={toggleSubject}
+                              className="flex flex-1 items-center gap-3 text-left"
+                            >
+                              {isOpen ? (
+                                <ChevronDown className="size-4 text-slate-500" />
+                              ) : (
+                                <ChevronRight className="size-4 text-slate-500" />
+                              )}
+                              <div>
+                                <p className="text-sm font-semibold text-slate-800">
+                                  {subject.name}
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                  {totalChapters} chapters
+                                </p>
+                              </div>
+                            </button>
+                            <div className="flex items-center gap-1.5">
+                              <Button
                                 type="button"
-                                onClick={toggleSubject}
-                                className="flex flex-1 items-center gap-3 text-left"
+                                size="icon-sm"
+                                variant="ghost"
+                                onClick={() => openCreateChapter(subject, null)}
                               >
-                                {isOpen ? (
-                                  <ChevronDown className="size-4 text-slate-500" />
+                                <Plus className="size-4" aria-hidden="true" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="ghost"
+                                onClick={() => openEditSubject(subject)}
+                                disabled={isBusy}
+                                className="text-slate-600 hover:text-slate-900"
+                              >
+                                <Pencil className="size-4" aria-hidden="true" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="ghost"
+                                onClick={() => handleDeleteSubject(subject)}
+                                disabled={isBusy}
+                                className="text-red-500 hover:text-red-600"
+                              >
+                                {isBusy ? (
+                                  <Loader2 className="size-4 animate-spin" />
                                 ) : (
-                                  <ChevronRight className="size-4 text-slate-500" />
-                                )}
-                                <div>
-                                  <p className="text-sm font-semibold text-slate-800">
-                                    {subject.name}
-                                  </p>
-                                  <p className="text-xs text-slate-500">
-                                    {totalChapters} chapters
-                                  </p>
-                                </div>
-                              </button>
-                              <div className="flex items-center gap-1.5">
-                                <Button
-                                  type="button"
-                                  size="icon-sm"
-                                  variant="ghost"
-                                  onClick={() =>
-                                    openCreateChapter(subject, null)
-                                  }
-                                >
-                                  <Plus className="size-4" aria-hidden="true" />
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="icon-sm"
-                                  variant="ghost"
-                                  onClick={() => openEditSubject(subject)}
-                                  disabled={isBusy}
-                                  className="text-slate-600 hover:text-slate-900"
-                                >
-                                  <Pencil
+                                  <Trash2
                                     className="size-4"
                                     aria-hidden="true"
                                   />
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="icon-sm"
-                                  variant="ghost"
-                                  onClick={() => handleDeleteSubject(subject)}
-                                  disabled={isBusy}
-                                  className="text-red-500 hover:text-red-600"
-                                >
-                                  {isBusy ? (
-                                    <Loader2 className="size-4 animate-spin" />
-                                  ) : (
-                                    <Trash2
-                                      className="size-4"
-                                      aria-hidden="true"
-                                    />
-                                  )}
-                                </Button>
-                              </div>
-                            </div>
-                            {isOpen ? (
-                              <div className="border-t border-slate-100 bg-slate-50 px-4 py-4">
-                                {roots.length === 0 ? (
-                                  <div className="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
-                                    No chapters yet. Click the + above to add.
-                                  </div>
-                                ) : (
-                                  renderChapterTree(roots, subject)
                                 )}
-                              </div>
-                            ) : null}
+                              </Button>
+                            </div>
                           </div>
-                        );
-                      },
-                    )}
+                          {isOpen ? (
+                            <div className="border-t border-slate-100 bg-slate-50 px-4 py-4">
+                              {roots.length === 0 ? (
+                                <div className="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
+                                  No chapters yet. Click the + above to add.
+                                </div>
+                              ) : (
+                                renderChapterTree(roots, subject)
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </>

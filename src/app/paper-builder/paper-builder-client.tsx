@@ -286,9 +286,7 @@ export function PaperBuilderClient({
           {/* Left Column: Question Selection */}
           <div className="space-y-6">
             <div className="bg-white shadow rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">
-                Question Selection
-              </h2>
+              <h2 className="text-xl font-semibold mb-4">Question Selection</h2>
 
               <div className="space-y-4">
                 {/* Subject Selection */}

@@ -25,7 +25,9 @@ export async function GET(request: Request) {
 
   const subjectId = Number.parseInt(subjectIdParam, 10);
   const chapterId = chapterIdParam ? Number.parseInt(chapterIdParam, 10) : null;
-  const difficulty = difficultyParam ? Number.parseInt(difficultyParam, 10) : null;
+  const difficulty = difficultyParam
+    ? Number.parseInt(difficultyParam, 10)
+    : null;
   const count = countParam ? Number.parseInt(countParam, 10) : 10;
 
   // Validate count (1-30 for MVP)

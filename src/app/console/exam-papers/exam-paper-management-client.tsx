@@ -752,7 +752,10 @@ export function ExamPaperManagement({
                       </SelectTrigger>
                       <SelectContent>
                         {(tag.values ?? []).map((value) => (
-                          <SelectItem key={value.id} value={value.id.toString()}>
+                          <SelectItem
+                            key={value.id}
+                            value={value.id.toString()}
+                          >
                             {value.value}
                           </SelectItem>
                         ))}
@@ -1025,7 +1028,10 @@ export function ExamPaperManagement({
                       </SelectTrigger>
                       <SelectContent>
                         {(tag.values ?? []).map((value) => (
-                          <SelectItem key={value.id} value={value.id.toString()}>
+                          <SelectItem
+                            key={value.id}
+                            value={value.id.toString()}
+                          >
                             {value.value}
                           </SelectItem>
                         ))}
