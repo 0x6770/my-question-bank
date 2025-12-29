@@ -1,18 +1,12 @@
 "use client";
 
-import { ChevronDown, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { LogoutButton } from "@/components/logout-button";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Tables } from "../../database.types";
@@ -90,42 +84,22 @@ export function AppNavbarClient({
 
   const roleMeta = adminRole ? roleLabelMap[adminRole] : null;
 
-  const questionBankOptions = useMemo(
-    () => [
-      { href: "/questions?bank=typical", label: "Topical Questions" },
-      { href: "/questions?bank=past-paper", label: "Past Paper Questions" },
-    ],
-    [],
-  );
-
-  const otherNavItems = useMemo(
+  const navItems = useMemo(
     () => [
       { href: "/account", label: "Account" },
+      { href: "/questions?bank=typical", label: "Checkpoint" },
       { href: "/papers", label: "Exam Paper" },
-      { href: "/paper-builder", label: "Paper Builder" },
+      { href: "/questions", label: "Questionbank" },
+      { href: "/paper-builder", label: "Worksheet Builder" },
     ],
     [],
   );
-
-  const isQuestionsPage =
-    pathname === "/questions" ||
-    pathname === "/" ||
-    pathname?.startsWith("/?") ||
-    pathname?.startsWith("/questions?");
-
-  const isTypicalQuestions =
-    isQuestionsPage &&
-    (pathname?.includes("bank=typical") ||
-      (!pathname?.includes("bank=") && !pathname?.includes("?")));
-
-  const isPastPaperQuestions =
-    isQuestionsPage && pathname?.includes("bank=past-paper");
 
   return (
     <header className="sticky top-0 z-50 border-b bg-background px-4 sm:px-6 lg:px-8 print:hidden">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 py-3">
         <nav className="flex items-center gap-4 text-sm font-semibold text-slate-700">
-          {otherNavItems.map((item) => {
+          {navItems.map((item) => {
             const isActive =
               pathname === item.href || pathname?.startsWith(`${item.href}?`);
             return (
@@ -144,41 +118,6 @@ export function AppNavbarClient({
               </Link>
             );
           })}
-
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              className={cn(
-                "flex items-center gap-1 rounded-md px-2 py-1 transition",
-                "hover:text-slate-900 hover:underline hover:underline-offset-4",
-                isQuestionsPage
-                  ? "text-slate-900 underline underline-offset-4"
-                  : "text-slate-700",
-              )}
-            >
-              Question Bank
-              <ChevronDown className="size-3.5" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              {questionBankOptions.map((option) => (
-                <DropdownMenuItem key={option.href} asChild>
-                  <Link
-                    href={option.href}
-                    className={cn(
-                      "cursor-pointer",
-                      option.href.includes("bank=typical") && isTypicalQuestions
-                        ? "font-semibold"
-                        : option.href.includes("bank=past-paper") &&
-                            isPastPaperQuestions
-                          ? "font-semibold"
-                          : "",
-                    )}
-                  >
-                    {option.label}
-                  </Link>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
         </nav>
 
         <div className="flex items-center gap-3">
