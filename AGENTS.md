@@ -22,6 +22,7 @@
 
 ## 代码与风格
 - **技术栈**：Next.js App Router，Supabase 客户端（server/client 分离），Tailwind 风格类名。格式化/lint 使用 `biome`。
+- **包管理器**：使用 `yarn` 管理依赖（非 npm），所有命令应使用 `yarn` 而非 `npm`。
 - **UI 风格**：圆角、浅色底、淡边框、柔和蓝/灰主色；按钮 hover 轻量阴影，标签/胶囊式切换控件。
 
 ## 开发与验证
