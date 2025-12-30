@@ -121,7 +121,7 @@ def ensure_exam_board(client: Client, name: str, dry_run: bool) -> Optional[int]
     logger.info("[dry-run] 创建 exam_board: %s", name)
     return None
   payload = {"name": name, "question_bank": QUESTION_BANK_EXAM_PAPERS}
-  resp = client.table("exam_boards").upsert(payload, on_conflict="name").execute()
+  resp = client.table("exam_boards").upsert(payload, on_conflict="name,question_bank").execute()
   data = resp.data or []
   return data[0]["id"] if data else None
 
