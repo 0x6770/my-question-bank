@@ -47,3 +47,6 @@ images/*
 
 **/skipped_exam_papers.json
 **/data/conversion_errors.json
+
+# supabase
+supabase/.temp/
