@@ -685,7 +685,7 @@ export function SubjectManagement({
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  {depth === 0 ? (
+                  {questionBank !== QUESTION_BANK.EXAM_PAPER && depth === 0 ? (
                     <Button
                       type="button"
                       size="icon-sm"
@@ -985,34 +985,44 @@ export function SubjectManagement({
                           className="rounded-xl border border-slate-200 bg-white shadow-sm"
                         >
                           <div className="flex items-center justify-between gap-2 px-4 py-3">
-                            <button
-                              type="button"
-                              onClick={toggleSubject}
-                              className="flex flex-1 items-center gap-3 text-left"
-                            >
-                              {isOpen ? (
-                                <ChevronDown className="size-4 text-slate-500" />
-                              ) : (
-                                <ChevronRight className="size-4 text-slate-500" />
-                              )}
-                              <div>
+                            {questionBank !== QUESTION_BANK.EXAM_PAPER ? (
+                              <button
+                                type="button"
+                                onClick={toggleSubject}
+                                className="flex flex-1 items-center gap-3 text-left"
+                              >
+                                {isOpen ? (
+                                  <ChevronDown className="size-4 text-slate-500" />
+                                ) : (
+                                  <ChevronRight className="size-4 text-slate-500" />
+                                )}
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-800">
+                                    {subject.name}
+                                  </p>
+                                  <p className="text-xs text-slate-500">
+                                    {totalChapters} chapters
+                                  </p>
+                                </div>
+                              </button>
+                            ) : (
+                              <div className="flex flex-1 items-center gap-3">
                                 <p className="text-sm font-semibold text-slate-800">
                                   {subject.name}
                                 </p>
-                                <p className="text-xs text-slate-500">
-                                  {totalChapters} chapters
-                                </p>
                               </div>
-                            </button>
+                            )}
                             <div className="flex items-center gap-1.5">
-                              <Button
-                                type="button"
-                                size="icon-sm"
-                                variant="ghost"
-                                onClick={() => openCreateChapter(subject, null)}
-                              >
-                                <Plus className="size-4" aria-hidden="true" />
-                              </Button>
+                              {questionBank !== QUESTION_BANK.EXAM_PAPER ? (
+                                <Button
+                                  type="button"
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  onClick={() => openCreateChapter(subject, null)}
+                                >
+                                  <Plus className="size-4" aria-hidden="true" />
+                                </Button>
+                              ) : null}
                               <Button
                                 type="button"
                                 size="icon-sm"
@@ -1042,7 +1052,7 @@ export function SubjectManagement({
                               </Button>
                             </div>
                           </div>
-                          {isOpen ? (
+                          {isOpen && questionBank !== QUESTION_BANK.EXAM_PAPER ? (
                             <div className="border-t border-slate-100 bg-slate-50 px-4 py-4">
                               {roots.length === 0 ? (
                                 <div className="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
