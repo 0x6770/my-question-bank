@@ -192,6 +192,11 @@ export function ExamPaperManagement({
 
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [listRefreshKey, setListRefreshKey] = useState(0);
+  const [createSubjectPickerOpen, setCreateSubjectPickerOpen] = useState(false);
+  const createSubjectPickerRef = useRef<HTMLDivElement>(null);
+  const [createActiveExamBoardId, setCreateActiveExamBoardId] = useState<
+    number | null
+  >(null);
   const [editSubjectPickerOpen, setEditSubjectPickerOpen] = useState(false);
   const editSubjectPickerRef = useRef<HTMLDivElement>(null);
   const [editActiveExamBoardId, setEditActiveExamBoardId] = useState<
@@ -596,19 +601,6 @@ export function ExamPaperManagement({
     }
   };
 
-  const subjectOptions = useMemo(
-    () =>
-      subjects
-        .slice()
-        .sort((a, b) => a.name.localeCompare(b.name, "zh-CN"))
-        .map((subject) => ({
-          id: subject.id,
-          label: subject.exam_board?.name
-            ? `${subject.exam_board.name} · ${subject.name}`
-            : subject.name,
-        })),
-    [subjects],
-  );
   const examBoardOptions = useMemo(() => {
     const map = new Map<number, string>();
     for (const subject of subjects) {
@@ -635,6 +627,16 @@ export function ExamPaperManagement({
     }
     return map;
   }, [subjects]);
+
+  const createModalSubjectOptions = useMemo(() => {
+    if (createActiveExamBoardId == null) return [];
+    return (
+      subjectsByExamBoard.get(createActiveExamBoardId)?.map((subject) => ({
+        id: subject.id,
+        label: subject.name,
+      })) ?? []
+    );
+  }, [createActiveExamBoardId, subjectsByExamBoard]);
 
   const modalSubjectOptions = useMemo(() => {
     if (editActiveExamBoardId == null) return [];
@@ -700,30 +702,99 @@ export function ExamPaperManagement({
         </CardHeader>
         <CardContent className="pt-6">
           <form className="space-y-4" onSubmit={handleCreate}>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="create-subject">Subject *</Label>
-                <Select
-                  value={createState.subjectId}
-                  onValueChange={(value) => {
-                    setCreateState((prev) => ({
-                      ...prev,
-                      subjectId: value,
-                    }));
-                    setCreateTagSelections({});
-                  }}
+            <div className="space-y-2">
+              <Label>Exam / Subject *</Label>
+              <div className="relative" ref={createSubjectPickerRef}>
+                <button
+                  type="button"
+                  onClick={() => setCreateSubjectPickerOpen((prev) => !prev)}
+                  className="flex h-11 w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 text-left text-sm font-medium text-slate-800 shadow-sm outline-none transition focus-visible:border-slate-400 focus-visible:ring-2 focus-visible:ring-slate-200"
                 >
-                  <SelectTrigger id="create-subject">
-                    <SelectValue placeholder="Select a subject" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {subjectOptions.map((option) => (
-                      <SelectItem key={option.id} value={option.id.toString()}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <span className="truncate">
+                    {(() => {
+                      const subj = subjects.find(
+                        (s) => String(s.id) === createState.subjectId,
+                      );
+                      if (!subj) return "Select exam & subject";
+                      const boardLabel =
+                        subj.exam_board?.name ??
+                        examBoardOptions.find(
+                          (b) => b.id === subj.exam_board_id,
+                        )?.label;
+                      return boardLabel
+                        ? `${boardLabel} · ${subj.name}`
+                        : subj.name;
+                    })()}
+                  </span>
+                  <ChevronDown className="size-4 text-slate-400" />
+                </button>
+                {createSubjectPickerOpen ? (
+                  <div className="absolute z-30 mt-2 w-full min-w-[640px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+                    <div className="grid grid-cols-2">
+                      <div className="max-h-72 overflow-auto">
+                        <div className="px-3 py-2 text-sm font-semibold text-slate-700">
+                          Choose exam board
+                        </div>
+                        {examBoardOptions.map((exam) => (
+                          <button
+                            key={exam.id}
+                            type="button"
+                            onMouseEnter={() =>
+                              setCreateActiveExamBoardId(exam.id)
+                            }
+                            onFocus={() => setCreateActiveExamBoardId(exam.id)}
+                            onClick={() => setCreateActiveExamBoardId(exam.id)}
+                            className={`flex w-full items-start gap-3 px-3 py-2 text-left text-sm font-semibold ${createActiveExamBoardId === exam.id ? "bg-slate-50 text-slate-900" : "text-slate-700 hover:bg-slate-50"}`}
+                          >
+                            <span className="flex-1 whitespace-normal text-left leading-snug break-words">
+                              {exam.label}
+                            </span>
+                            <span className="text-slate-400">›</span>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="max-h-72 overflow-auto bg-slate-50">
+                        {createActiveExamBoardId == null ? (
+                          <div className="px-4 py-6 text-sm text-slate-500">
+                            Select an exam board first
+                          </div>
+                        ) : createModalSubjectOptions.length === 0 ? (
+                          <div className="px-4 py-6 text-sm text-slate-500">
+                            No subjects under this exam board
+                          </div>
+                        ) : (
+                          <div className="flex flex-col divide-y divide-slate-200">
+                            {createModalSubjectOptions.map((option) => (
+                              <button
+                                key={option.id}
+                                type="button"
+                                className={`flex w-full items-start gap-3 px-3 py-2 text-left text-sm font-semibold ${createState.subjectId === String(option.id) ? "bg-white text-slate-900" : "text-slate-700 hover:bg-white"}`}
+                                onClick={() => {
+                                  setCreateState((prev) => ({
+                                    ...prev,
+                                    subjectId: String(option.id),
+                                  }));
+                                  setCreateTagSelections({});
+                                  setCreateSubjectPickerOpen(false);
+                                }}
+                              >
+                                <span className="flex-1 whitespace-normal text-left leading-snug break-words">
+                                  {option.label}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="pointer-events-none absolute inset-0">
+                      <div
+                        className="absolute top-0 bottom-0 border-l border-slate-200"
+                        style={{ left: "50%" }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -820,6 +891,9 @@ export function ExamPaperManagement({
                     questionFile: null,
                     markSchemeFile: null,
                   });
+                  setCreateTagSelections({});
+                  setCreateSubjectPickerOpen(false);
+                  setCreateActiveExamBoardId(null);
                   resetMessage();
                 }}
               >
