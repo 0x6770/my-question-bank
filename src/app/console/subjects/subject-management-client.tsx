@@ -1,10 +1,26 @@
 "use client";
 
 import {
-  ArrowDown,
-  ArrowUp,
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   ChevronDown,
   ChevronRight,
+  GripVertical,
   Loader2,
   Pencil,
   Plus,
@@ -173,6 +189,13 @@ export function SubjectManagement({
   const [busyChapterId, setBusyChapterId] = useState<number | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
   // Update state when props change (e.g., when switching question bank tabs)
   useEffect(() => {
     setExamBoards(initialExamBoards);
@@ -200,17 +223,6 @@ export function SubjectManagement({
     }
     return map;
   }, [subjects]);
-
-  const rootChaptersBySubject = useMemo(() => {
-    const map = new Map<number, ChapterRow[]>();
-    for (const chapter of chapters) {
-      if (chapter.parent_chapter_id != null) continue;
-      if (!map.has(chapter.subject_id)) map.set(chapter.subject_id, []);
-      map.get(chapter.subject_id)?.push(chapter);
-    }
-    for (const list of map.values()) list.sort(compareChapters);
-    return map;
-  }, [chapters]);
 
   const chapterChildrenMap = useMemo(() => {
     const map = new Map<number, ChapterRow[]>();
@@ -591,51 +603,49 @@ export function SubjectManagement({
     );
   };
 
-  const handleReorderChapter = async (
-    chapterId: number,
-    direction: "up" | "down",
+  const handleChapterDragEnd = async (
+    event: DragEndEvent,
+    subjectId: number,
+    parentChapterId: number | null,
   ) => {
-    const current = chapters.find((item) => item.id === chapterId);
-    if (!current) return;
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
     const siblings = chapters
       .filter(
         (chapter) =>
-          chapter.subject_id === current.subject_id &&
-          chapter.parent_chapter_id === current.parent_chapter_id,
+          chapter.subject_id === subjectId &&
+          chapter.parent_chapter_id === parentChapterId,
       )
       .sort(compareChapters);
-    const currentIndex = siblings.findIndex((item) => item.id === chapterId);
-    const targetIndex =
-      direction === "up" ? currentIndex - 1 : currentIndex + 1;
-    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= siblings.length) {
-      return;
-    }
 
-    const currentPosition = siblings[currentIndex].position ?? currentIndex + 1;
-    const targetPosition = siblings[targetIndex].position ?? targetIndex + 1;
+    const oldIndex = siblings.findIndex((ch) => ch.id === Number(active.id));
+    const newIndex = siblings.findIndex((ch) => ch.id === Number(over.id));
 
-    setBusyChapterId(chapterId);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reorderedSiblings = arrayMove(siblings, oldIndex, newIndex);
+
+    // Update positions in database
     try {
-      await Promise.all([
+      const updates = reorderedSiblings.map((chapter, index) =>
         supabase
           .from("chapters")
-          .update({ position: targetPosition })
-          .eq("id", siblings[currentIndex].id),
-        supabase
-          .from("chapters")
-          .update({ position: currentPosition })
-          .eq("id", siblings[targetIndex].id),
-      ]);
+          .update({ position: index + 1 })
+          .eq("id", chapter.id),
+      );
+      await Promise.all(updates);
 
+      // Update local state
       setChapters((prev) =>
-        prev.map((item) => {
-          if (item.id === siblings[currentIndex].id) {
-            return { ...item, position: targetPosition };
+        prev.map((chapter) => {
+          const newPosition = reorderedSiblings.findIndex(
+            (ch) => ch.id === chapter.id,
+          );
+          if (newPosition !== -1) {
+            return { ...chapter, position: newPosition + 1 };
           }
-          if (item.id === siblings[targetIndex].id) {
-            return { ...item, position: currentPosition };
-          }
-          return item;
+          return chapter;
         }),
       );
     } catch (error) {
@@ -643,9 +653,111 @@ export function SubjectManagement({
         "error",
         error instanceof Error ? error.message : "Failed to reorder chapters.",
       );
-    } finally {
-      setBusyChapterId(null);
     }
+  };
+
+  const SortableChapterItem = ({
+    chapter,
+    index,
+    subject,
+    depth,
+    childChapters,
+  }: {
+    chapter: ChapterRow;
+    index: number;
+    subject: SubjectRow;
+    depth: number;
+    childChapters: ChapterRow[];
+  }) => {
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging,
+    } = useSortable({ id: chapter.id });
+
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.5 : 1,
+    };
+
+    const isBusy = busyChapterId === chapter.id;
+    const orderLabel = `${index + 1}.`;
+
+    return (
+      <li
+        ref={setNodeRef}
+        style={style}
+        className="rounded-lg border border-slate-200 bg-white/70 px-3 py-2"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="cursor-grab touch-none active:cursor-grabbing"
+              {...attributes}
+              {...listeners}
+            >
+              <GripVertical className="size-4 text-slate-400" />
+            </button>
+            {childChapters.length > 0 ? (
+              <div className="text-slate-400">
+                <ChevronRight className="size-4" aria-hidden="true" />
+              </div>
+            ) : null}
+            <span className="text-sm font-semibold text-slate-500">
+              {orderLabel}
+            </span>
+            <span className="font-medium text-slate-700">{chapter.name}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {questionBank !== QUESTION_BANK.EXAM_PAPER && depth === 0 ? (
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                onClick={() => openCreateChapter(subject, chapter.id)}
+                disabled={isBusy}
+              >
+                <Plus className="size-4" aria-hidden="true" />
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              onClick={() => openEditChapter(chapter)}
+              disabled={isBusy}
+              className="text-slate-600 hover:text-slate-900"
+            >
+              <Pencil className="size-4" aria-hidden="true" />
+            </Button>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              onClick={() => handleDeleteChapter(chapter)}
+              disabled={isBusy}
+              className="text-red-500 hover:text-red-600"
+            >
+              {isBusy ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Trash2 className="size-4" aria-hidden="true" />
+              )}
+            </Button>
+          </div>
+        </div>
+        {childChapters.length > 0 ? (
+          <div className="mt-2 text-xs sm:text-sm">
+            {renderChapterTree(childChapters, subject, depth + 1)}
+          </div>
+        ) : null}
+      </li>
+    );
   };
 
   const renderChapterTree = (
@@ -654,105 +766,45 @@ export function SubjectManagement({
     depth = 0,
   ) => {
     if (chaptersList.length === 0) return null;
+
+    const parentChapterId =
+      chaptersList.length > 0 ? chaptersList[0].parent_chapter_id : null;
+
     return (
-      <ul
-        className={cn(
-          "space-y-2",
-          depth > 0 ? "border-l border-slate-200 pl-4" : null,
-        )}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={(event) =>
+          handleChapterDragEnd(event, subject.id, parentChapterId)
+        }
       >
-        {chaptersList.map((chapter, index) => {
-          const children = filteredChapterChildrenMap.get(chapter.id) ?? [];
-          const isBusy = busyChapterId === chapter.id;
-          const orderLabel = `${index + 1}.`;
-          return (
-            <li
-              key={chapter.id}
-              className="rounded-lg border border-slate-200 bg-white/70 px-3 py-2"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  {children.length > 0 ? (
-                    <div className="text-slate-400">
-                      <ChevronRight className="size-4" aria-hidden="true" />
-                    </div>
-                  ) : null}
-                  <span className="text-sm font-semibold text-slate-500">
-                    {orderLabel}
-                  </span>
-                  <span className="font-medium text-slate-700">
-                    {chapter.name}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {questionBank !== QUESTION_BANK.EXAM_PAPER && depth === 0 ? (
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="ghost"
-                      onClick={() => openCreateChapter(subject, chapter.id)}
-                      disabled={isBusy}
-                    >
-                      <Plus className="size-4" aria-hidden="true" />
-                    </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    onClick={() => handleReorderChapter(chapter.id, "up")}
-                    disabled={isBusy || index === 0}
-                    className="text-slate-500 hover:text-slate-800"
-                    title="Move up"
-                  >
-                    <ArrowUp className="size-4" aria-hidden="true" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    onClick={() => handleReorderChapter(chapter.id, "down")}
-                    disabled={isBusy || index === chaptersList.length - 1}
-                    className="text-slate-500 hover:text-slate-800"
-                    title="Move down"
-                  >
-                    <ArrowDown className="size-4" aria-hidden="true" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    onClick={() => openEditChapter(chapter)}
-                    disabled={isBusy}
-                    className="text-slate-600 hover:text-slate-900"
-                  >
-                    <Pencil className="size-4" aria-hidden="true" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    onClick={() => handleDeleteChapter(chapter)}
-                    disabled={isBusy}
-                    className="text-red-500 hover:text-red-600"
-                  >
-                    {isBusy ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="size-4" aria-hidden="true" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-              {children.length > 0 ? (
-                <div className="mt-2 text-xs sm:text-sm">
-                  {renderChapterTree(children, subject, depth + 1)}
-                </div>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
+        <SortableContext
+          items={chaptersList.map((ch) => ch.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <ul
+            className={cn(
+              "space-y-2",
+              depth > 0 ? "border-l border-slate-200 pl-4" : null,
+            )}
+          >
+            {chaptersList.map((chapter, index) => {
+              const childChapters =
+                filteredChapterChildrenMap.get(chapter.id) ?? [];
+              return (
+                <SortableChapterItem
+                  key={chapter.id}
+                  chapter={chapter}
+                  index={index}
+                  subject={subject}
+                  depth={depth}
+                  childChapters={childChapters}
+                />
+              );
+            })}
+          </ul>
+        </SortableContext>
+      </DndContext>
     );
   };
 
@@ -1018,7 +1070,9 @@ export function SubjectManagement({
                                   type="button"
                                   size="icon-sm"
                                   variant="ghost"
-                                  onClick={() => openCreateChapter(subject, null)}
+                                  onClick={() =>
+                                    openCreateChapter(subject, null)
+                                  }
                                 >
                                   <Plus className="size-4" aria-hidden="true" />
                                 </Button>
@@ -1052,7 +1106,8 @@ export function SubjectManagement({
                               </Button>
                             </div>
                           </div>
-                          {isOpen && questionBank !== QUESTION_BANK.EXAM_PAPER ? (
+                          {isOpen &&
+                          questionBank !== QUESTION_BANK.EXAM_PAPER ? (
                             <div className="border-t border-slate-100 bg-slate-50 px-4 py-4">
                               {roots.length === 0 ? (
                                 <div className="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500">

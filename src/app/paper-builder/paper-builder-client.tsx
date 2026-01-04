@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { QUESTION_BANK, type QuestionBank } from "@/lib/question-bank";
+import { useMemo, useState } from "react";
 import {
   Select,
   SelectContent,
@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { QUESTION_BANK, type QuestionBank } from "@/lib/question-bank";
 import type { Tables } from "../../../database.types";
 
 type SubjectRow = Tables<"subjects">;
@@ -256,6 +257,7 @@ export function PaperBuilderClient({
           <h2 className="text-lg font-semibold mb-4">Select Question Bank</h2>
           <div className="flex gap-4">
             <button
+              type="button"
               onClick={() =>
                 handleQuestionBankChange(QUESTION_BANK.PAST_PAPER_QUESTIONS)
               }
@@ -268,6 +270,7 @@ export function PaperBuilderClient({
               Past Paper Questions
             </button>
             <button
+              type="button"
               onClick={() =>
                 handleQuestionBankChange(QUESTION_BANK.TOPICAL_QUESTIONS)
               }
@@ -404,6 +407,7 @@ export function PaperBuilderClient({
 
                 {/* Generate Button */}
                 <button
+                  type="button"
                   onClick={handleGenerateQuestions}
                   disabled={loadingQuestions || !selectedSubjectId}
                   className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
@@ -458,6 +462,7 @@ export function PaperBuilderClient({
 
                   {/* Generate Paper Button */}
                   <button
+                    type="button"
                     onClick={handleGeneratePaper}
                     disabled={generatingPaper}
                     className="w-full bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
@@ -506,6 +511,7 @@ export function PaperBuilderClient({
                         </div>
                         <div className="flex gap-2 ml-2">
                           <button
+                            type="button"
                             onClick={() => handleMoveUp(index)}
                             disabled={index === 0}
                             className="text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"
@@ -514,6 +520,7 @@ export function PaperBuilderClient({
                             ↑
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleMoveDown(index)}
                             disabled={index === questions.length - 1}
                             className="text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"
@@ -522,6 +529,7 @@ export function PaperBuilderClient({
                             ↓
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleRemoveQuestion(question.id)}
                             className="text-red-600 hover:text-red-800 ml-1"
                             title="Remove question"
@@ -538,10 +546,13 @@ export function PaperBuilderClient({
                             {question.images.length} image(s)
                           </p>
                           {question.images[0]?.signedUrl && (
-                            <img
+                            <Image
                               src={question.images[0].signedUrl}
                               alt="Question preview"
+                              width={400}
+                              height={300}
                               className="max-w-full h-auto rounded border border-gray-200"
+                              unoptimized
                             />
                           )}
                         </div>

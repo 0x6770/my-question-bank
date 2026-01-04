@@ -331,7 +331,12 @@ export function ExamPaperManagement({
         throw new Error("Failed to obtain exam paper id.");
       }
 
-      const questionPath = await uploadPdf(createdId, questionFile, "question", true);
+      const questionPath = await uploadPdf(
+        createdId,
+        questionFile,
+        "question",
+        true,
+      );
       uploaded.push(questionPath);
       let markSchemePath: string | null = null;
       if (markSchemeFile) {

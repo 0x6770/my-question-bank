@@ -75,7 +75,6 @@ export async function GET(request: Request) {
     .eq("subject_id", subjectId);
 
   const chapters = allChapters ?? [];
-  const chapterMap = new Map(chapters.map((chapter) => [chapter.id, chapter]));
 
   const childChapterMap = new Map<number, number[]>();
   for (const chapter of chapters) {
@@ -127,7 +126,7 @@ export async function GET(request: Request) {
   }
 
   // Step 1: Find question IDs matching the criteria through question_chapters
-  let questionIdsQuery = supabase
+  const questionIdsQuery = supabase
     .from("question_chapters")
     .select("question_id")
     .in("chapter_id", allowedChapterIds);

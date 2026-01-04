@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "../../../../../database.types";
 
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const supabase = await createClient();
@@ -196,7 +196,7 @@ export async function GET(
 }
 
 export async function DELETE(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const supabase = await createClient();

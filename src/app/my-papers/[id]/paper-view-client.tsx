@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { useRef } from "react";
 
 type Question = {
   id: number;
@@ -74,6 +75,7 @@ export function PaperViewClient({ paper }: PaperViewClientProps) {
           <div className="flex items-center justify-between">
             <div>
               <button
+                type="button"
                 onClick={() => router.back()}
                 className="text-blue-600 hover:text-blue-800"
               >
@@ -82,12 +84,14 @@ export function PaperViewClient({ paper }: PaperViewClientProps) {
             </div>
             <div className="flex gap-3">
               <button
+                type="button"
                 onClick={handleDelete}
                 className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
               >
                 Delete
               </button>
               <button
+                type="button"
                 onClick={handlePrint}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
               >
@@ -148,10 +152,13 @@ export function PaperViewClient({ paper }: PaperViewClientProps) {
                   {question.images.map((image) => (
                     <div key={image.id}>
                       {image.signedUrl && (
-                        <img
+                        <Image
                           src={image.signedUrl}
                           alt={`Question ${index + 1} part ${image.position}`}
+                          width={800}
+                          height={600}
                           className="max-w-full h-auto border border-gray-200 rounded"
+                          unoptimized
                         />
                       )}
                     </div>
@@ -169,10 +176,13 @@ export function PaperViewClient({ paper }: PaperViewClientProps) {
                     {question.answerImages.map((image) => (
                       <div key={image.id}>
                         {image.signedUrl && (
-                          <img
+                          <Image
                             src={image.signedUrl}
                             alt={`Answer ${index + 1} part ${image.position}`}
+                            width={800}
+                            height={600}
                             className="max-w-full h-auto border border-gray-200 rounded"
+                            unoptimized
                           />
                         )}
                       </div>
