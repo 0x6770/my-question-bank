@@ -133,6 +133,8 @@ export function QuestionBrowserWithBuilder({
     }
   };
 
+  const hasSelectedQuestions = selectedQuestions.length > 0;
+
   return (
     <div className="space-y-6">
       {/* Error Message */}
@@ -143,8 +145,14 @@ export function QuestionBrowserWithBuilder({
       )}
 
       {/* Split Layout: Question Browser + Selected Questions Panel */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6">
-        {/* Left: Question Browser */}
+      <div
+        className={
+          hasSelectedQuestions
+            ? "grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6"
+            : ""
+        }
+      >
+        {/* Question Browser */}
         <div>
           <QuestionBrowser
             examBoards={examBoards}
@@ -157,22 +165,24 @@ export function QuestionBrowserWithBuilder({
           />
         </div>
 
-        {/* Right: Selected Questions Panel (sticky on desktop) */}
-        <div className="lg:sticky lg:top-6 lg:self-start">
-          <SelectedQuestionsPanel
-            selectedQuestions={selectedQuestions}
-            paperTitle={paperTitle}
-            showAnswers={showAnswers}
-            onRemove={handleRemoveQuestion}
-            onReorder={handleReorder}
-            onClearAll={handleClearAll}
-            onTitleChange={handleTitleChange}
-            onShowAnswersChange={handleShowAnswersChange}
-            onGenerate={handleGenerate}
-            questionBank={questionBank}
-            isGenerating={isGenerating}
-          />
-        </div>
+        {/* Selected Questions Panel (only show when questions are selected) */}
+        {hasSelectedQuestions && (
+          <div className="lg:sticky lg:top-6 lg:self-start">
+            <SelectedQuestionsPanel
+              selectedQuestions={selectedQuestions}
+              paperTitle={paperTitle}
+              showAnswers={showAnswers}
+              onRemove={handleRemoveQuestion}
+              onReorder={handleReorder}
+              onClearAll={handleClearAll}
+              onTitleChange={handleTitleChange}
+              onShowAnswersChange={handleShowAnswersChange}
+              onGenerate={handleGenerate}
+              questionBank={questionBank}
+              isGenerating={isGenerating}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
