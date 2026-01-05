@@ -4913,9 +4913,9 @@ styled-jsx@5.1.6:
     client-only "0.0.1"
 
 supabase@^2.62.10:
-  version "2.70.1"
-  resolved "https://registry.yarnpkg.com/supabase/-/supabase-2.70.1.tgz#4926c3ff4cd9b00e0f3552e819b168900f467664"
-  integrity sha512-UheVjg7GRYj8N01FlOkk/U01qRsIVDdL91wwIWkbzSggboKU+gBGdygpIxUZQspfXNeYthbn7IOhGDSzm3XUmw==
+  version "2.70.5"
+  resolved "https://registry.yarnpkg.com/supabase/-/supabase-2.70.5.tgz#4d1a7d9047463465e8457def3ef5ed05eb100f70"
+  integrity sha512-HtMGtYbcL9dxi2Yz4eGWWlxl9nQi76pOyGgCTBeE67p5AeIlv+KJhDOR8oinaNfHHMPKk0Uo1WW7Kxyrz+tdgg==
   dependencies:
     bin-links "^6.0.0"
     https-proxy-agent "^7.0.2"
