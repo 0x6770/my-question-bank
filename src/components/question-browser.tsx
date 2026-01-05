@@ -16,6 +16,26 @@ type QuestionBrowserProps = {
     parentChapterId: number | null;
   }[];
   questionBank: string; // "topical" | "past-paper" | "exam-paper"
+  paperBuilderMode?: boolean;
+  selectedQuestionIds?: Set<number>;
+  onAddToPaper?: (question: {
+    id: number;
+    marks: number;
+    difficulty: number;
+    calculator: boolean;
+    images: {
+      id: number;
+      storage_path: string;
+      position: number;
+      signedUrl: string | null;
+    }[];
+    answerImages: {
+      id: number;
+      storage_path: string;
+      position: number;
+      signedUrl: string | null;
+    }[];
+  }) => void;
 };
 
 type QuestionResult = {
@@ -56,6 +76,9 @@ export function QuestionBrowser({
   subjects,
   chapters,
   questionBank,
+  paperBuilderMode = false,
+  selectedQuestionIds,
+  onAddToPaper,
 }: QuestionBrowserProps) {
   const [hierarchySelection, setHierarchySelection] = useState<string>("all");
   const [difficultySelections, setDifficultySelections] = useState<Set<number>>(
@@ -611,7 +634,13 @@ export function QuestionBrowser({
         ) : (
           <>
             {questions.map((question) => (
-              <QuestionCard key={question.id} question={question} />
+              <QuestionCard
+                key={question.id}
+                question={question}
+                paperBuilderMode={paperBuilderMode}
+                isSelected={selectedQuestionIds?.has(question.id)}
+                onAddToPaper={onAddToPaper}
+              />
             ))}
             <div className="flex items-center justify-end gap-3">
               <Button

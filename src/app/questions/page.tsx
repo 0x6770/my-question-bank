@@ -1,5 +1,5 @@
 import { BackToTopButton } from "@/components/back-to-top-button";
-import { QuestionBrowser } from "@/components/question-browser";
+import { QuestionBrowserWithBuilder } from "@/components/question-browser-with-builder";
 import { QUESTION_BANK, type QuestionBank } from "@/lib/question-bank";
 import { firstOrNull, type SubjectWithBoard } from "@/lib/supabase/relations";
 import { createClient } from "@/lib/supabase/server";
@@ -66,8 +66,8 @@ export default async function Home(props: PageProps) {
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-12 sm:px-6 lg:px-8">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6">
-        <QuestionBrowser
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
+        <QuestionBrowserWithBuilder
           examBoards={examBoards ?? []}
           subjects={filteredSubjects}
           chapters={

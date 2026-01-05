@@ -3,6 +3,7 @@
 
 import {
   Bookmark,
+  Check,
   CheckCircle2,
   FileText,
   Maximize2,
@@ -38,6 +39,16 @@ type QuestionCardProps = {
     isAnswerViewed?: boolean;
   };
   disableInteractions?: boolean;
+  paperBuilderMode?: boolean;
+  isSelected?: boolean;
+  onAddToPaper?: (question: {
+    id: number;
+    marks: number;
+    difficulty: number;
+    calculator: boolean;
+    images: QuestionImage[];
+    answerImages: QuestionImage[];
+  }) => void;
 };
 
 const difficultyMeta: Record<
@@ -73,6 +84,9 @@ const difficultyMeta: Record<
 export function QuestionCard({
   question,
   disableInteractions = false,
+  paperBuilderMode = false,
+  isSelected = false,
+  onAddToPaper,
 }: QuestionCardProps) {
   const supabase = useMemo(() => createClient(), []);
   const [userId, setUserId] = useState<string | null>(null);
@@ -291,12 +305,39 @@ export function QuestionCard({
               </Button>
               <Button
                 variant="outline"
-                className="w-full justify-between gap-3 rounded border-sky-100 bg-sky-50 px-4 py-4 text-slate-800 hover:bg-sky-100"
-                disabled={disableInteractions}
+                className={`w-full justify-between gap-3 rounded px-4 py-4 text-sm ${
+                  isSelected
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    : "border-sky-100 bg-sky-50 text-slate-800 hover:bg-sky-100"
+                }`}
+                disabled={
+                  disableInteractions || !paperBuilderMode || isSelected
+                }
+                onClick={() => {
+                  if (paperBuilderMode && onAddToPaper && !isSelected) {
+                    onAddToPaper({
+                      id: question.id,
+                      marks: question.marks,
+                      difficulty: question.difficulty,
+                      calculator: question.calculator,
+                      images: question.images,
+                      answerImages: question.answerImages,
+                    });
+                  }
+                }}
               >
                 <div className="flex items-center gap-3">
-                  <Sparkles className="size-4" />
-                  <span className="text-sm">Generator</span>
+                  {isSelected ? (
+                    <>
+                      <Check className="size-4" />
+                      <span>Added</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="size-4" />
+                      <span>Generator</span>
+                    </>
+                  )}
                 </div>
               </Button>
             </div>
