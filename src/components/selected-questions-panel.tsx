@@ -337,7 +337,7 @@ export function SelectedQuestionsPanel({
 
       {/* Paper Settings & Generate */}
       {questionCount > 0 && (
-        <div className="border-t border-slate-200 bg-slate-50 p-4 space-y-4">
+        <div className="border-t border-slate-200 bg-slate-50 p-4 space-y-4 rounded-b-2xl">
           <div className="space-y-2">
             <Label htmlFor="paper-title" className="text-sm font-medium">
               Paper Title
