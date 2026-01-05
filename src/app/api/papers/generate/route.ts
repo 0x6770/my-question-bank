@@ -150,12 +150,25 @@ export async function POST(request: Request) {
 
   // Step 4: Update quota record with paper ID for tracking
   // This is optional but useful for auditing
-  await supabase
+  const { data: quotaRow } = await supabase
+    .from("user_paper_quotas")
+    .select("current_period_papers")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const { error: quotaUpdateError } = await supabase
     .from("user_paper_quotas")
     .update({
-      current_period_papers: supabase.sql`array_append(current_period_papers, ${paper.id})`,
+      current_period_papers: [
+        ...(quotaRow?.current_period_papers ?? []),
+        paper.id,
+      ],
     })
     .eq("user_id", user.id);
+
+  if (quotaUpdateError) {
+    console.warn("Failed to update quota tracking:", quotaUpdateError);
+  }
 
   // Return success with paper ID and quota information
   return NextResponse.json({
