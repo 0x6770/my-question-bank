@@ -48,7 +48,7 @@ export default async function ConsoleQuestionsPage(props: PageProps) {
   const bankParam = searchParams.bank;
   let selectedBank: QuestionBank = QUESTION_BANK.PAST_PAPER_QUESTIONS;
 
-  if (bankParam === "typical") {
+  if (bankParam === "topical") {
     selectedBank = QUESTION_BANK.TOPICAL_QUESTIONS;
   } else if (bankParam === "exam-paper") {
     selectedBank = QUESTION_BANK.EXAM_PAPER;

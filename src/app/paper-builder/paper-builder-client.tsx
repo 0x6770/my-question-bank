@@ -120,7 +120,7 @@ export function PaperBuilderClient({
   // Get bank param for API calls
   const bankParam = useMemo(() => {
     if (selectedQuestionBank === QUESTION_BANK.TOPICAL_QUESTIONS)
-      return "typical";
+      return "topical";
     return "past-paper";
   }, [selectedQuestionBank]);
 

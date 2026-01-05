@@ -15,7 +15,7 @@ type QuestionBrowserProps = {
     subjectId: number | null;
     parentChapterId: number | null;
   }[];
-  questionBank: string; // "typical" | "past-paper" | "exam-paper"
+  questionBank: string; // "topical" | "past-paper" | "exam-paper"
 };
 
 type QuestionResult = {
@@ -124,18 +124,6 @@ export function QuestionBrowser({
       window.removeEventListener("mousedown", handleClickOutside);
     };
   }, [hierarchyOpen]);
-
-  useEffect(() => {
-    if (activeExamBoardId != null) return;
-    const firstExamId =
-      subjects.find((subject) => subject.exam_board_id != null)
-        ?.exam_board_id ??
-      examBoards[0]?.id ??
-      null;
-    if (firstExamId != null) {
-      setActiveExamBoardId(firstExamId);
-    }
-  }, [activeExamBoardId, subjects, examBoards]);
 
   useEffect(() => {
     if (hierarchySelection.startsWith("subject:")) {

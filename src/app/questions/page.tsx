@@ -62,7 +62,7 @@ export default async function Home(props: PageProps) {
       ? "past-paper"
       : selectedBank === QUESTION_BANK.EXAM_PAPER
         ? "exam-paper"
-        : "typical";
+        : "topical";
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-12 sm:px-6 lg:px-8">

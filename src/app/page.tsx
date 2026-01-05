@@ -60,7 +60,7 @@ export default async function Home() {
                 parentChapterId: chapter.parent_chapter_id ?? null,
               })) ?? []
           }
-          questionBank="typical"
+          questionBank="topical"
         />
       </div>
       <BackToTopButton />

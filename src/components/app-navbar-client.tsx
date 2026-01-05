@@ -2,7 +2,7 @@
 
 import { LogOut } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { LogoutButton } from "@/components/logout-button";
@@ -34,6 +34,7 @@ export function AppNavbarClient({
     initialAdminRole,
   );
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     const supabase = createClient();
@@ -87,9 +88,9 @@ export function AppNavbarClient({
   const navItems = useMemo(
     () => [
       { href: "/account", label: "Account" },
-      { href: "/questions?bank=typical", label: "Checkpoint" },
+      { href: "/questions?bank=topical", label: "Checkpoint" },
       { href: "/papers", label: "Exam Paper" },
-      { href: "/questions", label: "Questionbank" },
+      { href: "/questions?bank=past-paper", label: "Questionbank" },
       { href: "/paper-builder", label: "Worksheet Builder" },
     ],
     [],
@@ -100,8 +101,15 @@ export function AppNavbarClient({
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 py-3">
         <nav className="flex items-center gap-4 text-sm font-semibold text-slate-700">
           {navItems.map((item) => {
+            // Parse item.href to get path and query parts
+            const [itemPath, itemQuery] = item.href.split("?");
+            const currentQuery = searchParams.toString();
+
+            // Check if path and query parameters match
             const isActive =
-              pathname === item.href || pathname?.startsWith(`${item.href}?`);
+              pathname === itemPath &&
+              (itemQuery ? currentQuery === itemQuery : !currentQuery);
+
             return (
               <Link
                 key={item.href}

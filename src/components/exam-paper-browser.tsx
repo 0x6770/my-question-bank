@@ -91,12 +91,8 @@ export function ExamPaperBrowser({
     }
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
   }, [examBoards, subjects]);
-  const [selectedExamBoardId, setSelectedExamBoardId] = useState<string>(
-    subjects[0]?.exam_board_id ? String(subjects[0].exam_board_id) : "",
-  );
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string>(
-    subjects[0]?.id ? String(subjects[0].id) : "",
-  );
+  const [selectedExamBoardId, setSelectedExamBoardId] = useState<string>("");
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>("");
   const [tagsBySubject, setTagsBySubject] = useState(() => {
     const map = new Map<number, Tag[]>();
     for (const tag of initialTags) {
@@ -119,7 +115,7 @@ export function ExamPaperBrowser({
   const [subjectPickerOpen, setSubjectPickerOpen] = useState(false);
   const subjectPickerRef = useRef<HTMLDivElement>(null);
   const [activeExamBoardId, setActiveExamBoardId] = useState<number | null>(
-    subjects[0]?.exam_board_id ?? derivedExamBoards[0]?.id ?? null,
+    null,
   );
   const hasActions = Boolean(renderActions);
 
@@ -343,15 +339,8 @@ export function ExamPaperBrowser({
       if (Number.isFinite(id) && id !== activeExamBoardId) {
         setActiveExamBoardId(id);
       }
-    } else if (activeExamBoardId == null && examBoardOptions[0]) {
-      setActiveExamBoardId(examBoardOptions[0].id);
     }
-  }, [
-    activeExamBoardId,
-    examBoardOptions,
-    selectedExamBoardId,
-    subjectPickerOpen,
-  ]);
+  }, [activeExamBoardId, selectedExamBoardId, subjectPickerOpen]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -367,12 +356,6 @@ export function ExamPaperBrowser({
     }
     return () => window.removeEventListener("mousedown", handleClickOutside);
   }, [subjectPickerOpen]);
-
-  useEffect(() => {
-    if (subjectPickerOpen && activeExamBoardId == null && examBoardOptions[0]) {
-      setActiveExamBoardId(examBoardOptions[0].id);
-    }
-  }, [activeExamBoardId, examBoardOptions, subjectPickerOpen]);
 
   const handleChangeSubject = (subjectId: string) => {
     setSelectedSubjectId(subjectId);

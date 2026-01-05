@@ -484,7 +484,7 @@ export function QuestionManagement({
   );
 
   const getTabValue = useCallback((bank: QuestionBank): string => {
-    if (bank === QUESTION_BANK.TOPICAL_QUESTIONS) return "typical";
+    if (bank === QUESTION_BANK.TOPICAL_QUESTIONS) return "topical";
     if (bank === QUESTION_BANK.EXAM_PAPER) return "exam-paper";
     return "past-paper";
   }, []);
@@ -1319,7 +1319,7 @@ export function QuestionManagement({
 
           <TabsList>
             <TabsTrigger value="past-paper">Past Paper Questions</TabsTrigger>
-            <TabsTrigger value="typical">Topical Questions</TabsTrigger>
+            <TabsTrigger value="topical">Topical Questions</TabsTrigger>
           </TabsList>
 
           <Card>
