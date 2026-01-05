@@ -112,7 +112,7 @@ export async function PATCH(
  * Requires: admin or super_admin role
  */
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ userId: string }> },
 ) {
   const supabase = await createClient();

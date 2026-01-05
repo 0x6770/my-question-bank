@@ -1,6 +1,6 @@
 "use client";
 
-import { Crown, Edit, Shield } from "lucide-react";
+import { Crown, Edit } from "lucide-react";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { Badge } from "@/components/ui/badge";

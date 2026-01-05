@@ -92,7 +92,6 @@ export function AppNavbarClient({
       { href: "/papers", label: "Exam Paper" },
       { href: "/questions?bank=past-paper", label: "Questionbank" },
       { href: "/paper-builder", label: "Worksheet Builder" },
-      { href: "/usage", label: "My Usage" },
     ],
     [],
   );

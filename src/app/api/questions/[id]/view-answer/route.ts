@@ -8,14 +8,14 @@ import { createClient } from "@/lib/supabase/server";
  * This should be called BEFORE showing the answer to the user
  */
 export async function POST(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const supabase = await createClient();
   const { id } = await params;
   const questionId = parseInt(id, 10);
 
-  if (isNaN(questionId)) {
+  if (Number.isNaN(questionId)) {
     return NextResponse.json({ error: "Invalid question ID" }, { status: 400 });
   }
 

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { UsageSummary } from "@/components/usage-summary";
 import { createClient } from "@/lib/supabase/server";
 import { AccountTabs } from "./account-tabs";
 
@@ -191,6 +192,11 @@ export default async function AccountPage() {
             Current user: {user.email ?? user.id}
           </p>
         </div>
+
+        <UsageSummary
+          title="Usage & Quotas"
+          description="Membership status and quota usage."
+        />
 
         {loadError ? (
           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
