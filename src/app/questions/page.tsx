@@ -24,12 +24,7 @@ export default async function Home(props: PageProps) {
     selectedBank = QUESTION_BANK.EXAM_PAPER;
   }
 
-  const { data: examBoards } = await supabase
-    .from("exam_boards")
-    .select("id, name, question_bank")
-    .eq("question_bank", selectedBank)
-    .order("name", { ascending: true });
-
+  // First fetch subjects - RLS will automatically filter based on user_subject_access
   const { data: subjects } = await supabase
     .from("subjects")
     .select(
@@ -39,11 +34,6 @@ export default async function Home(props: PageProps) {
     .order("name", { ascending: true })
     .overrideTypes<SubjectWithBoard[]>();
 
-  const { data: chapters } = await supabase
-    .from("chapters")
-    .select("id, name, subject_id, parent_chapter_id, position")
-    .order("position", { ascending: true });
-
   const normalizedSubjects = (subjects ?? []).map((subject) => ({
     ...subject,
     exam_board: firstOrNull(subject.exam_board),
@@ -52,6 +42,26 @@ export default async function Home(props: PageProps) {
   const filteredSubjects = normalizedSubjects.filter(
     (subject) => subject.exam_board?.question_bank === selectedBank,
   );
+
+  // Extract exam board IDs from user's accessible subjects
+  const accessibleExamBoardIds = new Set(
+    filteredSubjects
+      .map((subject) => subject.exam_board_id)
+      .filter((id): id is number => id != null),
+  );
+
+  // Only fetch exam boards that the user has access to via their subjects
+  const { data: examBoards } = await supabase
+    .from("exam_boards")
+    .select("id, name, question_bank")
+    .eq("question_bank", selectedBank)
+    .in("id", Array.from(accessibleExamBoardIds))
+    .order("name", { ascending: true });
+
+  const { data: chapters } = await supabase
+    .from("chapters")
+    .select("id, name, subject_id, parent_chapter_id, position")
+    .order("position", { ascending: true });
   const allowedSubjectIds = new Set(
     filteredSubjects.map((subject) => subject.id),
   );

@@ -64,9 +64,12 @@ export default async function ConsoleUserDetailPage({
     exam_board: firstOrNull(subject.exam_board),
   }));
 
-  const questionSubjects = normalizedSubjects.filter(
+  const topicalSubjects = normalizedSubjects.filter(
     (subject) =>
-      subject.exam_board?.question_bank === QUESTION_BANK.TOPICAL_QUESTIONS ||
+      subject.exam_board?.question_bank === QUESTION_BANK.TOPICAL_QUESTIONS,
+  );
+  const pastPaperSubjects = normalizedSubjects.filter(
+    (subject) =>
       subject.exam_board?.question_bank === QUESTION_BANK.PAST_PAPER_QUESTIONS,
   );
   const examPaperSubjects = normalizedSubjects.filter(
@@ -120,7 +123,8 @@ export default async function ConsoleUserDetailPage({
       {profile ? (
         <UserAccessEditor
           user={profile}
-          questionSubjects={questionSubjects}
+          topicalSubjects={topicalSubjects}
+          pastPaperSubjects={pastPaperSubjects}
           examPaperSubjects={examPaperSubjects}
           accessGrants={accessGrants}
           adminRole={adminRole}
