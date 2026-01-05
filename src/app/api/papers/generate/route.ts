@@ -2,9 +2,6 @@ import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
 
-const QUOTA_LIMIT = 30; // 30 papers per quota period
-const QUOTA_PERIOD_DAYS = 30; // 30 days
-
 export async function POST(request: Request) {
   const supabase = await createClient();
 
@@ -70,83 +67,45 @@ export async function POST(request: Request) {
     );
   }
 
-  // Step 1: Check user quota
-  const { data: quotaData, error: quotaError } = await supabase
-    .from("user_paper_quotas")
-    .select("papers_generated, quota_reset_at")
-    .eq("user_id", user.id)
-    .single();
+  // Step 1: Check and consume paper generation quota using new quota system
+  // Note: We pass null as paper_id initially, will update after paper is created
+  const { data: quotaResult, error: quotaCheckError } = await supabase.rpc(
+    "check_and_consume_paper_quota",
+    {
+      p_user_id: user.id,
+      p_paper_id: null,
+    },
+  );
 
-  let currentQuota = quotaData;
-
-  // If no quota record exists, create one
-  if (quotaError?.code === "PGRST116") {
-    // Not found
-    const resetAt = new Date();
-    resetAt.setDate(resetAt.getDate() + QUOTA_PERIOD_DAYS);
-
-    const { data: newQuota, error: createQuotaError } = await supabase
-      .from("user_paper_quotas")
-      .insert({
-        user_id: user.id,
-        papers_generated: 0,
-        quota_reset_at: resetAt.toISOString(),
-      })
-      .select("papers_generated, quota_reset_at")
-      .single();
-
-    if (createQuotaError) {
-      return NextResponse.json(
-        { error: createQuotaError.message },
-        { status: 500 },
-      );
-    }
-
-    currentQuota = newQuota;
-  } else if (quotaError) {
-    return NextResponse.json({ error: quotaError.message }, { status: 500 });
-  }
-
-  if (!currentQuota) {
+  if (quotaCheckError) {
+    console.error("Quota check failed:", quotaCheckError);
     return NextResponse.json(
-      { error: "Failed to retrieve quota information" },
+      { error: "Quota check failed", details: quotaCheckError.message },
       { status: 500 },
     );
   }
 
-  // Check if quota needs to be reset
-  const now = new Date();
-  const resetAt = new Date(currentQuota.quota_reset_at);
-
-  if (now >= resetAt) {
-    // Reset quota
-    const newResetAt = new Date();
-    newResetAt.setDate(newResetAt.getDate() + QUOTA_PERIOD_DAYS);
-
-    const { data: updatedQuota, error: resetError } = await supabase
-      .from("user_paper_quotas")
-      .update({
-        papers_generated: 0,
-        quota_reset_at: newResetAt.toISOString(),
-      })
-      .eq("user_id", user.id)
-      .select("papers_generated, quota_reset_at")
-      .single();
-
-    if (resetError) {
-      return NextResponse.json({ error: resetError.message }, { status: 500 });
-    }
-
-    currentQuota = updatedQuota;
+  if (!quotaResult || quotaResult.length === 0) {
+    return NextResponse.json(
+      { error: "Quota check failed - no data returned" },
+      { status: 500 },
+    );
   }
 
-  // Check if user has exceeded quota
-  if (currentQuota.papers_generated >= QUOTA_LIMIT) {
+  const quota = quotaResult[0];
+
+  // If quota check failed, return error
+  if (!quota.success) {
     return NextResponse.json(
       {
         error: "Quota exceeded",
-        message: `You have reached the limit of ${QUOTA_LIMIT} papers per ${QUOTA_PERIOD_DAYS} days`,
-        quota_reset_at: currentQuota.quota_reset_at,
+        message: quota.message,
+        code: quota.code,
+        quota: {
+          used: quota.used,
+          total: quota.total,
+          resetAt: quota.reset_at,
+        },
       },
       { status: 403 },
     );
@@ -189,24 +148,24 @@ export async function POST(request: Request) {
     );
   }
 
-  // Step 4: Update user quota
-  const { error: updateQuotaError } = await supabase
+  // Step 4: Update quota record with paper ID for tracking
+  // This is optional but useful for auditing
+  await supabase
     .from("user_paper_quotas")
     .update({
-      papers_generated: currentQuota.papers_generated + 1,
+      current_period_papers: supabase.sql`array_append(current_period_papers, ${paper.id})`,
     })
     .eq("user_id", user.id);
 
-  if (updateQuotaError) {
-    // Note: We don't rollback the paper creation if quota update fails
-    // This is to prevent losing the generated paper
-    console.error("Failed to update quota:", updateQuotaError);
-  }
-
-  // Return success with paper ID
+  // Return success with paper ID and quota information
   return NextResponse.json({
     success: true,
     paper_id: paper.id,
-    quota_remaining: QUOTA_LIMIT - (currentQuota.papers_generated + 1),
+    quota: {
+      used: quota.used,
+      total: quota.total,
+      remaining: quota.total - quota.used,
+      resetAt: quota.reset_at,
+    },
   });
 }

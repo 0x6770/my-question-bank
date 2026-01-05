@@ -1,16 +1,37 @@
 "use client";
 
+import { Crown, Edit, Shield } from "lucide-react";
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type UserRow = {
   id: string;
   email: string | null;
   role: string;
   created_at?: string;
+  membership_tier?: string;
+  membership_expires_at?: string | null;
+  is_whitelisted?: boolean;
 };
 
 type Props = {
@@ -26,6 +47,14 @@ export function UserListManager({ users }: Props) {
   const [createBusy, setCreateBusy] = useState(false);
   const [createEmail, setCreateEmail] = useState("");
   const [createPassword, setCreatePassword] = useState("");
+
+  // Membership management state
+  const [membershipDialogOpen, setMembershipDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
+  const [membershipTier, setMembershipTier] = useState<string>("basic");
+  const [expiresAt, setExpiresAt] = useState<string>("");
+  const [isWhitelisted, setIsWhitelisted] = useState(false);
+  const [membershipBusy, setMembershipBusy] = useState(false);
 
   const handleCreateUser = async (event: FormEvent) => {
     event.preventDefault();
@@ -80,6 +109,107 @@ export function UserListManager({ users }: Props) {
     } finally {
       setCreateBusy(false);
     }
+  };
+
+  const openMembershipDialog = (user: UserRow) => {
+    setSelectedUser(user);
+    setMembershipTier(user.membership_tier || "basic");
+    setExpiresAt(
+      user.membership_expires_at
+        ? new Date(user.membership_expires_at).toISOString().slice(0, 16)
+        : "",
+    );
+    setIsWhitelisted(user.is_whitelisted || false);
+    setMembershipDialogOpen(true);
+  };
+
+  const handleMembershipUpdate = async () => {
+    if (!selectedUser) return;
+
+    setMembershipBusy(true);
+    setMessage(null);
+
+    try {
+      const response = await fetch(
+        `/api/admin/users/${selectedUser.id}/membership`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            membership_tier: membershipTier,
+            membership_expires_at: expiresAt || null,
+            is_whitelisted: isWhitelisted,
+          }),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to update membership");
+      }
+
+      // Update user in the list
+      setUserList((prev) =>
+        prev.map((u) =>
+          u.id === selectedUser.id
+            ? {
+                ...u,
+                membership_tier: membershipTier,
+                membership_expires_at: expiresAt || null,
+                is_whitelisted: isWhitelisted,
+              }
+            : u,
+        ),
+      );
+
+      setMessage({ type: "success", text: "Membership updated successfully" });
+      setMembershipDialogOpen(false);
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Failed to update membership",
+      });
+    } finally {
+      setMembershipBusy(false);
+    }
+  };
+
+  const getMembershipBadge = (user: UserRow) => {
+    // Don't show membership badge for admin users
+    if (user.role === "admin" || user.role === "super_admin") {
+      return null;
+    }
+
+    if (user.is_whitelisted) {
+      return (
+        <Badge className="bg-purple-500 hover:bg-purple-600">
+          <Crown className="mr-1 h-3 w-3" />
+          WHITELIST
+        </Badge>
+      );
+    }
+
+    const tierColors = {
+      basic: "bg-blue-500 hover:bg-blue-600",
+      premium: "bg-amber-500 hover:bg-amber-600",
+    };
+
+    const tier = user.membership_tier || "basic";
+    const tierColor =
+      tierColors[tier as keyof typeof tierColors] || "bg-blue-500";
+
+    return <Badge className={tierColor}>{tier.toUpperCase()}</Badge>;
+  };
+
+  const isMembershipActive = (user: UserRow) => {
+    return (
+      user.membership_expires_at &&
+      new Date(user.membership_expires_at) > new Date()
+    );
   };
 
   return (
@@ -140,12 +270,13 @@ export function UserListManager({ users }: Props) {
       ) : (
         userList.map((user) => {
           const userLabel = user.email || user.id;
+          const membershipActive = isMembershipActive(user);
           return (
             <div
               key={user.id}
               className="grid gap-4 px-6 py-5 md:grid-cols-[1fr_auto] md:items-center"
             >
-              <div className="space-y-1">
+              <div className="space-y-2">
                 <p className="text-sm font-semibold text-slate-800">
                   {userLabel}
                 </p>
@@ -153,14 +284,34 @@ export function UserListManager({ users }: Props) {
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 uppercase tracking-wide text-slate-600">
                     {user.role}
                   </span>
+                  {getMembershipBadge(user)}
                   {user.created_at ? (
                     <span>
                       Created {new Date(user.created_at).toLocaleDateString()}
                     </span>
                   ) : null}
                 </div>
+                {user.membership_expires_at && (
+                  <div
+                    className={`text-xs ${membershipActive ? "text-green-600" : "text-red-600"}`}
+                  >
+                    {membershipActive ? "Expires" : "Expired"}:{" "}
+                    {new Date(user.membership_expires_at).toLocaleDateString()}
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2">
+                {/* Don't show Membership button for admin users */}
+                {user.role !== "admin" && user.role !== "super_admin" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openMembershipDialog(user)}
+                  >
+                    <Edit className="mr-1 h-3 w-3" />
+                    Membership
+                  </Button>
+                )}
                 <Button asChild variant="outline" size="sm">
                   <Link href={`/console/users/${user.id}`}>Manage</Link>
                 </Button>
@@ -169,6 +320,79 @@ export function UserListManager({ users }: Props) {
           );
         })
       )}
+
+      {/* Membership Edit Dialog */}
+      <Dialog
+        open={membershipDialogOpen}
+        onOpenChange={setMembershipDialogOpen}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Membership</DialogTitle>
+            <DialogDescription>
+              Update membership tier and settings for{" "}
+              {selectedUser?.email || selectedUser?.id}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="membership-tier">Membership Tier</Label>
+              <Select value={membershipTier} onValueChange={setMembershipTier}>
+                <SelectTrigger id="membership-tier">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="basic">Basic</SelectItem>
+                  <SelectItem value="premium">Premium</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="expires-at">Expires At</Label>
+              <Input
+                id="expires-at"
+                type="datetime-local"
+                value={expiresAt}
+                onChange={(e) => setExpiresAt(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Leave empty for no expiration
+              </p>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="whitelist"
+                checked={isWhitelisted}
+                onCheckedChange={(checked) =>
+                  setIsWhitelisted(checked === true)
+                }
+              />
+              <label
+                htmlFor="whitelist"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Add to whitelist (unlimited access)
+              </label>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setMembershipDialogOpen(false)}
+              disabled={membershipBusy}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleMembershipUpdate} disabled={membershipBusy}>
+              {membershipBusy ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

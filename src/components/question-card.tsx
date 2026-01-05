@@ -157,10 +157,29 @@ export function QuestionCard({
     setViewingAnswer(true);
     setAnswerError(null);
     try {
-      const { error } = await supabase.rpc("track_answer_view", {
-        q_id: question.id,
-      });
-      if (error) throw error;
+      // Check quota before showing answer
+      const response = await fetch(
+        `/api/questions/${question.id}/view-answer`,
+        {
+          method: "POST",
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        // Quota exceeded or other error
+        if (data.code === "quota_exceeded" && data.quota) {
+          setAnswerError(
+            `Quota exceeded! ${data.quota.used}/${data.quota.total} answers viewed. Resets on ${new Date(data.quota.resetAt).toLocaleDateString()}`,
+          );
+        } else {
+          setAnswerError(data.message || "Failed to view answer");
+        }
+        return;
+      }
+
+      // Quota check passed, show answer
       setIsAnswerViewed(true);
       // Open fullscreen mode and switch to Answer view
       setFullscreenOpen(true);
@@ -170,7 +189,7 @@ export function QuestionCard({
       setAnswerError(
         error instanceof Error
           ? error.message
-          : "Failed to record answer view, please try again later.",
+          : "Failed to view answer, please try again later.",
       );
     } finally {
       setViewingAnswer(false);

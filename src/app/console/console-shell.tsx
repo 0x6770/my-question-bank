@@ -1,6 +1,6 @@
 "use client";
 
-import { FileQuestion, FileText, Tag, Users } from "lucide-react";
+import { FileQuestion, FileText, Settings, Tag, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType, ReactNode, SVGProps } from "react";
@@ -34,6 +34,12 @@ const navItems: NavItem[] = [
     ],
   },
   { href: "/console/tags", label: "Tags", icon: Tag },
+  {
+    href: "/console/permissions",
+    label: "Permissions",
+    icon: Settings,
+    requiresSuperAdmin: true,
+  },
   {
     href: "/console/users",
     label: "Users",

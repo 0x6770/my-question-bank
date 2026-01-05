@@ -5,7 +5,9 @@ export default async function ConsoleUsersPage() {
   const supabase = await createClient();
   const { data: profiles, error: profilesError } = await supabase
     .from("profiles")
-    .select("id, email, role, created_at")
+    .select(
+      "id, email, role, created_at, membership_tier, membership_expires_at, is_whitelisted",
+    )
     .order("created_at", { ascending: false });
 
   const loadError = profilesError
