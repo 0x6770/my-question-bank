@@ -30,8 +30,10 @@ import logging
 import mimetypes
 import re
 import sys
+import threading
 import uuid
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -1044,10 +1046,13 @@ def upload_items(
     error_report: Optional[ErrorReport] = None,
     show_progress: bool = True,
     verbose: bool = False,
+    max_workers: int = 5,
 ) -> int:
     """Upload converted items into Supabase DB + storage. Returns success count."""
     success = 0
     failed = 0
+    # 使用线程锁保护计数器
+    lock = threading.Lock()
 
     def upload_single_item(item_idx: int, item: dict[str, Any]) -> bool:
         """Upload a single item. Returns True if successful."""
@@ -1065,7 +1070,8 @@ def upload_items(
                     message=error_msg,
                     context={"item_index": item_idx, "chapter_ids": chapter_ids},
                 ))
-                failed += 1
+                with lock:
+                    failed += 1
                 return False
             else:
                 raise ValueError(error_msg)
@@ -1139,14 +1145,15 @@ def upload_items(
                         message=f"上传失败: {exc}",
                         context={
                             "question_id": q_id,
-                            "chapter_id": chapter_id,
+                            "chapter_ids": chapter_ids,
                             "item_index": item_idx,
                             "error_details": str(exc),
                         },
                     ))
                 raise
 
-            success += 1
+            with lock:
+                success += 1
             if error_report:
                 error_report.add_success()
             if verbose:
@@ -1161,27 +1168,56 @@ def upload_items(
                     message=f"上传失败: {exc}",
                     context={
                         "item_index": item_idx,
-                        "chapter_id": chapter_id,
+                        "chapter_ids": chapter_ids,
                         "error_details": str(exc),
                     },
                 ))
-                failed += 1
+                with lock:
+                    failed += 1
                 if verbose:
                     console.print(f"[red]题目 #{item_idx} 上传失败: {exc}[/red]")
                 return False
             else:
                 raise
 
+    # 并发上传
     if show_progress and len(items) > 0:
         with create_progress() as progress:
             task_id = progress.add_task("上传题目", total=len(items), success=0, failed=0)
-            for item_idx, item in enumerate(items, start=1):
-                upload_single_item(item_idx, item)
-                progress.update(task_id, advance=1, success=success, failed=failed)
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # 提交所有任务
+                futures = {
+                    executor.submit(upload_single_item, idx + 1, item): idx
+                    for idx, item in enumerate(items)
+                }
+
+                # 处理完成的任务
+                for future in as_completed(futures):
+                    try:
+                        future.result()  # 获取结果，如果有异常会抛出
+                    except Exception:
+                        # 异常已在 upload_single_item 中处理
+                        pass
+
+                    # 更新进度条（线程安全）
+                    with lock:
+                        progress.update(task_id, advance=1, success=success, failed=failed)
+
         console.print(f"[green]上传完成:[/green] {success}/{len(items)} 成功")
     else:
-        for item_idx, item in enumerate(items, start=1):
-            upload_single_item(item_idx, item)
+        # 无进度条模式
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(upload_single_item, idx + 1, item): idx
+                for idx, item in enumerate(items)
+            }
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception:
+                    pass
+
         logger.info(f"上传完成: {success}/{len(items)} 成功")
 
     return success
@@ -1304,6 +1340,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help="tags NDJSON 文件路径（默认：data/database_export-myquestionbank-9gcfve68fe4574af-tags.json）",
+    )
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=5,
+        help="并发上传线程数（默认：5）",
     )
     return parser.parse_args()
 
@@ -1884,7 +1926,7 @@ def main():
             return
 
         logger.info(
-            f"开始上传到 Supabase（question_bucket={question_bucket}, answer_bucket={answer_bucket}）..."
+            f"开始上传到 Supabase（question_bucket={question_bucket}, answer_bucket={answer_bucket}, max_workers={args.max_workers}）..."
         )
         try:
             uploaded = upload_items(
@@ -1895,6 +1937,7 @@ def main():
                 error_report=error_report,
                 show_progress=show_progress,
                 verbose=args.verbose,
+                max_workers=args.max_workers,
             )
             console.print(f"[green]上传完成:[/green] {uploaded}/{len(upload_items_list)} 条。")
         except Exception as exc:  # noqa: BLE001

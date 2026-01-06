@@ -20,8 +20,10 @@ import argparse
 import json
 import logging
 import os
+import threading
 import uuid
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Optional
@@ -234,6 +236,7 @@ def main():
   parser.add_argument("--auto-create", action="store_true", help="缺失对象自动创建（非 dry-run 时生效）")
   parser.add_argument("--n-paper", "--n_paper", type=int, help="限制上传的 exam paper 数量（按成功导入计数）")
   parser.add_argument("--verbose", "-v", action="store_true", help="显示详细日志（包括 HTTP 请求）")
+  parser.add_argument("--max-workers", type=int, default=5, help="并发上传线程数（默认：5）")
   args = parser.parse_args()
 
   logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -288,15 +291,22 @@ def main():
     else:
       client = None
 
+  # 创建线程锁用于保护文件写入和共享变量
+  error_lock = threading.Lock()
+  skipped_lock = threading.Lock()
+  stats_lock = threading.Lock()
+
   def append_error(rec: dict[str, Any], reason: str):
-    errors_path.parent.mkdir(parents=True, exist_ok=True)
-    with errors_path.open("a", encoding="utf-8") as f:
-      f.write(json.dumps({"reason": reason, "record": rec}, ensure_ascii=False) + "\n")
+    with error_lock:
+      errors_path.parent.mkdir(parents=True, exist_ok=True)
+      with errors_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"reason": reason, "record": rec}, ensure_ascii=False) + "\n")
 
   def append_skipped(rec: dict[str, Any], reason: str):
-    skipped_path.parent.mkdir(parents=True, exist_ok=True)
-    with skipped_path.open("a", encoding="utf-8") as f:
-      f.write(json.dumps({"reason": reason, "record": rec}, ensure_ascii=False) + "\n")
+    with skipped_lock:
+      skipped_path.parent.mkdir(parents=True, exist_ok=True)
+      with skipped_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"reason": reason, "record": rec}, ensure_ascii=False) + "\n")
 
   # 清空旧的错误/跳过文件
   if errors_path.exists():
@@ -418,7 +428,8 @@ def main():
         missing_files.append(str(ms_local))
       if missing_files:
         append_error(rec.raw, f"missing pdf {missing_files}")
-        pdf_missing += 1
+        with stats_lock:
+          pdf_missing += 1
         return "failed"
 
       uploaded_paths: list[str] = []
@@ -540,26 +551,54 @@ def main():
       append_error(rec.raw, f"异常: {exc}")
       return "failed"
 
-  # 主循环：使用 rich 进度条
+  # 主循环：使用 rich 进度条 + 并发处理
   total_records = len(records)
   if args.n_paper:
     total_records = min(total_records, args.n_paper)
 
+  # 限制实际处理的记录数
+  records_to_process = records if args.n_paper is None else records[:args.n_paper]
+
   with create_progress() as progress:
-    task_id = progress.add_task("导入试卷", total=total_records, success=0, skipped=0, failed=0)
-    for rec in records:
-      if args.n_paper is not None and result["imported"] >= args.n_paper:
-        break
-      result["processed"] += 1
-      status = process_single_record(rec)
-      result[status] += 1
-      progress.update(
-        task_id,
-        advance=1,
-        success=result["imported"],
-        skipped=result["skipped"],
-        failed=result["failed"],
-      )
+    task_id = progress.add_task("导入试卷", total=len(records_to_process), success=0, skipped=0, failed=0)
+
+    with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
+      # 提交所有任务
+      futures = {
+        executor.submit(process_single_record, rec): idx
+        for idx, rec in enumerate(records_to_process)
+      }
+
+      # 处理完成的任务
+      for future in as_completed(futures):
+        try:
+          status = future.result()  # 获取结果
+          with stats_lock:
+            result["processed"] += 1
+            result[status] += 1
+
+          # 更新进度条（线程安全）
+          with stats_lock:
+            progress.update(
+              task_id,
+              advance=1,
+              success=result["imported"],
+              skipped=result["skipped"],
+              failed=result["failed"],
+            )
+        except Exception as e:
+          # 处理未预期的异常
+          logger.error(f"处理记录时发生异常: {e}")
+          with stats_lock:
+            result["processed"] += 1
+            result["failed"] += 1
+            progress.update(
+              task_id,
+              advance=1,
+              success=result["imported"],
+              skipped=result["skipped"],
+              failed=result["failed"],
+            )
 
   console.print(
     f"[green]完成:[/green] processed={result['processed']} "
