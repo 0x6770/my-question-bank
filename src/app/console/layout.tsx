@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
@@ -5,6 +6,10 @@ import { createClient } from "@/lib/supabase/server";
 
 import { ConsoleShell } from "./console-shell";
 import { isAdminRole } from "./types";
+
+export const metadata: Metadata = {
+  title: "My Question Bank | Console",
+};
 
 export default async function ConsoleLayout({
   children,
