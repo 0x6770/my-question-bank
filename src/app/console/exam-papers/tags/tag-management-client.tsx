@@ -14,13 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { type TreeNode, TreeSelect } from "@/components/ui/tree-select";
 import { createClient } from "@/lib/supabase/client";
 import type { SubjectWithBoard } from "@/lib/supabase/relations";
 import { cn } from "@/lib/utils";
@@ -58,8 +52,8 @@ export function ExamPaperTagManagement({
   const supabase = useMemo(() => createClient(), []);
   const [subjects] = useState(initialSubjects);
   const [tags, setTags] = useState<TagDefinition[]>(initialTags);
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string>(
-    initialSubjects[0]?.id ? String(initialSubjects[0].id) : "",
+  const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(
+    initialSubjects[0]?.id ?? null,
   );
   const [creatingTagName, setCreatingTagName] = useState("");
   const [creatingRequired, setCreatingRequired] = useState(false);
@@ -75,19 +69,48 @@ export function ExamPaperTagManagement({
     text: string;
   } | null>(loadError ? { type: "error", text: loadError } : null);
 
-  const subjectOptions = useMemo(
-    () =>
-      subjects
+  const subjectTreeData = useMemo(() => {
+    const boardMap = new Map<
+      number,
+      { name: string; subjects: SubjectRow[] }
+    >();
+
+    for (const subject of subjects) {
+      if (subject.exam_board) {
+        const boardId = subject.exam_board.id;
+        if (!boardMap.has(boardId)) {
+          boardMap.set(boardId, {
+            name: subject.exam_board.name,
+            subjects: [],
+          });
+        }
+        boardMap.get(boardId)?.subjects.push(subject);
+      }
+    }
+
+    const treeNodes: TreeNode[] = [];
+    for (const [
+      boardId,
+      { name, subjects: boardSubjects },
+    ] of boardMap.entries()) {
+      const children: TreeNode[] = boardSubjects
         .slice()
         .sort((a, b) => a.name.localeCompare(b.name, "zh-CN"))
         .map((subject) => ({
-          id: subject.id,
-          label: subject.exam_board?.name
-            ? `${subject.exam_board.name} · ${subject.name}`
-            : subject.name,
-        })),
-    [subjects],
-  );
+          id: `subject-${subject.id}`,
+          label: subject.name,
+          value: subject.id,
+        }));
+
+      treeNodes.push({
+        id: `board-${boardId}`,
+        label: name,
+        children,
+      });
+    }
+
+    return treeNodes.sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
+  }, [subjects]);
 
   const tagsBySubject = useMemo(() => {
     const map = new Map<number, TagDefinition[]>();
@@ -107,7 +130,7 @@ export function ExamPaperTagManagement({
   }, [tags]);
 
   const currentSubjectTags = selectedSubjectId
-    ? (tagsBySubject.get(Number.parseInt(selectedSubjectId, 10)) ?? [])
+    ? (tagsBySubject.get(selectedSubjectId) ?? [])
     : [];
 
   const resetMessage = () => setMessage(null);
@@ -115,14 +138,14 @@ export function ExamPaperTagManagement({
   const handleCreateTag = async (event: React.FormEvent) => {
     event.preventDefault();
     resetMessage();
-    const subjectId = Number.parseInt(selectedSubjectId, 10);
-    if (!subjectId) {
+    if (!selectedSubjectId) {
       setMessage({
         type: "error",
         text: "Please select a subject before creating a tag.",
       });
       return;
     }
+    const subjectId = selectedSubjectId;
     const name = creatingTagName.trim();
     if (!name) {
       setMessage({ type: "error", text: "Please enter a tag name." });
@@ -252,6 +275,13 @@ export function ExamPaperTagManagement({
 
   const handleDeleteValue = async (tagId: number, valueId: number) => {
     resetMessage();
+    if (
+      !window.confirm(
+        "Delete this tag value? This will remove it from all associated exam papers.",
+      )
+    ) {
+      return;
+    }
     setBusyId(valueId);
     const { error } = await supabase
       .from("subject_exam_tag_values")
@@ -330,24 +360,16 @@ export function ExamPaperTagManagement({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
             <div className="space-y-2 sm:w-80">
               <Label htmlFor="subject-select">Subject</Label>
-              <Select
+              <TreeSelect
+                data={subjectTreeData}
                 value={selectedSubjectId}
                 onValueChange={(value) => {
                   setSelectedSubjectId(value);
                   resetMessage();
                 }}
-              >
-                <SelectTrigger id="subject-select">
-                  <SelectValue placeholder="Select Subject" />
-                </SelectTrigger>
-                <SelectContent>
-                  {subjectOptions.map((option) => (
-                    <SelectItem key={option.id} value={option.id.toString()}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="Select Subject"
+                className="w-full"
+              />
             </div>
           </div>
         </CardContent>
