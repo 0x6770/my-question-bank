@@ -232,11 +232,11 @@ export function QuestionCard({
         <div className="grid gap-0 border-b border-slate-100 md:grid-cols-[1fr_200px] lg:grid-cols-[1fr_200px]">
           <div className="flex flex-col gap-3 px-4 py-4">
             <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-              <span
-                className={`rounded px-3 py-1 font-semibold uppercase tracking-wide ${question.calculator ? "bg-sky-50 text-sky-700" : "bg-slate-100 text-slate-500"}`}
-              >
-                {question.calculator ? "Calculator" : "No Calculator"}
-              </span>
+              {!question.calculator && (
+                <span className="rounded bg-slate-100 px-3 py-1 font-semibold uppercase tracking-wide text-slate-500">
+                  No Calculator
+                </span>
+              )}
               {/* <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
                   {subjectLabel} {chapterLabel ? ` > ${chapterLabel}` : ""}
                 </span> */}
@@ -395,11 +395,11 @@ export function QuestionCard({
           <div className="relative flex h-[90vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
               <div className="flex flex-wrap items-center gap-3 text-sm text-slate-700">
-                <span
-                  className={`rounded px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${question.calculator ? "bg-sky-50 text-sky-700" : "bg-slate-100 text-slate-500"}`}
-                >
-                  {question.calculator ? "CALCULATOR" : "NO CALCULATOR"}
-                </span>
+                {!question.calculator && (
+                  <span className="rounded bg-slate-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    NO CALCULATOR
+                  </span>
+                )}
                 <p className="text-xs uppercase tracking-wide text-slate-500">
                   Question #{question.id}
                 </p>

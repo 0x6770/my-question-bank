@@ -325,7 +325,7 @@ export function QuestionManagement({
     setTypicalChapterId(null);
     setMarks("");
     setDifficulty("2");
-    setCalculatorAllowed(false);
+    setCalculatorAllowed(true);
     setImages([]);
     setAnswerImages([]);
     setQuestionTags({});
@@ -773,7 +773,7 @@ export function QuestionManagement({
     setTypicalChapterId(null);
     setMarks("");
     setDifficulty("2");
-    setCalculatorAllowed(false);
+    setCalculatorAllowed(true);
     setImages([]);
     setAnswerImages([]);
   };
@@ -1756,7 +1756,7 @@ export function QuestionManagement({
                     Calculator not allowed
                   </span>
                   <span className="text-xs text-slate-500">
-                    Check if a calculator is not allowed for this question.
+                    Click if a calculator is not allowed for this question.
                   </span>
                 </div>
               </label>
@@ -2196,7 +2196,7 @@ export function QuestionManagement({
                         Calculator not allowed
                       </span>
                       <span className="text-xs text-slate-500">
-                        Check if a calculator is not allowed for this question.
+                        Click if a calculator is not allowed for this question.
                       </span>
                     </div>
                   </label>
