@@ -66,6 +66,23 @@ export default async function Home(props: PageProps) {
     filteredSubjects.map((subject) => subject.id),
   );
 
+  // Fetch tags for all subjects in this question bank
+  const { data: tags } = await supabase
+    .from("subject_question_tags")
+    .select(
+      `
+      id,
+      subject_id,
+      name,
+      required,
+      position,
+      values:subject_question_tag_values(id, value, position)
+    `,
+    )
+    .in("subject_id", Array.from(allowedSubjectIds))
+    .order("subject_id", { ascending: true })
+    .order("position", { ascending: true });
+
   // Map question bank to URL parameter format for API
   const questionBankParam =
     selectedBank === QUESTION_BANK.PAST_PAPER_QUESTIONS
@@ -94,6 +111,7 @@ export default async function Home(props: PageProps) {
                 parentChapterId: chapter.parent_chapter_id ?? null,
               })) ?? []
           }
+          tags={tags ?? []}
           questionBank={questionBankParam}
         />
       </div>

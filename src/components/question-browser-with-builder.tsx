@@ -19,6 +19,14 @@ type QuestionBrowserWithBuilderProps = {
     subjectId: number | null;
     parentChapterId: number | null;
   }[];
+  tags: {
+    id: number;
+    subject_id: number;
+    name: string;
+    required: boolean;
+    position: number;
+    values: { id: number; value: string; position: number }[] | null;
+  }[];
   questionBank: string;
 };
 
@@ -26,6 +34,7 @@ export function QuestionBrowserWithBuilder({
   examBoards,
   subjects,
   chapters,
+  tags,
   questionBank,
 }: QuestionBrowserWithBuilderProps) {
   const router = useRouter();
@@ -158,6 +167,7 @@ export function QuestionBrowserWithBuilder({
             examBoards={examBoards}
             subjects={subjects}
             chapters={chapters}
+            tags={tags}
             questionBank={questionBank}
             paperBuilderMode={true}
             selectedQuestionIds={selectedQuestionIds}

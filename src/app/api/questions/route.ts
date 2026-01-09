@@ -15,9 +15,23 @@ export async function GET(request: Request) {
   const completionParam = searchParams.get("completion"); // "all" | "completed" | "incompleted"
   const bookmarkParam = searchParams.get("bookmark"); // "all" | "bookmarked"
   const bankParam = searchParams.get("bank"); // "topical" | "past-paper" | "exam-paper"
+  const tagFiltersParam = searchParams.get("tagFilters"); // "tagName1:valueId1,tagName2:valueId2"
 
   const subjectId = subjectIdParam ? Number.parseInt(subjectIdParam, 10) : null;
   const chapterId = chapterIdParam ? Number.parseInt(chapterIdParam, 10) : null;
+
+  // Parse tag filters: format is "tagName1:valueId1,tagName2:valueId2"
+  const tagFilters: Array<{ tagName: string; valueId: number }> = [];
+  if (tagFiltersParam) {
+    const pairs = tagFiltersParam.split(",");
+    for (const pair of pairs) {
+      const [tagName, valueIdStr] = pair.split(":");
+      const valueId = Number.parseInt(valueIdStr, 10);
+      if (tagName && Number.isFinite(valueId)) {
+        tagFilters.push({ tagName, valueId });
+      }
+    }
+  }
 
   // Map URL parameter to question bank value, default to "past paper questions"
   let selectedBank: QuestionBank = QUESTION_BANK.PAST_PAPER_QUESTIONS;
@@ -167,12 +181,74 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: qcError.message }, { status: 500 });
   }
 
-  const matchingQuestionIds = Array.from(
+  let matchingQuestionIds = Array.from(
     new Set((questionChapterRows ?? []).map((row) => row.question_id)),
   );
 
   if (matchingQuestionIds.length === 0) {
     return NextResponse.json({ questions: [], hasMore: false, page: safePage });
+  }
+
+  // Apply tag filters if provided
+  if (tagFilters.length > 0 && subjectId) {
+    // Query questions that have ALL the specified tag values for the subject
+    const { data: tagFilterData } = await supabase
+      .from("question_tag_values")
+      .select(
+        `
+        question_id,
+        tag_value_id,
+        subject_question_tag_values!inner(
+          id,
+          subject_question_tags!inner(
+            name
+          )
+        )
+      `,
+      )
+      .eq("subject_id", subjectId)
+      .in("question_id", matchingQuestionIds);
+
+    // Build a map: questionId -> Set of (tagName, valueId) pairs
+    const questionTagMap = new Map<number, Set<string>>();
+    for (const row of tagFilterData ?? []) {
+      const tagValues = row.subject_question_tag_values;
+      const tagValue = Array.isArray(tagValues) ? tagValues[0] : tagValues;
+      const tagRecords = tagValue?.subject_question_tags;
+      const tagRecord = Array.isArray(tagRecords) ? tagRecords[0] : tagRecords;
+      const tagName = tagRecord?.name;
+      if (!tagName) {
+        continue;
+      }
+      const key = `${tagName}:${row.tag_value_id}`;
+      const existing = questionTagMap.get(row.question_id) ?? new Set();
+      existing.add(key);
+      questionTagMap.set(row.question_id, existing);
+    }
+
+    // Filter questions that have ALL required tags
+    const requiredTagKeys = new Set(
+      tagFilters.map((f) => `${f.tagName}:${f.valueId}`),
+    );
+    matchingQuestionIds = matchingQuestionIds.filter((qId) => {
+      const questionTags = questionTagMap.get(qId);
+      if (!questionTags) return false;
+      // Check if all required tags are present
+      for (const requiredKey of requiredTagKeys) {
+        if (!questionTags.has(requiredKey)) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    if (matchingQuestionIds.length === 0) {
+      return NextResponse.json({
+        questions: [],
+        hasMore: false,
+        page: safePage,
+      });
+    }
   }
 
   // 第二步：查询题目详情
@@ -256,6 +332,53 @@ export async function GET(request: Request) {
     questionToChaptersMap.set(qc.question_id, existing);
   }
 
+  // 第四步：获取每个题目的标签
+  const { data: allQuestionTags } = await supabase
+    .from("question_tag_values")
+    .select(
+      `
+      question_id,
+      subject_id,
+      tag_value_id,
+      subject_question_tag_values!inner(
+        id,
+        value,
+        tag_id,
+        subject_question_tags!inner(
+          id,
+          name,
+          subject_id
+        )
+      )
+    `,
+    )
+    .in("question_id", questionIds);
+
+  // 构建 questionId -> tags[] 映射
+  type QuestionTag = {
+    subjectId: number;
+    tagName: string;
+    tagValue: string;
+  };
+
+  const questionToTagsMap = new Map<number, QuestionTag[]>();
+  for (const qt of allQuestionTags ?? []) {
+    const tagValues = qt.subject_question_tag_values;
+    const tagValue = Array.isArray(tagValues) ? tagValues[0] : tagValues;
+    const tagRecords = tagValue?.subject_question_tags;
+    const tagRecord = Array.isArray(tagRecords) ? tagRecords[0] : tagRecords;
+    if (!tagValue || !tagRecord?.name) {
+      continue;
+    }
+    const existing = questionToTagsMap.get(qt.question_id) ?? [];
+    existing.push({
+      subjectId: qt.subject_id,
+      tagName: tagRecord.name,
+      tagValue: tagValue.value,
+    });
+    questionToTagsMap.set(qt.question_id, existing);
+  }
+
   const questionImagePaths = new Set<string>();
   const answerImagePaths = new Set<string>();
 
@@ -302,6 +425,12 @@ export async function GET(request: Request) {
       : null;
     const subjectIdFromChapter = chapter?.subject_id ?? null;
 
+    // 获取这个题目的标签（只返回主 subject 的标签）
+    const questionTags = questionToTagsMap.get(row.id) ?? [];
+    const primarySubjectTags = subjectIdFromChapter
+      ? questionTags.filter((tag) => tag.subjectId === subjectIdFromChapter)
+      : [];
+
     return {
       id: row.id,
       marks: row.marks,
@@ -316,6 +445,10 @@ export async function GET(request: Request) {
         subjectIdFromChapter != null
           ? (subjectMap.get(subjectIdFromChapter) ?? null)
           : null,
+      tags: primarySubjectTags.map((tag) => ({
+        name: tag.tagName,
+        value: tag.tagValue,
+      })),
       images: sortedImages,
       answerImages: sortedAnswerImages,
     };

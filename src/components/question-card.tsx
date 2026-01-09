@@ -37,6 +37,10 @@ type QuestionCardProps = {
     answerImages: QuestionImage[];
     isBookmarked?: boolean;
     isAnswerViewed?: boolean;
+    tags?: {
+      name: string;
+      value: string;
+    }[];
   };
   disableInteractions?: boolean;
   paperBuilderMode?: boolean;
@@ -219,6 +223,8 @@ export function QuestionCard({
   const showQuestionOnly = showQuestion && !showAnswer;
   const showAnswerOnly = showAnswer && !showQuestion;
   const showBoth = showQuestion && showAnswer;
+  // TODO: Re-enable question tag pills (Paper/Topic) once the tag UX is finalized.
+  const showQuestionTags = false;
 
   return (
     <>
@@ -261,6 +267,19 @@ export function QuestionCard({
                 </Button>
               ) : null}
             </div>
+            {/* Tags */}
+            {showQuestionTags && question.tags && question.tags.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                {question.tags.map((tag, index) => (
+                  <span
+                    key={`${question.id}-tag-${index}`}
+                    className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-700"
+                  >
+                    {tag.name}: {tag.value}
+                  </span>
+                ))}
+              </div>
+            )}
             <div className="overflow-hidden">
               {question.images.length > 0 ? (
                 <div className="flex flex-col space-y-0">
@@ -403,6 +422,17 @@ export function QuestionCard({
                 <span className="text-xs text-slate-500">
                   Marks: {question.marks}
                 </span>
+                {showQuestionTags &&
+                  question.tags &&
+                  question.tags.length > 0 &&
+                  question.tags.map((tag, index) => (
+                    <span
+                      key={`full-${question.id}-tag-${index}`}
+                      className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-700"
+                    >
+                      {tag.name}: {tag.value}
+                    </span>
+                  ))}
               </div>
               <div className="flex items-center gap-3">
                 <div className="inline-flex overflow-hidden rounded-full border border-slate-200 bg-white text-sm shadow-sm">

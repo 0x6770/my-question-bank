@@ -5,6 +5,13 @@ import { ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { QuestionCard } from "@/components/question-card";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type QuestionBrowserProps = {
   examBoards: { id: number; name: string }[];
@@ -14,6 +21,14 @@ type QuestionBrowserProps = {
     name: string;
     subjectId: number | null;
     parentChapterId: number | null;
+  }[];
+  tags: {
+    id: number;
+    subject_id: number;
+    name: string;
+    required: boolean;
+    position: number;
+    values: { id: number; value: string; position: number }[] | null;
   }[];
   questionBank: string; // "topical" | "past-paper" | "exam-paper"
   paperBuilderMode?: boolean;
@@ -59,6 +74,10 @@ type QuestionResult = {
     }[];
     chapterId: number | null;
     subjectId: number | null;
+    tags?: {
+      name: string;
+      value: string;
+    }[];
   }>;
   hasMore?: boolean;
   page?: number;
@@ -75,6 +94,7 @@ export function QuestionBrowser({
   examBoards,
   subjects,
   chapters,
+  tags,
   questionBank,
   paperBuilderMode = false,
   selectedQuestionIds,
@@ -84,6 +104,9 @@ export function QuestionBrowser({
   const [difficultySelections, setDifficultySelections] = useState<Set<number>>(
     new Set(),
   );
+  const [tagFilters, setTagFilters] = useState<Record<string, number | null>>(
+    {},
+  ); // { tagName: valueId }
   const [questions, setQuestions] = useState<QuestionResult["questions"]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -128,6 +151,7 @@ export function QuestionBrowser({
     setActiveSubjectId(null);
     setCompletionFilter("all");
     setBookmarkFilter("all");
+    setTagFilters({});
     selectHierarchy("all");
   };
 
@@ -224,6 +248,14 @@ export function QuestionBrowser({
         if (bookmarkFilter === "bookmarked") {
           params.set("bookmark", "bookmarked");
         }
+        // Add tag filters
+        const activeTagFilters = Object.entries(tagFilters)
+          .filter(([_, valueId]) => valueId !== null)
+          .map(([tagName, valueId]) => `${tagName}:${valueId}`)
+          .join(",");
+        if (activeTagFilters) {
+          params.set("tagFilters", activeTagFilters);
+        }
         params.set("bank", questionBank);
         const response = await fetch(`/api/questions?${params.toString()}`, {
           signal: controller.signal,
@@ -256,7 +288,25 @@ export function QuestionBrowser({
     hierarchySelection,
     page,
     questionBank,
+    tagFilters,
   ]);
+
+  // Get available tags for the active subject
+  const availableSubjectTags = useMemo(() => {
+    if (!activeSubjectId) return [];
+    return tags.filter((tag) => tag.subject_id === activeSubjectId);
+  }, [activeSubjectId, tags]);
+
+  // Split tags into paper tag and custom tags
+  const paperTag = useMemo(
+    () => availableSubjectTags.find((tag) => tag.name === "paper"),
+    [availableSubjectTags],
+  );
+  const paperLabel = "Paper";
+  const customTags = useMemo(
+    () => availableSubjectTags.filter((tag) => tag.name !== "paper"),
+    [availableSubjectTags],
+  );
 
   const currentLabel = useMemo(() => {
     if (hierarchySelection.startsWith("subject:")) {
@@ -323,7 +373,8 @@ export function QuestionBrowser({
     hierarchySelection.startsWith("subject:") ||
     difficultySelections.size > 0 ||
     completionFilter !== "all" ||
-    bookmarkFilter !== "all";
+    bookmarkFilter !== "all" ||
+    Object.values(tagFilters).some((v) => v !== null);
 
   const visibleSubjects = useMemo(() => {
     if (activeExamBoardId == null) return subjects;
@@ -335,7 +386,8 @@ export function QuestionBrowser({
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-slate-200 bg-slate-100/70 p-4">
-        <div className="flex flex-wrap items-start gap-4 md:items-end">
+        <div className="space-y-4">
+          {/* Row 1: Subject Selector */}
           <div className="space-y-2">
             <p className="text-sm font-semibold text-slate-700">
               Exam / Subject / Chapter
@@ -511,104 +563,206 @@ export function QuestionBrowser({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <p className="text-sm font-semibold text-slate-700">Difficulty</p>
-            <div className="inline-flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm md:flex-nowrap md:items-center">
-              {difficultyOptions.map((item) => {
-                const checked = difficultySelections.has(item.value);
+          {/* Row 2: Custom Tags */}
+          {customTags.length > 0 && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {customTags.map((tag) => {
+                const selectId = `tag-filter-${tag.id}`;
                 return (
-                  <label
-                    key={item.value}
-                    className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-100"
-                  >
-                    <input
-                      type="checkbox"
-                      className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
-                      checked={checked}
-                      onChange={() => toggleDifficulty(item.value)}
-                    />
-                    <span>{item.label}</span>
-                  </label>
+                  <div key={tag.id} className="space-y-2">
+                    <label
+                      htmlFor={selectId}
+                      className="text-sm font-semibold text-slate-700"
+                    >
+                      {tag.name}
+                      {tag.required && (
+                        <span className="ml-1 text-red-500">*</span>
+                      )}
+                    </label>
+                    <Select
+                      value={
+                        tagFilters[tag.name]
+                          ? String(tagFilters[tag.name])
+                          : "all"
+                      }
+                      onValueChange={(value) => {
+                        const valueId =
+                          value === "all" ? null : parseInt(value, 10);
+                        setTagFilters((prev) => ({
+                          ...prev,
+                          [tag.name]: valueId,
+                        }));
+                        setPage(1);
+                      }}
+                    >
+                      <SelectTrigger
+                        id={selectId}
+                        className="w-full rounded-xl border-slate-200 shadow-sm"
+                      >
+                        <SelectValue placeholder={`All ${tag.name}`} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All {tag.name}</SelectItem>
+                        {tag.values
+                          ?.sort(
+                            (a, b) => (a.position || 0) - (b.position || 0),
+                          )
+                          .map((val) => (
+                            <SelectItem key={val.id} value={String(val.id)}>
+                              {val.value}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 );
               })}
             </div>
-          </div>
+          )}
 
-          <div className="space-y-2">
-            <p className="text-sm font-semibold text-slate-700">Completion</p>
-            <div className="inline-flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm md:flex-nowrap md:items-center">
-              {[
-                { key: "all", label: "All" },
-                { key: "completed", label: "Completed" },
-                { key: "incompleted", label: "Incompleted" },
-              ].map((item) => (
-                <label
-                  key={item.key}
-                  className={`flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium ${
-                    completionFilter === item.key
-                      ? "bg-sky-50 text-slate-900"
-                      : "text-slate-700 hover:bg-slate-100"
-                  }`}
+          {/* Row 3: Paper Tag, Difficulty, Completion, Bookmarks */}
+          <div className="flex flex-wrap items-start gap-4 md:items-end">
+            {/* Paper Tag */}
+            {paperTag && (
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-slate-700">
+                  {paperLabel}
+                  {paperTag.required && (
+                    <span className="ml-1 text-red-500">*</span>
+                  )}
+                </p>
+                <Select
+                  value={
+                    tagFilters[paperTag.name]
+                      ? String(tagFilters[paperTag.name])
+                      : "all"
+                  }
+                  onValueChange={(value) => {
+                    const valueId =
+                      value === "all" ? null : parseInt(value, 10);
+                    setTagFilters((prev) => ({
+                      ...prev,
+                      [paperTag.name]: valueId,
+                    }));
+                    setPage(1);
+                  }}
                 >
-                  <input
-                    type="radio"
-                    name="completion"
-                    className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
-                    checked={completionFilter === item.key}
-                    onChange={() => {
-                      setCompletionFilter(
-                        item.key as "all" | "completed" | "incompleted",
-                      );
-                      setPage(1);
-                    }}
-                  />
-                  <span>{item.label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
+                  <SelectTrigger className="h-11 rounded-xl border-slate-200 shadow-sm">
+                    <SelectValue placeholder={`All ${paperLabel}`} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All {paperLabel}</SelectItem>
+                    {paperTag.values
+                      ?.sort((a, b) => (a.position || 0) - (b.position || 0))
+                      .map((val) => (
+                        <SelectItem key={val.id} value={String(val.id)}>
+                          {val.value}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
-          <div className="space-y-2">
-            <p className="text-sm font-semibold text-slate-700">Bookmarks</p>
-            <div className="inline-flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm md:flex-nowrap md:items-center">
-              {[
-                { key: "all", label: "All" },
-                { key: "bookmarked", label: "Bookmarked" },
-              ].map((item) => (
-                <label
-                  key={item.key}
-                  className={`flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium ${
-                    bookmarkFilter === item.key
-                      ? "bg-sky-50 text-slate-900"
-                      : "text-slate-700 hover:bg-slate-100"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="bookmark"
-                    className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
-                    checked={bookmarkFilter === item.key}
-                    onChange={() => {
-                      setBookmarkFilter(item.key as "all" | "bookmarked");
-                      setPage(1);
-                    }}
-                  />
-                  <span>{item.label}</span>
-                </label>
-              ))}
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-slate-700">Difficulty</p>
+              <div className="inline-flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm md:flex-nowrap md:items-center">
+                {difficultyOptions.map((item) => {
+                  const checked = difficultySelections.has(item.value);
+                  return (
+                    <label
+                      key={item.value}
+                      className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                    >
+                      <input
+                        type="checkbox"
+                        className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                        checked={checked}
+                        onChange={() => toggleDifficulty(item.value)}
+                      />
+                      <span>{item.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
-          </div>
 
-          <div className="ml-auto flex flex-col justify-between gap-3 md:items-end md:justify-center">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={clearFilters}
-              className="w-full max-w-xs md:w-auto"
-              disabled={!filtersActive}
-            >
-              Clear filters
-            </Button>
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-slate-700">Completion</p>
+              <div className="inline-flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm md:flex-nowrap md:items-center">
+                {[
+                  { key: "all", label: "All" },
+                  { key: "completed", label: "Completed" },
+                  { key: "incompleted", label: "Incompleted" },
+                ].map((item) => (
+                  <label
+                    key={item.key}
+                    className={`flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium ${
+                      completionFilter === item.key
+                        ? "bg-sky-50 text-slate-900"
+                        : "text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="completion"
+                      className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                      checked={completionFilter === item.key}
+                      onChange={() => {
+                        setCompletionFilter(
+                          item.key as "all" | "completed" | "incompleted",
+                        );
+                        setPage(1);
+                      }}
+                    />
+                    <span>{item.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-slate-700">Bookmarks</p>
+              <div className="inline-flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm md:flex-nowrap md:items-center">
+                {[
+                  { key: "all", label: "All" },
+                  { key: "bookmarked", label: "Bookmarked" },
+                ].map((item) => (
+                  <label
+                    key={item.key}
+                    className={`flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium ${
+                      bookmarkFilter === item.key
+                        ? "bg-sky-50 text-slate-900"
+                        : "text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="bookmark"
+                      className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                      checked={bookmarkFilter === item.key}
+                      onChange={() => {
+                        setBookmarkFilter(item.key as "all" | "bookmarked");
+                        setPage(1);
+                      }}
+                    />
+                    <span>{item.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="ml-auto flex flex-col justify-between gap-3 md:items-end md:justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={clearFilters}
+                className="w-full max-w-xs md:w-auto"
+                disabled={!filtersActive}
+              >
+                Clear filters
+              </Button>
+            </div>
           </div>
         </div>
       </div>

@@ -106,7 +106,25 @@ type FormImage = {
   file?: File;
 };
 
+type TagValueRow = {
+  id: number;
+  value: string;
+  position: number;
+  created_at?: string;
+};
+
+type SubjectQuestionTag = {
+  id: number;
+  subject_id: number;
+  name: string;
+  required: boolean;
+  position: number;
+  is_system: boolean;
+  values?: TagValueRow[] | null;
+};
+
 const _PAGE_SIZE = 20;
+const NONE_SELECT_VALUE = "__none__";
 
 type QuestionApiResponse = {
   questions: Array<{
@@ -167,6 +185,10 @@ function buildChapterLabelMap(chapters: ChapterRow[]) {
     labelMap.set(chapter.id, computeLabel(chapter));
   }
   return labelMap;
+}
+
+function formatTagLabel(name: string) {
+  return name.toLowerCase() === "paper" ? "Paper" : name;
 }
 
 function formatDateTime(value: string) {
@@ -306,7 +328,27 @@ export function QuestionManagement({
     setCalculatorAllowed(false);
     setImages([]);
     setAnswerImages([]);
+    setQuestionTags({});
   }, [initialChapters, initialQuestions, initialHasMore]);
+
+  // Load tag definitions for all subjects
+  useEffect(() => {
+    async function loadTags() {
+      const { data, error } = await supabase
+        .from("subject_question_tags")
+        .select(`
+          id, subject_id, name, required, position, is_system,
+          values:subject_question_tag_values(id, value, position, created_at)
+        `)
+        .order("subject_id", { ascending: true })
+        .order("position", { ascending: true });
+
+      if (!error && data) {
+        setAvailableTags(data);
+      }
+    }
+    loadTags();
+  }, [supabase]);
 
   const chapterMap = useMemo(
     () => new Map(chapters.map((chapter) => [chapter.id, chapter])),
@@ -389,6 +431,7 @@ export function QuestionManagement({
     () => buildChapterTree(typicalChapters, allChapters),
     [typicalChapters, allChapters],
   );
+
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
 
@@ -403,6 +446,13 @@ export function QuestionManagement({
   const [calculatorAllowed, setCalculatorAllowed] = useState(true);
   const [images, setImages] = useState<FormImage[]>([]);
   const [answerImages, setAnswerImages] = useState<FormImage[]>([]);
+
+  // Tag state: { subjectId: { tagId: tagValueId | null } }
+  const [availableTags, setAvailableTags] = useState<SubjectQuestionTag[]>([]);
+  const [questionTags, setQuestionTags] = useState<
+    Record<number, Record<number, number | null>>
+  >({});
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(
     loadError
@@ -430,7 +480,69 @@ export function QuestionManagement({
   const [editCalculatorAllowed, setEditCalculatorAllowed] = useState(false);
   const [editImages, setEditImages] = useState<FormImage[]>([]);
   const [editAnswerImages, setEditAnswerImages] = useState<FormImage[]>([]);
+  const [editQuestionTags, setEditQuestionTags] = useState<
+    Record<number, Record<number, number | null>>
+  >({});
   const [isUpdating, setIsUpdating] = useState(false);
+
+  // Search by question ID
+  const [searchQuestionId, setSearchQuestionId] = useState<string>("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchedQuestion, setSearchedQuestion] =
+    useState<QuestionSummary | null>(null);
+
+  // Get subject IDs from selected chapters
+  const selectedSubjectIds = useMemo(() => {
+    const subjectIds = new Set<number>();
+    if (pastPaperChapterId) {
+      const chapter = allChapters.find((ch) => ch.id === pastPaperChapterId);
+      if (chapter?.subject?.id) {
+        subjectIds.add(chapter.subject.id);
+      }
+    }
+    if (typicalChapterId) {
+      const chapter = allChapters.find((ch) => ch.id === typicalChapterId);
+      if (chapter?.subject?.id) {
+        subjectIds.add(chapter.subject.id);
+      }
+    }
+    return Array.from(subjectIds);
+  }, [pastPaperChapterId, typicalChapterId, allChapters]);
+
+  // Get tags for the selected subjects
+  const selectedSubjectTags = useMemo(() => {
+    return availableTags.filter((tag) =>
+      selectedSubjectIds.includes(tag.subject_id),
+    );
+  }, [availableTags, selectedSubjectIds]);
+
+  // Get subject IDs from edit chapter selections
+  const editSelectedSubjectIds = useMemo(() => {
+    const subjectIds = new Set<number>();
+    if (editPastPaperChapterId) {
+      const chapter = allChapters.find(
+        (ch) => ch.id === editPastPaperChapterId,
+      );
+      if (chapter?.subject?.id) {
+        subjectIds.add(chapter.subject.id);
+      }
+    }
+    if (editTypicalChapterId) {
+      const chapter = allChapters.find((ch) => ch.id === editTypicalChapterId);
+      if (chapter?.subject?.id) {
+        subjectIds.add(chapter.subject.id);
+      }
+    }
+    return Array.from(subjectIds);
+  }, [editPastPaperChapterId, editTypicalChapterId, allChapters]);
+
+  // Get tags for the edit selected subjects
+  const editSelectedSubjectTags = useMemo(() => {
+    return availableTags.filter((tag) =>
+      editSelectedSubjectIds.includes(tag.subject_id),
+    );
+  }, [availableTags, editSelectedSubjectIds]);
 
   const formRef = useRef<HTMLFormElement>(null);
   const imageIdRef = useRef(0);
@@ -766,6 +878,31 @@ export function QuestionManagement({
       return;
     }
 
+    // Validate required tags for each selected subject
+    for (const subjectId of selectedSubjectIds) {
+      const subjectChapter = allChapters.find(
+        (ch) => ch.subject?.id === subjectId,
+      );
+      const subjectName =
+        subjectChapter?.subject?.name || `Subject ${subjectId}`;
+      const subjectTags = selectedSubjectTags.filter(
+        (tag) => tag.subject_id === subjectId,
+      );
+
+      for (const tag of subjectTags) {
+        if (tag.required) {
+          const selectedValue = questionTags[subjectId]?.[tag.id];
+          if (!selectedValue) {
+            setFeedback({
+              type: "error",
+              message: `Please fill all required tags for ${subjectName}. Missing: ${tag.name}`,
+            });
+            return;
+          }
+        }
+      }
+    }
+
     setFeedback(null);
     setIsSubmitting(true);
 
@@ -789,14 +926,23 @@ export function QuestionManagement({
       return;
     }
 
-    // Use database function to create question with multiple chapters
+    // Build tags array for RPC call
+    const tagsArray = selectedSubjectIds.map((subjectId) => ({
+      subject_id: subjectId,
+      tag_value_ids: Object.entries(questionTags[subjectId] || {})
+        .map(([_, valueId]) => valueId)
+        .filter((id): id is number => id !== null),
+    }));
+
+    // Use database function to create question with multiple chapters and tags
     const { data: createdQuestionId, error: insertError } = await supabase.rpc(
-      "create_question_with_chapters",
+      "create_question_with_chapters_and_tags",
       {
         p_marks: parsedMarks,
         p_difficulty: parsedDifficulty,
         p_calculator: calculatorAllowed,
         p_chapter_ids: chapterIds,
+        p_tags: tagsArray,
       },
     );
 
@@ -919,7 +1065,7 @@ export function QuestionManagement({
     void loadQuestionsPage(nextPage);
   };
 
-  const beginEdit = (question: QuestionSummary) => {
+  const beginEdit = async (question: QuestionSummary) => {
     setFeedback(null);
     setEditingQuestionId(question.id);
 
@@ -941,6 +1087,33 @@ export function QuestionManagement({
 
     setEditPastPaperChapterId(pastPaperId ?? null);
     setEditTypicalChapterId(typicalId ?? null);
+
+    // Load existing tags for this question
+    const { data: existingTags } = await supabase
+      .from("question_tag_values")
+      .select(`
+        subject_id, tag_value_id,
+        subject_question_tag_values!inner(
+          id, tag_id
+        )
+      `)
+      .eq("question_id", question.id);
+
+    // Build editQuestionTags state from existing tags
+    const loadedTags: Record<number, Record<number, number | null>> = {};
+    for (const tagRow of existingTags || []) {
+      if (!loadedTags[tagRow.subject_id]) {
+        loadedTags[tagRow.subject_id] = {};
+      }
+      const tagValues = tagRow.subject_question_tag_values;
+      const tagValue = Array.isArray(tagValues) ? tagValues[0] : tagValues;
+      if (!tagValue) {
+        continue;
+      }
+      const tagId = tagValue.tag_id;
+      loadedTags[tagRow.subject_id][tagId] = tagRow.tag_value_id;
+    }
+    setEditQuestionTags(loadedTags);
 
     setEditMarks(String(question.marks));
     setEditDifficulty(String(question.difficulty));
@@ -975,6 +1148,60 @@ export function QuestionManagement({
     setEditImages([]);
     setEditAnswerImages([]);
     setIsUpdating(false);
+  };
+
+  const handleSearchById = async () => {
+    const id = parseInt(searchQuestionId.trim(), 10);
+    if (!searchQuestionId.trim() || Number.isNaN(id)) {
+      setSearchError("Please enter a valid question ID");
+      setSearchedQuestion(null);
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchError(null);
+    setSearchedQuestion(null);
+
+    try {
+      // Use API endpoint that bypasses RLS for admins
+      const response = await fetch(`/api/console/questions/${id}`);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        setSearchError(errorData.error || `Question #${id} not found`);
+        setIsSearching(false);
+        return;
+      }
+
+      const questionData = await response.json();
+
+      const mappedQuestion: QuestionSummary = {
+        id: questionData.id,
+        marks: questionData.marks,
+        difficulty: questionData.difficulty,
+        calculator: questionData.calculator,
+        createdAt: questionData.createdAt,
+        images: questionData.images,
+        answerImages: questionData.answerImages,
+        chapterIds: questionData.chapterIds,
+        chapterName: questionData.chapterName,
+        subjectName: questionData.subjectName,
+      };
+
+      setSearchedQuestion(mappedQuestion);
+      primeSignedUrlCache([mappedQuestion]);
+    } catch (error) {
+      console.error("Search error:", error);
+      setSearchError("Failed to search question");
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuestionId("");
+    setSearchedQuestion(null);
+    setSearchError(null);
   };
 
   const handleEditAddImageFiles = (
@@ -1083,6 +1310,31 @@ export function QuestionManagement({
       return;
     }
 
+    // Validate required tags for each selected subject (edit mode)
+    for (const subjectId of editSelectedSubjectIds) {
+      const subjectChapter = allChapters.find(
+        (ch) => ch.subject?.id === subjectId,
+      );
+      const subjectName =
+        subjectChapter?.subject?.name || `Subject ${subjectId}`;
+      const subjectTags = editSelectedSubjectTags.filter(
+        (tag) => tag.subject_id === subjectId,
+      );
+
+      for (const tag of subjectTags) {
+        if (tag.required) {
+          const selectedValue = editQuestionTags[subjectId]?.[tag.id];
+          if (!selectedValue) {
+            setFeedback({
+              type: "error",
+              message: `Please fill all required tags for ${subjectName}. Missing: ${tag.name}`,
+            });
+            return;
+          }
+        }
+      }
+    }
+
     setFeedback(null);
     setIsUpdating(true);
 
@@ -1124,6 +1376,29 @@ export function QuestionManagement({
         type: "error",
         message:
           updateError?.message ?? "There was an issue updating the question.",
+      });
+      return;
+    }
+
+    // Update tags
+    const editTagsArray = editSelectedSubjectIds.map((subjectId) => ({
+      subject_id: subjectId,
+      tag_value_ids: Object.entries(editQuestionTags[subjectId] || {})
+        .map(([_, valueId]) => valueId)
+        .filter((id): id is number => id !== null),
+    }));
+
+    const { error: tagsError } = await supabase.rpc("update_question_tags", {
+      p_question_id: editingQuestionId,
+      p_tags: editTagsArray,
+    });
+
+    if (tagsError) {
+      setIsUpdating(false);
+      setFeedback({
+        type: "error",
+        message:
+          tagsError?.message ?? "There was an issue updating question tags.",
       });
       return;
     }
@@ -1258,6 +1533,421 @@ export function QuestionManagement({
       })),
   });
 
+  const renderQuestionItem = (question: QuestionSummary, cardId?: string) => {
+    const questionCardData = buildQuestionCardData(question);
+    return (
+      <Card key={question.id} id={cardId} className="border-slate-200">
+        <CardHeader className="border-b border-slate-100">
+          <CardTitle className="text-base font-semibold text-slate-800">
+            Question #{question.id}
+          </CardTitle>
+          <CardDescription className="flex flex-wrap items-center gap-3 text-xs">
+            <span>Created at:{formatDateTime(question.createdAt)}</span>
+          </CardDescription>
+          <CardAction className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              title="Edit question"
+              onClick={() => beginEdit(question)}
+              disabled={isUpdating && editingQuestionId === question.id}
+            >
+              {isUpdating && editingQuestionId === question.id ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Pencil className="size-4" />
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              title="Delete question"
+              onClick={() => handleDelete(question.id)}
+              disabled={busyQuestionId === question.id}
+            >
+              {busyQuestionId === question.id ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Trash2 className="size-4 text-red-500" />
+              )}
+            </Button>
+          </CardAction>
+        </CardHeader>
+        {editingQuestionId !== question.id ? (
+          <div className="border-t border-slate-100 bg-slate-50/60">
+            <div className="px-4 py-4">
+              <QuestionCard question={questionCardData} disableInteractions />
+            </div>
+          </div>
+        ) : null}
+        {editingQuestionId === question.id ? (
+          <form onSubmit={handleUpdate} className="space-y-4 p-4">
+            {/* Past Paper Questions Chapter Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="edit-past-paper-chapter">
+                Past Paper Questions
+                <span className="ml-2 text-xs text-slate-500">(可选)</span>
+              </Label>
+              <TreeSelect
+                data={pastPaperTree}
+                value={editPastPaperChapterId}
+                onValueChange={setEditPastPaperChapterId}
+                placeholder="选择章节..."
+              />
+            </div>
+
+            {/* Topical Questions Chapter Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="edit-typical-chapter">
+                Topical Questions
+                <span className="ml-2 text-xs text-slate-500">(可选)</span>
+              </Label>
+              <TreeSelect
+                data={typicalTree}
+                value={editTypicalChapterId}
+                onValueChange={setEditTypicalChapterId}
+                placeholder="选择章节..."
+              />
+            </div>
+
+            {/* Selection summary */}
+            {(editPastPaperChapterId || editTypicalChapterId) && (
+              <p className="text-xs text-slate-600">
+                已选择{" "}
+                {
+                  [editPastPaperChapterId, editTypicalChapterId].filter(Boolean)
+                    .length
+                }{" "}
+                个题库
+              </p>
+            )}
+
+            {/* Tag Selection for Edit */}
+            {editSelectedSubjectIds.length > 0 && (
+              <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <h3 className="text-sm font-semibold text-slate-900">
+                  Question Tags
+                </h3>
+                {editSelectedSubjectIds.map((subjectId) => {
+                  const subjectChapter = allChapters.find(
+                    (ch) => ch.subject?.id === subjectId,
+                  );
+                  const subjectName =
+                    subjectChapter?.subject?.name ?? `Subject ${subjectId}`;
+                  const subjectTags = editSelectedSubjectTags.filter(
+                    (tag) => tag.subject_id === subjectId,
+                  );
+
+                  if (subjectTags.length === 0) return null;
+
+                  return (
+                    <div
+                      key={subjectId}
+                      className="space-y-3 rounded-lg border border-slate-200 bg-white p-3"
+                    >
+                      <h4 className="text-xs font-medium text-slate-700">
+                        {subjectName}
+                      </h4>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {subjectTags.map((tag) => (
+                          <div key={tag.id} className="space-y-2">
+                            <Label htmlFor={`edit-tag-${tag.id}`}>
+                              {formatTagLabel(tag.name)}
+                              {tag.required && (
+                                <span className="ml-1 text-red-500">*</span>
+                              )}
+                            </Label>
+                            <Select
+                              value={
+                                editQuestionTags[subjectId]?.[
+                                  tag.id
+                                ]?.toString() || ""
+                              }
+                              onValueChange={(value) => {
+                                const nextValue =
+                                  value === NONE_SELECT_VALUE || value === ""
+                                    ? null
+                                    : parseInt(value, 10);
+                                setEditQuestionTags((prev) => ({
+                                  ...prev,
+                                  [subjectId]: {
+                                    ...(prev[subjectId] || {}),
+                                    [tag.id]: nextValue,
+                                  },
+                                }));
+                              }}
+                            >
+                              <SelectTrigger id={`edit-tag-${tag.id}`}>
+                                <SelectValue
+                                  placeholder={`Select ${formatTagLabel(tag.name)}`}
+                                />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={NONE_SELECT_VALUE}>
+                                  -- None --
+                                </SelectItem>
+                                {tag.values
+                                  ?.sort(
+                                    (a, b) =>
+                                      (a.position || 0) - (b.position || 0),
+                                  )
+                                  .map((val) => (
+                                    <SelectItem
+                                      key={val.id}
+                                      value={val.id.toString()}
+                                    >
+                                      {val.value}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="edit-marks">Marks</Label>
+                <Input
+                  id="edit-marks"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={editMarks}
+                  onChange={(event) => setEditMarks(event.target.value)}
+                  placeholder="Enter marks (positive integer)"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-difficulty">Difficulty</Label>
+                <Select
+                  value={editDifficulty}
+                  onValueChange={setEditDifficulty}
+                >
+                  <SelectTrigger id="edit-difficulty">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">Easy (1)</SelectItem>
+                    <SelectItem value="2">Medium (2)</SelectItem>
+                    <SelectItem value="3">Hard (3)</SelectItem>
+                    <SelectItem value="4">Challenge (4)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
+                <input
+                  type="checkbox"
+                  checked={!editCalculatorAllowed}
+                  onChange={(event) =>
+                    setEditCalculatorAllowed(!event.target.checked)
+                  }
+                  className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                />
+                <div className="flex flex-col">
+                  <span className="font-medium text-slate-800">
+                    Calculator not allowed
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    Check if a calculator is not allowed for this question.
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="edit-image">Question Images</Label>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Input
+                    id="edit-image"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleEditAddImageFiles}
+                    className="max-w-xl flex-1"
+                  />
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  Upload question images; they display in list order and can be
+                  reordered.
+                </p>
+              </div>
+
+              {editImages.length > 0 ? (
+                <ul className="space-y-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
+                  {editImages.map((image, index) => (
+                    <li
+                      key={image.id}
+                      className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:gap-3"
+                    >
+                      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500 self-start">
+                        {index + 1}
+                      </span>
+                      <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
+                        <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
+                          <Image
+                            src={
+                              resolveImageSrc(image.storagePath ?? image.url) ??
+                              image.url
+                            }
+                            alt={`Question preview ${index + 1}`}
+                            width={1200}
+                            height={675}
+                            className="h-full w-full object-contain"
+                            sizes="(max-width: 768px) 100vw, 640px"
+                            unoptimized
+                          />
+                        </div>
+                      </div>
+                      <div className="ml-auto flex items-start gap-1 pt-1 sm:ml-0">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => moveEditImage(index, "up")}
+                          disabled={index === 0}
+                          aria-label="Move image up"
+                        >
+                          <ArrowUp className="size-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => moveEditImage(index, "down")}
+                          disabled={index === editImages.length - 1}
+                          aria-label="Move image down"
+                        >
+                          <ArrowDown className="size-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => handleEditRemoveImage(index)}
+                          aria-label="Remove image"
+                        >
+                          <Trash2 className="size-4 text-red-500" />
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="edit-answer-image">Answer Images</Label>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Input
+                    id="edit-answer-image"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleEditAddAnswerImageFiles}
+                    className="max-w-xl flex-1"
+                  />
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  Upload answer images; they display in list order and can be
+                  reordered.
+                </p>
+              </div>
+
+              {editAnswerImages.length > 0 ? (
+                <ul className="space-y-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
+                  {editAnswerImages.map((image, index) => (
+                    <li
+                      key={image.id}
+                      className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:gap-3"
+                    >
+                      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500 self-start">
+                        {index + 1}
+                      </span>
+                      <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
+                        <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
+                          <Image
+                            src={
+                              resolveImageSrc(image.storagePath ?? image.url) ??
+                              image.url
+                            }
+                            alt={`Answer preview ${index + 1}`}
+                            width={1200}
+                            height={675}
+                            className="h-full w-full object-contain"
+                            sizes="(max-width: 768px) 100vw, 640px"
+                            unoptimized
+                          />
+                        </div>
+                      </div>
+                      <div className="ml-auto flex items-start gap-1 pt-1 sm:ml-0">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => moveEditAnswerImage(index, "up")}
+                          disabled={index === 0}
+                          aria-label="Move answer image up"
+                        >
+                          <ArrowUp className="size-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => moveEditAnswerImage(index, "down")}
+                          disabled={index === editAnswerImages.length - 1}
+                          aria-label="Move answer image down"
+                        >
+                          <ArrowDown className="size-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => handleEditRemoveAnswerImage(index)}
+                          aria-label="Remove answer image"
+                        >
+                          <Trash2 className="size-4 text-red-500" />
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+
+            <div className="flex items-center gap-3 border-t border-slate-200 pt-4">
+              <Button type="submit" disabled={isUpdating} className="gap-2">
+                {isUpdating ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : null}
+                Save changes
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={cancelEdit}
+                disabled={isUpdating}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        ) : null}
+      </Card>
+    );
+  };
+
   const handleTabChange = (value: string) => {
     router.push(`/console/questions?bank=${value}`);
   };
@@ -1373,6 +2063,96 @@ export function QuestionManagement({
                     个题库
                   </p>
                 )}
+
+                {/* Tag Selection */}
+                {selectedSubjectIds.length > 0 && (
+                  <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <h3 className="text-sm font-semibold text-slate-900">
+                      Question Tags
+                    </h3>
+                    {selectedSubjectIds.map((subjectId) => {
+                      const subjectChapter = allChapters.find(
+                        (ch) => ch.subject?.id === subjectId,
+                      );
+                      const subjectName =
+                        subjectChapter?.subject?.name || `Subject ${subjectId}`;
+                      const subjectTags = selectedSubjectTags.filter(
+                        (tag) => tag.subject_id === subjectId,
+                      );
+
+                      if (subjectTags.length === 0) return null;
+
+                      return (
+                        <div
+                          key={subjectId}
+                          className="space-y-3 rounded-lg border border-slate-200 bg-white p-3"
+                        >
+                          <h4 className="text-xs font-medium text-slate-700">
+                            {subjectName}
+                          </h4>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            {subjectTags.map((tag) => (
+                              <div key={tag.id} className="space-y-2">
+                                <Label htmlFor={`tag-${tag.id}`}>
+                                  {formatTagLabel(tag.name)}
+                                  {tag.required && (
+                                    <span className="ml-1 text-red-500">*</span>
+                                  )}
+                                </Label>
+                                <Select
+                                  value={
+                                    questionTags[subjectId]?.[
+                                      tag.id
+                                    ]?.toString() || ""
+                                  }
+                                  onValueChange={(value) => {
+                                    const nextValue =
+                                      value === NONE_SELECT_VALUE ||
+                                      value === ""
+                                        ? null
+                                        : parseInt(value, 10);
+                                    setQuestionTags((prev) => ({
+                                      ...prev,
+                                      [subjectId]: {
+                                        ...(prev[subjectId] || {}),
+                                        [tag.id]: nextValue,
+                                      },
+                                    }));
+                                  }}
+                                >
+                                  <SelectTrigger id={`tag-${tag.id}`}>
+                                    <SelectValue
+                                      placeholder={`Select ${formatTagLabel(tag.name)}`}
+                                    />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value={NONE_SELECT_VALUE}>
+                                      -- None --
+                                    </SelectItem>
+                                    {tag.values
+                                      ?.sort(
+                                        (a, b) =>
+                                          (a.position || 0) - (b.position || 0),
+                                      )
+                                      .map((val) => (
+                                        <SelectItem
+                                          key={val.id}
+                                          value={val.id.toString()}
+                                        >
+                                          {val.value}
+                                        </SelectItem>
+                                      ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="question-marks">Marks</Label>
@@ -1603,6 +2383,64 @@ export function QuestionManagement({
             </form>
           </Card>
 
+          {/* Search by Question ID */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Search Question by ID</CardTitle>
+              <CardDescription>
+                Enter a question ID to find and view it below
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  placeholder="Enter question ID..."
+                  value={searchQuestionId}
+                  onChange={(e) => setSearchQuestionId(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleSearchById();
+                    }
+                  }}
+                  className="flex-1"
+                />
+                <Button
+                  onClick={handleSearchById}
+                  disabled={isSearching || !searchQuestionId.trim()}
+                >
+                  {isSearching ? (
+                    <>
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                      Searching...
+                    </>
+                  ) : (
+                    "Search"
+                  )}
+                </Button>
+                {(searchedQuestion || searchError) && (
+                  <Button variant="outline" onClick={handleClearSearch}>
+                    Clear
+                  </Button>
+                )}
+              </div>
+              {searchError && (
+                <p className="text-sm text-red-600">{searchError}</p>
+              )}
+              {searchedQuestion && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-slate-700">
+                    Search Result:
+                  </p>
+                  {renderQuestionItem(
+                    searchedQuestion,
+                    `search-question-${searchedQuestion.id}`,
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <section className="space-y-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
               <ScrollText className="size-4" />
@@ -1624,391 +2462,9 @@ export function QuestionManagement({
             ) : (
               <>
                 <div className="space-y-4">
-                  {questions.map((question) => {
-                    const questionCardData = buildQuestionCardData(question);
-                    return (
-                      <Card
-                        key={question.id}
-                        id={`question-${question.id}`}
-                        className="border-slate-200"
-                      >
-                        <CardHeader className="border-b border-slate-100">
-                          <CardTitle className="text-base font-semibold text-slate-800">
-                            Question #{question.id}
-                          </CardTitle>
-                          <CardDescription className="flex flex-wrap items-center gap-3 text-xs">
-                            <span>
-                              Created at:{formatDateTime(question.createdAt)}
-                            </span>
-                          </CardDescription>
-                          <CardAction className="flex items-center gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon-sm"
-                              title="Edit question"
-                              onClick={() => beginEdit(question)}
-                              disabled={
-                                isUpdating && editingQuestionId === question.id
-                              }
-                            >
-                              {isUpdating &&
-                              editingQuestionId === question.id ? (
-                                <Loader2 className="size-4 animate-spin" />
-                              ) : (
-                                <Pencil className="size-4" />
-                              )}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon-sm"
-                              title="Delete question"
-                              onClick={() => handleDelete(question.id)}
-                              disabled={busyQuestionId === question.id}
-                            >
-                              {busyQuestionId === question.id ? (
-                                <Loader2 className="size-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="size-4 text-red-500" />
-                              )}
-                            </Button>
-                          </CardAction>
-                        </CardHeader>
-                        {editingQuestionId !== question.id ? (
-                          <div className="border-t border-slate-100 bg-slate-50/60">
-                            <div className="px-4 py-4">
-                              <QuestionCard
-                                question={questionCardData}
-                                disableInteractions
-                              />
-                            </div>
-                          </div>
-                        ) : null}
-                        {editingQuestionId === question.id ? (
-                          <form
-                            onSubmit={handleUpdate}
-                            className="space-y-4 p-4"
-                          >
-                            {/* Past Paper Questions Chapter Selection */}
-                            <div className="space-y-2">
-                              <Label htmlFor="edit-past-paper-chapter">
-                                Past Paper Questions
-                                <span className="ml-2 text-xs text-slate-500">
-                                  (可选)
-                                </span>
-                              </Label>
-                              <TreeSelect
-                                data={pastPaperTree}
-                                value={editPastPaperChapterId}
-                                onValueChange={setEditPastPaperChapterId}
-                                placeholder="选择章节..."
-                              />
-                            </div>
-
-                            {/* Topical Questions Chapter Selection */}
-                            <div className="space-y-2">
-                              <Label htmlFor="edit-typical-chapter">
-                                Topical Questions
-                                <span className="ml-2 text-xs text-slate-500">
-                                  (可选)
-                                </span>
-                              </Label>
-                              <TreeSelect
-                                data={typicalTree}
-                                value={editTypicalChapterId}
-                                onValueChange={setEditTypicalChapterId}
-                                placeholder="选择章节..."
-                              />
-                            </div>
-
-                            {/* Selection summary */}
-                            {(editPastPaperChapterId ||
-                              editTypicalChapterId) && (
-                              <p className="text-xs text-slate-600">
-                                已选择{" "}
-                                {
-                                  [
-                                    editPastPaperChapterId,
-                                    editTypicalChapterId,
-                                  ].filter(Boolean).length
-                                }{" "}
-                                个题库
-                              </p>
-                            )}
-                            <div className="grid gap-4 sm:grid-cols-2">
-                              <div className="space-y-2">
-                                <Label htmlFor="edit-marks">Marks</Label>
-                                <Input
-                                  id="edit-marks"
-                                  type="number"
-                                  min={1}
-                                  step={1}
-                                  value={editMarks}
-                                  onChange={(event) =>
-                                    setEditMarks(event.target.value)
-                                  }
-                                  placeholder="Enter marks (positive integer)"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label htmlFor="edit-difficulty">
-                                  Difficulty
-                                </Label>
-                                <Select
-                                  value={editDifficulty}
-                                  onValueChange={setEditDifficulty}
-                                >
-                                  <SelectTrigger id="edit-difficulty">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="1">Easy (1)</SelectItem>
-                                    <SelectItem value="2">
-                                      Medium (2)
-                                    </SelectItem>
-                                    <SelectItem value="3">Hard (3)</SelectItem>
-                                    <SelectItem value="4">
-                                      Challenge (4)
-                                    </SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
-                                <input
-                                  type="checkbox"
-                                  checked={!editCalculatorAllowed}
-                                  onChange={(event) =>
-                                    setEditCalculatorAllowed(
-                                      !event.target.checked,
-                                    )
-                                  }
-                                  className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
-                                />
-                                <div className="flex flex-col">
-                                  <span className="font-medium text-slate-800">
-                                    Calculator not allowed
-                                  </span>
-                                  <span className="text-xs text-slate-500">
-                                    Check if a calculator is not allowed for
-                                    this question.
-                                  </span>
-                                </div>
-                              </label>
-                            </div>
-
-                            <div className="space-y-3">
-                              <div>
-                                <Label htmlFor="edit-image">
-                                  Images (Vertical Stack)
-                                </Label>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  <Input
-                                    id="edit-image"
-                                    type="file"
-                                    accept="image/*"
-                                    multiple
-                                    onChange={handleEditAddImageFiles}
-                                    className="max-w-xl flex-1"
-                                  />
-                                </div>
-                                <p className="mt-1 text-xs text-slate-500">
-                                  Select one or more images to upload; they
-                                  display in list order and can be reordered.
-                                </p>
-                              </div>
-
-                              {editImages.length > 0 ? (
-                                <ul className="space-y-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
-                                  {editImages.map((image, index) => (
-                                    <li
-                                      key={image.id}
-                                      className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:gap-3"
-                                    >
-                                      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500 self-start">
-                                        {index + 1}
-                                      </span>
-                                      <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
-                                        <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
-                                          <Image
-                                            src={
-                                              resolveImageSrc(
-                                                image.storagePath ?? image.url,
-                                              ) ?? image.url
-                                            }
-                                            alt={`Preview ${index + 1}`}
-                                            width={1200}
-                                            height={675}
-                                            className="h-full w-full object-contain"
-                                            sizes="(max-width: 768px) 100vw, 640px"
-                                            unoptimized
-                                          />
-                                        </div>
-                                      </div>
-                                      <div className="ml-auto flex items-start gap-1 pt-1 sm:ml-0">
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          size="icon-sm"
-                                          onClick={() =>
-                                            moveEditImage(index, "up")
-                                          }
-                                          disabled={index === 0}
-                                          aria-label="Move image up"
-                                        >
-                                          <ArrowUp className="size-4" />
-                                        </Button>
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          size="icon-sm"
-                                          onClick={() =>
-                                            moveEditImage(index, "down")
-                                          }
-                                          disabled={
-                                            index === editImages.length - 1
-                                          }
-                                          aria-label="Move image down"
-                                        >
-                                          <ArrowDown className="size-4" />
-                                        </Button>
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          size="icon-sm"
-                                          onClick={() =>
-                                            handleEditRemoveImage(index)
-                                          }
-                                          aria-label="Remove image"
-                                        >
-                                          <Trash2 className="size-4 text-red-500" />
-                                        </Button>
-                                      </div>
-                                    </li>
-                                  ))}
-                                </ul>
-                              ) : null}
-                            </div>
-
-                            <div className="space-y-3">
-                              <div>
-                                <Label htmlFor="edit-answer-image">
-                                  Answer Images
-                                </Label>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  <Input
-                                    id="edit-answer-image"
-                                    type="file"
-                                    accept="image/*"
-                                    multiple
-                                    onChange={handleEditAddAnswerImageFiles}
-                                    className="max-w-xl flex-1"
-                                  />
-                                </div>
-                                <p className="mt-1 text-xs text-slate-500">
-                                  Upload answer images; they display in list
-                                  order and can be reordered.
-                                </p>
-                              </div>
-
-                              {editAnswerImages.length > 0 ? (
-                                <ul className="space-y-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm">
-                                  {editAnswerImages.map((image, index) => (
-                                    <li
-                                      key={image.id}
-                                      className="flex flex-wrap items-start gap-2 rounded-lg bg-white p-2 shadow-sm sm:gap-3"
-                                    >
-                                      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 font-medium text-slate-500 self-start">
-                                        {index + 1}
-                                      </span>
-                                      <div className="flex min-h-[160px] w-full flex-1 flex-col gap-2 sm:flex-row sm:gap-3">
-                                        <div className="relative w-full flex-1 overflow-hidden rounded bg-slate-50">
-                                          <Image
-                                            src={
-                                              resolveImageSrc(
-                                                image.storagePath ?? image.url,
-                                              ) ?? image.url
-                                            }
-                                            alt={`Answer preview ${index + 1}`}
-                                            width={1200}
-                                            height={675}
-                                            className="h-full w-full object-contain"
-                                            sizes="(max-width: 768px) 100vw, 640px"
-                                            unoptimized
-                                          />
-                                        </div>
-                                      </div>
-                                      <div className="ml-auto flex items-start gap-1 pt-1 sm:ml-0">
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          size="icon-sm"
-                                          onClick={() =>
-                                            moveEditAnswerImage(index, "up")
-                                          }
-                                          disabled={index === 0}
-                                          aria-label="Move answer image up"
-                                        >
-                                          <ArrowUp className="size-4" />
-                                        </Button>
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          size="icon-sm"
-                                          onClick={() =>
-                                            moveEditAnswerImage(index, "down")
-                                          }
-                                          disabled={
-                                            index ===
-                                            editAnswerImages.length - 1
-                                          }
-                                          aria-label="Move answer image down"
-                                        >
-                                          <ArrowDown className="size-4" />
-                                        </Button>
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          size="icon-sm"
-                                          onClick={() =>
-                                            handleEditRemoveAnswerImage(index)
-                                          }
-                                          aria-label="Remove answer image"
-                                        >
-                                          <Trash2 className="size-4 text-red-500" />
-                                        </Button>
-                                      </div>
-                                    </li>
-                                  ))}
-                                </ul>
-                              ) : null}
-                            </div>
-
-                            <div className="flex items-center gap-3 border-t border-slate-200 pt-4">
-                              <Button
-                                type="submit"
-                                disabled={isUpdating}
-                                className="gap-2"
-                              >
-                                {isUpdating ? (
-                                  <Loader2 className="size-4 animate-spin" />
-                                ) : null}
-                                Save changes
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={cancelEdit}
-                                disabled={isUpdating}
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          </form>
-                        ) : null}
-                      </Card>
-                    );
-                  })}
+                  {questions.map((question) =>
+                    renderQuestionItem(question, `question-${question.id}`),
+                  )}
                 </div>
                 <div className="flex items-center justify-end gap-3">
                   <Button

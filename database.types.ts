@@ -376,6 +376,49 @@ export type Database = {
           },
         ];
       };
+      question_tag_values: {
+        Row: {
+          created_at: string;
+          question_id: number;
+          subject_id: number;
+          tag_value_id: number;
+        };
+        Insert: {
+          created_at?: string;
+          question_id: number;
+          subject_id: number;
+          tag_value_id: number;
+        };
+        Update: {
+          created_at?: string;
+          question_id?: number;
+          subject_id?: number;
+          tag_value_id?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "question_tag_values_question_id_fkey";
+            columns: ["question_id"];
+            isOneToOne: false;
+            referencedRelation: "questions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "question_tag_values_subject_id_fkey";
+            columns: ["subject_id"];
+            isOneToOne: false;
+            referencedRelation: "subjects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "question_tag_values_tag_value_id_fkey";
+            columns: ["tag_value_id"];
+            isOneToOne: false;
+            referencedRelation: "subject_question_tag_values";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       questions: {
         Row: {
           calculator: boolean;
@@ -553,6 +596,82 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "subject_exam_tags_subject_id_fkey";
+            columns: ["subject_id"];
+            isOneToOne: false;
+            referencedRelation: "subjects";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      subject_question_tag_values: {
+        Row: {
+          created_at: string;
+          id: number;
+          position: number;
+          tag_id: number;
+          updated_at: string;
+          value: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: number;
+          position?: number;
+          tag_id: number;
+          updated_at?: string;
+          value: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: number;
+          position?: number;
+          tag_id?: number;
+          updated_at?: string;
+          value?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "subject_question_tag_values_tag_id_fkey";
+            columns: ["tag_id"];
+            isOneToOne: false;
+            referencedRelation: "subject_question_tags";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      subject_question_tags: {
+        Row: {
+          created_at: string;
+          id: number;
+          is_system: boolean;
+          name: string;
+          position: number;
+          required: boolean;
+          subject_id: number;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: number;
+          is_system?: boolean;
+          name: string;
+          position?: number;
+          required?: boolean;
+          subject_id: number;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: number;
+          is_system?: boolean;
+          name?: string;
+          position?: number;
+          required?: boolean;
+          subject_id?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "subject_question_tags_subject_id_fkey";
             columns: ["subject_id"];
             isOneToOne: false;
             referencedRelation: "subjects";
@@ -779,6 +898,16 @@ export type Database = {
         };
         Returns: number;
       };
+      create_question_with_chapters_and_tags: {
+        Args: {
+          p_calculator: boolean;
+          p_chapter_ids: number[];
+          p_difficulty: number;
+          p_marks: number;
+          p_tags: Json;
+        };
+        Returns: number;
+      };
       get_user_membership_tier: {
         Args: { p_user_id: string };
         Returns: string;
@@ -813,6 +942,18 @@ export type Database = {
       };
       is_current_user_admin: { Args: never; Returns: boolean };
       track_answer_view: { Args: { q_id: number }; Returns: undefined };
+      update_question_tags: {
+        Args: { p_question_id: number; p_tags: Json };
+        Returns: undefined;
+      };
+      update_question_tags_for_subject: {
+        Args: {
+          p_question_id: number;
+          p_subject_id: number;
+          p_tag_value_ids: number[];
+        };
+        Returns: undefined;
+      };
       update_question_with_chapters: {
         Args: {
           p_calculator: boolean;
