@@ -1,28 +1,28 @@
 import { NextResponse } from "next/server";
 
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
-type AdminSearchQuestionImage = {
+type QuestionImageRow = {
   id: number;
   storage_path: string;
   position: number;
 };
 
-type AdminSearchQuestionChapter = {
-  chapter_id: number;
-  chapter_name: string | null;
-  subject_name: string | null;
+type ChapterSubjectRow = {
+  id: number;
+  name: string;
 };
 
-type AdminSearchQuestionResult = {
+type ChapterRow = {
   id: number;
-  marks: number;
-  difficulty: number;
-  calculator: boolean;
-  created_at: string;
-  question_images: AdminSearchQuestionImage[] | null;
-  answer_images: AdminSearchQuestionImage[] | null;
-  question_chapters: AdminSearchQuestionChapter[] | null;
+  name: string;
+  subject: ChapterSubjectRow | ChapterSubjectRow[] | null;
+};
+
+const toSingle = <T>(value: T | T[] | null | undefined): T | null => {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
 };
 
 export async function GET(
@@ -60,14 +60,15 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Use RPC function to bypass RLS and fetch question data
-  const { data: questionData, error: questionError } = await supabase.rpc(
-    "admin_search_question",
-    { question_id_param: questionId },
-  );
+  const adminClient = createAdminClient();
+
+  const { data: questionData, error: questionError } = await adminClient
+    .from("questions")
+    .select("id, marks, difficulty, calculator, created_at")
+    .eq("id", questionId)
+    .single();
 
   if (questionError || !questionData) {
-    console.error("RPC error:", questionError);
     return NextResponse.json(
       {
         error: `Question #${questionId} not found`,
@@ -77,16 +78,85 @@ export async function GET(
     );
   }
 
-  const typedQuestionData = questionData as AdminSearchQuestionResult;
+  const [questionImagesResult, answerImagesResult, questionChaptersResult] =
+    await Promise.all([
+      adminClient
+        .from("question_images")
+        .select("id, storage_path, position")
+        .eq("question_id", questionId)
+        .order("position", { ascending: true }),
+      adminClient
+        .from("answer_images")
+        .select("id, storage_path, position")
+        .eq("question_id", questionId)
+        .order("position", { ascending: true }),
+      adminClient
+        .from("question_chapters")
+        .select("chapter_id, created_at")
+        .eq("question_id", questionId)
+        .order("created_at", { ascending: true }),
+    ]);
 
-  // Parse JSON response from RPC function
-  const questionImages = (typedQuestionData.question_images ?? [])
-    .slice()
-    .sort((a, b) => a.position - b.position);
+  if (questionImagesResult.error || answerImagesResult.error) {
+    return NextResponse.json(
+      {
+        error: "Failed to load question images.",
+        details:
+          questionImagesResult.error?.message ??
+          answerImagesResult.error?.message,
+      },
+      { status: 500 },
+    );
+  }
 
-  const answerImages = (typedQuestionData.answer_images ?? [])
-    .slice()
-    .sort((a, b) => a.position - b.position);
+  if (questionChaptersResult.error) {
+    return NextResponse.json(
+      {
+        error: "Failed to load question chapters.",
+        details: questionChaptersResult.error.message,
+      },
+      { status: 500 },
+    );
+  }
+
+  const questionImages = (questionImagesResult.data ??
+    []) as QuestionImageRow[];
+  const answerImages = (answerImagesResult.data ?? []) as QuestionImageRow[];
+
+  const questionChapterRows = questionChaptersResult.data ?? [];
+  const chapterIds = questionChapterRows.map((row) => row.chapter_id);
+
+  let chapterMap = new Map<number, ChapterRow>();
+  if (chapterIds.length > 0) {
+    const { data: chapterData, error: chapterError } = await adminClient
+      .from("chapters")
+      .select("id, name, subject:subjects(id, name)")
+      .in("id", chapterIds);
+
+    if (chapterError) {
+      return NextResponse.json(
+        {
+          error: "Failed to load chapter data.",
+          details: chapterError.message,
+        },
+        { status: 500 },
+      );
+    }
+
+    chapterMap = new Map(
+      (chapterData ?? []).map((chapter) => [chapter.id, chapter as ChapterRow]),
+    );
+  }
+
+  const questionChapters = chapterIds.map((chapterId) => {
+    const chapter = chapterMap.get(chapterId) ?? null;
+    const subject = chapter ? toSingle(chapter.subject) : null;
+    return {
+      chapter_id: chapterId,
+      chapter_name: chapter?.name ?? null,
+      subject_name: subject?.name ?? null,
+    };
+  });
 
   // Get signed URLs for images
   const questionPaths = questionImages.map((img) => img.storage_path);
@@ -118,15 +188,14 @@ export async function GET(
   }
 
   // Extract chapter and subject info
-  const questionChapters = typedQuestionData.question_chapters ?? [];
   const firstChapter = questionChapters[0];
 
   return NextResponse.json({
-    id: typedQuestionData.id,
-    marks: typedQuestionData.marks,
-    difficulty: typedQuestionData.difficulty,
-    calculator: typedQuestionData.calculator,
-    createdAt: typedQuestionData.created_at,
+    id: questionData.id,
+    marks: questionData.marks,
+    difficulty: questionData.difficulty,
+    calculator: questionData.calculator,
+    createdAt: questionData.created_at,
     images: questionImages.map((img) => ({
       id: img.id,
       storage_path: img.storage_path,
