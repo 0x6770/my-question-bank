@@ -232,33 +232,32 @@ export function QuestionCard({
   return (
     <>
       <article className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid gap-0 border-b border-slate-100 md:grid-cols-[1fr_200px] lg:grid-cols-[1fr_200px]">
+        <div className="flex flex-col md:grid md:grid-cols-[1fr_200px] gap-0 border-b border-slate-100">
           <div className="flex flex-col gap-3 px-4 py-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-              {!question.calculator && (
-                <span className="rounded bg-slate-100 px-3 py-1 font-semibold uppercase tracking-wide text-slate-500">
-                  No Calculator
-                </span>
-              )}
-              {/* <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
-                  {subjectLabel} {chapterLabel ? ` > ${chapterLabel}` : ""}
-                </span> */}
-              <div className="flex flex-wrap items-center gap-3">
-                <span className={`font-semibold ${meta.accentClass}`}>
-                  {meta.label}
-                </span>
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: 4 }).map((_, index) => (
-                    <span
-                      key={`${question.id}-difficulty-${index}`}
-                      className={`h-2.5 w-2.5 rounded-full ${index < meta.level ? meta.dotClass : "bg-slate-200"}`}
-                    />
-                  ))}
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <div className="flex flex-1 flex-wrap items-center justify-between gap-3">
+                {!question.calculator && (
+                  <span className="rounded bg-slate-100 px-3 py-1 font-semibold uppercase tracking-wide text-slate-500">
+                    No Calculator
+                  </span>
+                )}
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className={`font-semibold ${meta.accentClass}`}>
+                    {meta.label}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: 4 }).map((_, index) => (
+                      <span
+                        key={`${question.id}-difficulty-${index}`}
+                        className={`h-2.5 w-2.5 rounded-full ${index < meta.level ? meta.dotClass : "bg-slate-200"}`}
+                      />
+                    ))}
+                  </div>
                 </div>
+                <span className="font-semibold text-slate-500">
+                  Marks: {question.marks}
+                </span>
               </div>
-              <span className="font-semibold text-slate-500">
-                Marks: {question.marks}
-              </span>
               {hasImages ? (
                 <Button
                   variant="ghost"
@@ -307,7 +306,7 @@ export function QuestionCard({
             </div>
           </div>
 
-          <aside className="flex flex-col gap-5 border-t border-slate-100 bg-white px-4 py-5 lg:border-l lg:border-t-0">
+          <aside className="flex flex-col gap-3 border-t border-slate-100 bg-white px-4 py-4 md:gap-5 md:border-l md:border-t-0 md:py-5">
             <div className="flex items-center justify-center gap-3 text-slate-600">
               <Button
                 variant="ghost"
@@ -330,21 +329,21 @@ export function QuestionCard({
                 />
               </div>
             </div>
-            <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-1 md:gap-3">
               <Button
                 variant="outline"
-                className="w-full justify-between gap-3 rounded border-sky-100 bg-sky-50 px-4 py-4 text-slate-800 hover:bg-sky-100"
+                className="w-full justify-center gap-2 rounded border-sky-100 bg-sky-50 px-3 py-3 text-slate-800 hover:bg-sky-100 md:justify-between md:gap-3 md:px-4 md:py-4"
                 onClick={handleViewAnswer}
                 disabled={disableInteractions || viewingAnswer}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 md:gap-3">
                   <FileText className="size-4" />
                   <span className="text-sm">Mark Scheme</span>
                 </div>
               </Button>
               <Button
                 variant="outline"
-                className={`w-full justify-between gap-3 rounded px-4 py-4 text-sm ${
+                className={`w-full justify-center gap-2 rounded px-3 py-3 text-sm md:justify-between md:gap-3 md:px-4 md:py-4 ${
                   isSelected
                     ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                     : "border-sky-100 bg-sky-50 text-slate-800 hover:bg-sky-100"
@@ -365,7 +364,7 @@ export function QuestionCard({
                   }
                 }}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 md:gap-3">
                   {isSelected ? (
                     <>
                       <Check className="size-4" />
@@ -398,7 +397,7 @@ export function QuestionCard({
               <div className="flex flex-wrap items-center gap-3 text-sm text-slate-700">
                 {!question.calculator && (
                   <span className="rounded bg-slate-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    NO CALCULATOR
+                    No Calculator
                   </span>
                 )}
                 <p className="text-xs uppercase tracking-wide text-slate-500">
@@ -470,11 +469,12 @@ export function QuestionCard({
                 </div>
                 <Button
                   variant="ghost"
-                  size="icon"
+                  size="icon-sm"
                   onClick={() => setFullscreenOpen(false)}
                   aria-label="Close fullscreen"
+                  className="md:size-9"
                 >
-                  <X className="h-5 w-5" />
+                  <X className="h-4 w-4 md:h-5 md:w-5" />
                 </Button>
               </div>
             </div>
