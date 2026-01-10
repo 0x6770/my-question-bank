@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 type Question = {
   id: number;
@@ -41,9 +41,57 @@ type PaperViewClientProps = {
 export function PaperViewClient({ paper }: PaperViewClientProps) {
   const router = useRouter();
   const printRef = useRef<HTMLDivElement>(null);
+  const [isPreparingPrint, setIsPreparingPrint] = useState(false);
+  const [printNotice, setPrintNotice] = useState<string | null>(null);
 
-  const handlePrint = () => {
+  const waitForImages = async () => {
+    const container = printRef.current;
+    if (!container) return true;
+    const images = Array.from(container.querySelectorAll("img"));
+    if (images.length === 0) return true;
+
+    const results = await Promise.all(
+      images.map(
+        (img) =>
+          new Promise<boolean>((resolve) => {
+            if (img.complete && img.naturalWidth > 0) {
+              resolve(true);
+              return;
+            }
+            const handleLoad = () => {
+              cleanup();
+              resolve(true);
+            };
+            const handleError = () => {
+              cleanup();
+              resolve(false);
+            };
+            const cleanup = () => {
+              img.removeEventListener("load", handleLoad);
+              img.removeEventListener("error", handleError);
+            };
+            img.addEventListener("load", handleLoad);
+            img.addEventListener("error", handleError);
+          }),
+      ),
+    );
+
+    return results.every(Boolean);
+  };
+
+  const handlePrint = async () => {
+    if (isPreparingPrint) return;
+    setIsPreparingPrint(true);
+    setPrintNotice(null);
+    const imagesReady = await waitForImages();
+    if (!imagesReady) {
+      setPrintNotice(
+        "Some images failed to load. If the PDF is blank, refresh and try again.",
+      );
+    }
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     window.print();
+    setIsPreparingPrint(false);
   };
 
   const handleDelete = async () => {
@@ -93,12 +141,16 @@ export function PaperViewClient({ paper }: PaperViewClientProps) {
               <button
                 type="button"
                 onClick={handlePrint}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                disabled={isPreparingPrint}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-300 transition-colors"
               >
-                Print / Save as PDF
+                {isPreparingPrint ? "Preparing PDF..." : "Print / Save as PDF"}
               </button>
             </div>
           </div>
+          {printNotice ? (
+            <p className="mt-2 text-xs text-amber-600">{printNotice}</p>
+          ) : null}
         </div>
       </div>
 
@@ -158,6 +210,7 @@ export function PaperViewClient({ paper }: PaperViewClientProps) {
                           width={800}
                           height={600}
                           className="max-w-full h-auto border border-gray-200 rounded"
+                          loading="eager"
                           unoptimized
                         />
                       )}
@@ -182,6 +235,7 @@ export function PaperViewClient({ paper }: PaperViewClientProps) {
                             width={800}
                             height={600}
                             className="max-w-full h-auto border border-gray-200 rounded"
+                            loading="eager"
                             unoptimized
                           />
                         )}
