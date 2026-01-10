@@ -506,10 +506,9 @@ export function PaperBuilderClient({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="1">1 (Easy)</SelectItem>
-                      <SelectItem value="2">2</SelectItem>
-                      <SelectItem value="3">3 (Medium)</SelectItem>
-                      <SelectItem value="4">4</SelectItem>
-                      <SelectItem value="5">5 (Hard)</SelectItem>
+                      <SelectItem value="2">2 (Medium)</SelectItem>
+                      <SelectItem value="3">3 (Hard)</SelectItem>
+                      <SelectItem value="4">4 (Challenge)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
