@@ -14,6 +14,7 @@ export async function GET(request: Request) {
   const chapterIdParam = searchParams.get("chapterId");
   const difficultyParam = searchParams.get("difficulty");
   const countParam = searchParams.get("count");
+  const statusParam = searchParams.get("status"); // "all" | "completed" | "incompleted" | "bookmarked"
 
   // Validate required parameters
   if (!bankParam || !subjectIdParam) {
@@ -29,6 +30,18 @@ export async function GET(request: Request) {
     ? Number.parseInt(difficultyParam, 10)
     : null;
   const count = countParam ? Number.parseInt(countParam, 10) : 10;
+  const normalizedStatus =
+    statusParam === "complete"
+      ? "completed"
+      : statusParam === "incomplete"
+        ? "incompleted"
+        : statusParam;
+  const statusFilter: "all" | "completed" | "incompleted" | "bookmarked" =
+    normalizedStatus === "completed" ||
+    normalizedStatus === "incompleted" ||
+    normalizedStatus === "bookmarked"
+      ? normalizedStatus
+      : "all";
 
   // Validate count (1-30 for MVP)
   if (!Number.isFinite(count) || count < 1 || count > 30) {
@@ -36,6 +49,20 @@ export async function GET(request: Request) {
       { error: "Count must be between 1 and 30" },
       { status: 400 },
     );
+  }
+
+  let userId: string | null = null;
+  if (statusFilter !== "all") {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    userId = user?.id ?? null;
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Please log in to use status filters." },
+        { status: 401 },
+      );
+    }
   }
 
   // Map URL parameter to question bank value
@@ -176,26 +203,6 @@ export async function GET(request: Request) {
     query = query.eq("difficulty", difficulty);
   }
 
-  const { data: allQuestions, error: questionsError } = await query;
-
-  if (questionsError) {
-    return NextResponse.json(
-      { error: questionsError.message },
-      { status: 500 },
-    );
-  }
-
-  // Random sampling in JavaScript (since Supabase doesn't support ORDER BY RANDOM() with .select())
-  // Shuffle the array using Fisher-Yates algorithm
-  const shuffled = [...(allQuestions ?? [])];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-
-  // Take the first 'count' items
-  const selectedQuestions = shuffled.slice(0, Math.min(count, shuffled.length));
-
   type QuestionRow = Omit<
     Database["public"]["Tables"]["questions"]["Row"],
     "chapter_id"
@@ -215,6 +222,76 @@ export async function GET(request: Request) {
         }[]
       | null;
   };
+
+  const { data: allQuestions, error: questionsError } = await query;
+
+  if (questionsError) {
+    return NextResponse.json(
+      { error: questionsError.message },
+      { status: 500 },
+    );
+  }
+
+  let statusFilteredQuestions = (allQuestions ?? []) as QuestionRow[];
+  if (statusFilter !== "all") {
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Please log in to use status filters." },
+        { status: 401 },
+      );
+    }
+    const questionIds = statusFilteredQuestions.map((row) => row.id);
+    if (questionIds.length === 0) {
+      return NextResponse.json({ questions: [] });
+    }
+
+    const { data: userQuestionRows, error: userQuestionError } = await supabase
+      .from("user_questions")
+      .select("question_id, is_bookmarked, answer_viewed_at")
+      .eq("user_id", userId)
+      .in("question_id", questionIds);
+
+    if (userQuestionError) {
+      return NextResponse.json(
+        { error: userQuestionError.message },
+        { status: 500 },
+      );
+    }
+
+    const bookmarkedIds = new Set<number>();
+    const answeredIds = new Set<number>();
+
+    for (const row of userQuestionRows ?? []) {
+      if (row.question_id == null) continue;
+      if (row.is_bookmarked) bookmarkedIds.add(row.question_id);
+      if (row.answer_viewed_at) answeredIds.add(row.question_id);
+    }
+
+    if (statusFilter === "bookmarked") {
+      statusFilteredQuestions = statusFilteredQuestions.filter((question) =>
+        bookmarkedIds.has(question.id),
+      );
+    } else if (statusFilter === "completed") {
+      statusFilteredQuestions = statusFilteredQuestions.filter((question) =>
+        answeredIds.has(question.id),
+      );
+    } else if (statusFilter === "incompleted") {
+      statusFilteredQuestions = statusFilteredQuestions.filter(
+        (question) => !answeredIds.has(question.id),
+      );
+    }
+  }
+
+  // Random sampling in JavaScript (since Supabase doesn't support ORDER BY RANDOM() with .select())
+  // Shuffle the array using Fisher-Yates algorithm
+  const shuffled = [...statusFilteredQuestions];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  // Take the first 'count' items
+  const selectedQuestions = shuffled.slice(0, Math.min(count, shuffled.length));
 
   // Step 3: Get chapter information for each question
   const questionIds = selectedQuestions.map((q) => (q as QuestionRow).id);

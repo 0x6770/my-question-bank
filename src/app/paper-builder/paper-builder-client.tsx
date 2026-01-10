@@ -76,6 +76,9 @@ export function PaperBuilderClient({
   const [selectedDifficulty, setSelectedDifficulty] = useState<number | null>(
     null,
   );
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "completed" | "incompleted" | "bookmarked"
+  >("all");
   const [questionCount, setQuestionCount] = useState<number>(10);
 
   // Paper state
@@ -210,6 +213,10 @@ export function PaperBuilderClient({
 
       if (selectedDifficulty !== null) {
         params.append("difficulty", selectedDifficulty.toString());
+      }
+
+      if (statusFilter !== "all") {
+        params.append("status", statusFilter);
       }
 
       const response = await fetch(`/api/papers/random-questions?${params}`);
@@ -509,6 +516,38 @@ export function PaperBuilderClient({
                       <SelectItem value="2">2 (Medium)</SelectItem>
                       <SelectItem value="3">3 (Hard)</SelectItem>
                       <SelectItem value="4">4 (Challenge)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Status Selection */}
+                <div>
+                  <label
+                    htmlFor="status"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Status (Optional)
+                  </label>
+                  <Select
+                    value={statusFilter}
+                    onValueChange={(value) => {
+                      setStatusFilter(
+                        value as
+                          | "all"
+                          | "completed"
+                          | "incompleted"
+                          | "bookmarked",
+                      );
+                    }}
+                  >
+                    <SelectTrigger id="status">
+                      <SelectValue placeholder="All statuses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="incompleted">Incomplete</SelectItem>
+                      <SelectItem value="bookmarked">Bookmarked</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
