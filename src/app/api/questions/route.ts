@@ -251,6 +251,58 @@ export async function GET(request: Request) {
     }
   }
 
+  let prefetchedUserQuestionRows:
+    | {
+        question_id: number | null;
+        is_bookmarked: boolean;
+        answer_viewed_at: string | null;
+        completed_at: string | null;
+      }[]
+    | null = null;
+
+  if (user && completionParam && completionParam !== "all") {
+    const { data: completionRows, error: completionError } = await supabase
+      .from("user_questions")
+      .select("question_id, is_bookmarked, answer_viewed_at, completed_at")
+      .eq("user_id", user.id)
+      .in("question_id", matchingQuestionIds);
+
+    if (completionError) {
+      return NextResponse.json(
+        { error: completionError.message },
+        { status: 500 },
+      );
+    }
+
+    prefetchedUserQuestionRows = completionRows ?? [];
+    const completedIds = new Set<number>();
+
+    for (const row of completionRows ?? []) {
+      if (row.question_id == null) continue;
+      if (row.answer_viewed_at || row.completed_at) {
+        completedIds.add(row.question_id);
+      }
+    }
+
+    if (completionParam === "completed") {
+      matchingQuestionIds = matchingQuestionIds.filter((id) =>
+        completedIds.has(id),
+      );
+    } else if (completionParam === "incompleted") {
+      matchingQuestionIds = matchingQuestionIds.filter(
+        (id) => !completedIds.has(id),
+      );
+    }
+
+    if (matchingQuestionIds.length === 0) {
+      return NextResponse.json({
+        questions: [],
+        hasMore: false,
+        page: safePage,
+      });
+    }
+  }
+
   // 第二步：查询题目详情
   let query = supabase
     .from("questions")
@@ -495,24 +547,21 @@ export async function GET(request: Request) {
 
   // Bookmarks for current user (if signed in)
   let bookmarksById: Record<number, boolean> = {};
-  let answersViewedById: Record<number, boolean> = {};
   let completedById: Record<number, boolean> = {};
   if (user && withSigned.length > 0) {
-    const { data: bookmarkRows } = await supabase
-      .from("user_questions")
-      .select("question_id, is_bookmarked, answer_viewed_at, completed_at")
-      .in(
-        "question_id",
-        withSigned.map((q) => q.id),
-      );
+    let bookmarkRows = prefetchedUserQuestionRows;
+    if (!bookmarkRows) {
+      const { data } = await supabase
+        .from("user_questions")
+        .select("question_id, is_bookmarked, answer_viewed_at, completed_at")
+        .in(
+          "question_id",
+          withSigned.map((q) => q.id),
+        );
+      bookmarkRows = data ?? [];
+    }
     bookmarksById = Object.fromEntries(
       (bookmarkRows ?? []).map((row) => [row.question_id, row.is_bookmarked]),
-    );
-    answersViewedById = Object.fromEntries(
-      (bookmarkRows ?? []).map((row) => [
-        row.question_id,
-        Boolean(row.answer_viewed_at),
-      ]),
     );
     completedById = Object.fromEntries(
       (bookmarkRows ?? []).map((row) => [
@@ -522,20 +571,10 @@ export async function GET(request: Request) {
     );
   }
 
-  let filtered = withSigned;
-  if (user && completionParam && completionParam !== "all") {
-    const shouldIncludeViewed = completionParam === "completed";
-    filtered = withSigned.filter((question) =>
-      shouldIncludeViewed
-        ? completedById[question.id]
-        : !completedById[question.id],
-    );
-  }
-
-  const withBookmarks = filtered.map((question) => ({
+  const withBookmarks = withSigned.map((question) => ({
     ...question,
     isBookmarked: bookmarksById[question.id] ?? false,
-    isAnswerViewed: answersViewedById[question.id] ?? false,
+    isAnswerViewed: completedById[question.id] ?? false,
   }));
 
   return NextResponse.json({

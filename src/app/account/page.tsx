@@ -40,7 +40,9 @@ export default async function AccountPage() {
 
   const { data: bookmarkRows, error: bookmarkError } = await supabase
     .from("user_questions")
-    .select("question_id, created_at, answer_viewed_at, is_bookmarked")
+    .select(
+      "question_id, created_at, answer_viewed_at, completed_at, is_bookmarked",
+    )
     .order("created_at", { ascending: false });
 
   const questionIds = Array.from(
@@ -48,6 +50,7 @@ export default async function AccountPage() {
   );
   const bookmarkedAtMap = new Map<number, string | null>();
   const answerViewedMap = new Map<number, boolean>();
+  const completedMap = new Map<number, boolean>();
   const isBookmarkedMap = new Map<number, boolean>();
   const answerViewedAtMap = new Map<number, string | null>();
   for (const row of bookmarkRows ?? []) {
@@ -56,6 +59,10 @@ export default async function AccountPage() {
       row.is_bookmarked ? row.created_at : null,
     );
     answerViewedMap.set(row.question_id, Boolean(row.answer_viewed_at));
+    completedMap.set(
+      row.question_id,
+      Boolean(row.answer_viewed_at || row.completed_at),
+    );
     isBookmarkedMap.set(row.question_id, row.is_bookmarked ?? false);
     answerViewedAtMap.set(row.question_id, row.answer_viewed_at ?? null);
   }
@@ -167,7 +174,7 @@ export default async function AccountPage() {
       question: {
         ...q,
         isBookmarked: true,
-        isAnswerViewed: answerViewedMap.get(q.id) ?? false,
+        isAnswerViewed: completedMap.get(q.id) ?? false,
       },
       bookmarkedAt: q.bookmarkedAt,
     }));

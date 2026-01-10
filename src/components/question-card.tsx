@@ -325,9 +325,7 @@ export function QuestionCard({
               <span className="h-6 w-px bg-slate-200" aria-hidden="true" />
               <div className="flex items-center justify-center rounded-full p-1">
                 <CheckCircle2
-                  aria-label={
-                    isAnswerViewed ? "Answer viewed" : "Answer not viewed"
-                  }
+                  aria-label={isAnswerViewed ? "Completed" : "Not completed"}
                   className={`size-5 ${isAnswerViewed ? "text-emerald-600" : "text-slate-300"}`}
                 />
               </div>
