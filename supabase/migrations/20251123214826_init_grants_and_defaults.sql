@@ -65,14 +65,6 @@ GRANT ALL ON SEQUENCE "public"."subjects_id_seq" TO "anon";
 GRANT ALL ON SEQUENCE "public"."subjects_id_seq" TO "authenticated";
 GRANT ALL ON SEQUENCE "public"."subjects_id_seq" TO "service_role";
 
-GRANT ALL ON TABLE "public"."tags" TO "anon";
-GRANT ALL ON TABLE "public"."tags" TO "authenticated";
-GRANT ALL ON TABLE "public"."tags" TO "service_role";
-
-GRANT ALL ON SEQUENCE "public"."tag_id_seq" TO "anon";
-GRANT ALL ON SEQUENCE "public"."tag_id_seq" TO "authenticated";
-GRANT ALL ON SEQUENCE "public"."tag_id_seq" TO "service_role";
-
 GRANT ALL ON TABLE "public"."user_questions" TO "postgres";
 GRANT ALL ON TABLE "public"."user_questions" TO "anon";
 GRANT ALL ON TABLE "public"."user_questions" TO "authenticated";

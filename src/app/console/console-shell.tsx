@@ -1,14 +1,6 @@
 "use client";
 
-import {
-  FileQuestion,
-  FileText,
-  Menu,
-  Settings,
-  Tag,
-  Users,
-  X,
-} from "lucide-react";
+import { FileQuestion, FileText, Menu, Settings, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType, ReactNode, SVGProps } from "react";
@@ -44,7 +36,6 @@ const navItems: NavItem[] = [
       { href: "/console/exam-papers/tags", label: "Tags" },
     ],
   },
-  { href: "/console/tags", label: "Tags", icon: Tag },
   {
     href: "/console/permissions",
     label: "Permissions",

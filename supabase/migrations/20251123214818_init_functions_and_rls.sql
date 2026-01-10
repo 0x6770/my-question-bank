@@ -339,38 +339,6 @@ CREATE POLICY "subjects.update" ON "public"."subjects"
         'super_admin'::"public"."user_role"
     ]));
 
--- tags
-ALTER TABLE "public"."tags" ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "tags.delete" ON "public"."tags"
-    FOR DELETE
-    USING ("public"."in_roles"(VARIADIC ARRAY[
-        'admin'::"public"."user_role",
-        'super_admin'::"public"."user_role"
-    ]));
-
-CREATE POLICY "tags.insert" ON "public"."tags"
-    FOR INSERT
-    WITH CHECK ("public"."in_roles"(VARIADIC ARRAY[
-        'admin'::"public"."user_role",
-        'super_admin'::"public"."user_role"
-    ]));
-
-CREATE POLICY "tags.select" ON "public"."tags"
-    FOR SELECT
-    USING (true);
-
-CREATE POLICY "tags.update" ON "public"."tags"
-    FOR UPDATE
-    USING ("public"."in_roles"(VARIADIC ARRAY[
-        'admin'::"public"."user_role",
-        'super_admin'::"public"."user_role"
-    ]))
-    WITH CHECK ("public"."in_roles"(VARIADIC ARRAY[
-        'admin'::"public"."user_role",
-        'super_admin'::"public"."user_role"
-    ]));
-
 -- user_questions
 ALTER TABLE "public"."user_questions" ENABLE ROW LEVEL SECURITY;
 
