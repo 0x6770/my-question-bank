@@ -232,19 +232,16 @@ export function QuestionCard({
   return (
     <>
       <article className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid gap-0 border-b border-slate-100 md:grid-cols-[1fr_200px] lg:grid-cols-[1fr_200px]">
+        <div className="flex flex-col md:grid md:grid-cols-[1fr_200px] gap-0 border-b border-slate-100">
           <div className="flex flex-col gap-3 px-4 py-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
               {!question.calculator && (
-                <span className="rounded bg-slate-100 px-3 py-1 font-semibold uppercase tracking-wide text-slate-500">
+                <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500 sm:px-3">
                   No Calculator
                 </span>
               )}
-              {/* <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
-                  {subjectLabel} {chapterLabel ? ` > ${chapterLabel}` : ""}
-                </span> */}
-              <div className="flex flex-wrap items-center gap-3">
-                <span className={`font-semibold ${meta.accentClass}`}>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <span className={`text-sm font-semibold ${meta.accentClass}`}>
                   {meta.label}
                 </span>
                 <div className="flex items-center gap-1">
@@ -256,7 +253,7 @@ export function QuestionCard({
                   ))}
                 </div>
               </div>
-              <span className="font-semibold text-slate-500">
+              <span className="text-sm font-semibold text-slate-500">
                 Marks: {question.marks}
               </span>
               {hasImages ? (
@@ -265,6 +262,7 @@ export function QuestionCard({
                   size="icon-sm"
                   onClick={() => setFullscreenOpen(true)}
                   aria-label="Fullscreen preview"
+                  className="ml-auto"
                 >
                   <Maximize2 className="h-4 w-4" />
                 </Button>
@@ -307,7 +305,7 @@ export function QuestionCard({
             </div>
           </div>
 
-          <aside className="flex flex-col gap-5 border-t border-slate-100 bg-white px-4 py-5 lg:border-l lg:border-t-0">
+          <aside className="flex flex-col gap-3 border-t border-slate-100 bg-white px-4 py-4 md:gap-5 md:border-l md:border-t-0 md:py-5">
             <div className="flex items-center justify-center gap-3 text-slate-600">
               <Button
                 variant="ghost"
@@ -330,21 +328,21 @@ export function QuestionCard({
                 />
               </div>
             </div>
-            <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-1 md:gap-3">
               <Button
                 variant="outline"
-                className="w-full justify-between gap-3 rounded border-sky-100 bg-sky-50 px-4 py-4 text-slate-800 hover:bg-sky-100"
+                className="w-full justify-center gap-2 rounded border-sky-100 bg-sky-50 px-3 py-3 text-slate-800 hover:bg-sky-100 md:justify-between md:gap-3 md:px-4 md:py-4"
                 onClick={handleViewAnswer}
                 disabled={disableInteractions || viewingAnswer}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 md:gap-3">
                   <FileText className="size-4" />
                   <span className="text-sm">Mark Scheme</span>
                 </div>
               </Button>
               <Button
                 variant="outline"
-                className={`w-full justify-between gap-3 rounded px-4 py-4 text-sm ${
+                className={`w-full justify-center gap-2 rounded px-3 py-3 text-sm md:justify-between md:gap-3 md:px-4 md:py-4 ${
                   isSelected
                     ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                     : "border-sky-100 bg-sky-50 text-slate-800 hover:bg-sky-100"
@@ -365,7 +363,7 @@ export function QuestionCard({
                   }
                 }}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 md:gap-3">
                   {isSelected ? (
                     <>
                       <Check className="size-4" />
@@ -392,23 +390,25 @@ export function QuestionCard({
       </article>
 
       {fullscreenOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 md:p-8">
-          <div className="relative flex h-[90vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <div className="flex flex-wrap items-center gap-3 text-sm text-slate-700">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-2 md:p-8">
+          <div className="relative flex h-[95vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl md:h-[90vh]">
+            <div className="flex flex-col gap-2 border-b border-slate-200 px-3 py-2 md:flex-row md:items-center md:justify-between md:px-4 md:py-3">
+              <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
                 {!question.calculator && (
-                  <span className="rounded bg-slate-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    NO CALCULATOR
+                  <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-500 md:px-2.5 md:py-1">
+                    NO CALC
                   </span>
                 )}
                 <p className="text-xs uppercase tracking-wide text-slate-500">
-                  Question #{question.id}
+                  Q#{question.id}
                 </p>
-                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                <span className="hidden items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 md:inline-flex">
                   {subjectLabel} {chapterLabel ? ` > ${chapterLabel}` : ""}
                 </span>
                 <div className="flex items-center gap-2">
-                  <span className={`font-semibold ${meta.accentClass}`}>
+                  <span
+                    className={`text-xs font-semibold md:text-sm ${meta.accentClass}`}
+                  >
                     {meta.label}
                   </span>
                 </div>
@@ -416,7 +416,7 @@ export function QuestionCard({
                   {Array.from({ length: 4 }).map((_, index) => (
                     <span
                       key={`full-${question.id}-difficulty-${index}`}
-                      className={`h-2.5 w-2.5 rounded-full ${index < meta.level ? meta.dotClass : "bg-slate-200"}`}
+                      className={`h-2 w-2 rounded-full md:h-2.5 md:w-2.5 ${index < meta.level ? meta.dotClass : "bg-slate-200"}`}
                     />
                   ))}
                 </div>
@@ -429,23 +429,23 @@ export function QuestionCard({
                   question.tags.map((tag, index) => (
                     <span
                       key={`full-${question.id}-tag-${index}`}
-                      className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-700"
+                      className="hidden items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-700 md:inline-flex"
                     >
                       {tag.name}: {tag.value}
                     </span>
                   ))}
               </div>
-              <div className="flex items-center gap-3">
-                <div className="inline-flex overflow-hidden rounded-full border border-slate-200 bg-white text-sm shadow-sm">
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="inline-flex overflow-hidden rounded-full border border-slate-200 bg-white text-xs shadow-sm md:text-sm">
                   <button
                     type="button"
                     onClick={() => {
                       setShowQuestion(true);
                       setShowAnswer(false);
                     }}
-                    className={`px-3 py-1 font-medium transition ${showQuestionOnly ? "bg-sky-100 text-slate-900" : "bg-white text-slate-600 hover:bg-slate-50"} border-r border-slate-200`}
+                    className={`px-2 py-1 font-medium transition md:px-3 ${showQuestionOnly ? "bg-sky-100 text-slate-900" : "bg-white text-slate-600 hover:bg-slate-50"} border-r border-slate-200`}
                   >
-                    Question
+                    Q
                   </button>
                   <button
                     type="button"
@@ -453,9 +453,9 @@ export function QuestionCard({
                       setShowQuestion(false);
                       setShowAnswer(true);
                     }}
-                    className={`px-3 py-1 font-medium transition ${showAnswerOnly ? "bg-sky-100 text-slate-900" : "bg-white text-slate-600 hover:bg-slate-50"} border-r border-slate-200`}
+                    className={`px-2 py-1 font-medium transition md:px-3 ${showAnswerOnly ? "bg-sky-100 text-slate-900" : "bg-white text-slate-600 hover:bg-slate-50"} border-r border-slate-200`}
                   >
-                    Answer
+                    A
                   </button>
                   <button
                     type="button"
@@ -463,18 +463,19 @@ export function QuestionCard({
                       setShowQuestion(true);
                       setShowAnswer(true);
                     }}
-                    className={`px-3 py-1 font-medium transition ${showBoth ? "bg-sky-100 text-slate-900" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+                    className={`px-2 py-1 font-medium transition md:px-3 ${showBoth ? "bg-sky-100 text-slate-900" : "bg-white text-slate-600 hover:bg-slate-50"}`}
                   >
-                    Question & Answer
+                    Q&A
                   </button>
                 </div>
                 <Button
                   variant="ghost"
-                  size="icon"
+                  size="icon-sm"
                   onClick={() => setFullscreenOpen(false)}
                   aria-label="Close fullscreen"
+                  className="md:size-9"
                 >
-                  <X className="h-5 w-5" />
+                  <X className="h-4 w-4 md:h-5 md:w-5" />
                 </Button>
               </div>
             </div>
@@ -493,14 +494,14 @@ export function QuestionCard({
                       className={`relative ${showAnswer ? "border-r border-slate-200" : ""}`}
                     >
                       {questionImages.length === 0 ? (
-                        <div className="absolute inset-0 overflow-auto p-4">
+                        <div className="absolute inset-0 overflow-auto p-2 md:p-4">
                           <p className="text-sm text-slate-500">
                             No question images.
                           </p>
                         </div>
                       ) : hasMultiQuestionImages ? (
                         <div className="absolute inset-0 flex h-full flex-col overflow-hidden md:flex-row">
-                          <div className="flex-1 overflow-auto border-b border-slate-200 p-4 md:border-b-0 md:border-r">
+                          <div className="flex-1 overflow-auto border-b border-slate-200 p-2 md:border-b-0 md:border-r md:p-4">
                             {primaryQuestionImage ? (
                               <Image
                                 key={primaryQuestionImage.id}
@@ -517,8 +518,8 @@ export function QuestionCard({
                               />
                             ) : null}
                           </div>
-                          <div className="flex-1 overflow-auto p-4">
-                            <div className="space-y-4">
+                          <div className="flex-1 overflow-auto p-2 md:p-4">
+                            <div className="space-y-2 md:space-y-4">
                               {secondaryQuestionImages.map((image) => (
                                 <Image
                                   key={image.id}
@@ -535,8 +536,8 @@ export function QuestionCard({
                           </div>
                         </div>
                       ) : (
-                        <div className="absolute inset-0 overflow-auto p-4">
-                          <div className="space-y-4">
+                        <div className="absolute inset-0 overflow-auto p-2 md:p-4">
+                          <div className="space-y-2 md:space-y-4">
                             {questionImages.map((image) => (
                               <Image
                                 key={image.id}
@@ -556,8 +557,8 @@ export function QuestionCard({
                   ) : null}
                   {showAnswer ? (
                     <div className="relative">
-                      <div className="absolute inset-0 overflow-auto p-4">
-                        <div className="space-y-4">
+                      <div className="absolute inset-0 overflow-auto p-2 md:p-4">
+                        <div className="space-y-2 md:space-y-4">
                           {answerImages.length > 0 ? (
                             answerImages.map((image) => (
                               <Image
