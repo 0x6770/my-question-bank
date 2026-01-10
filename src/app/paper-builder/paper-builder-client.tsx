@@ -64,6 +64,9 @@ export function PaperBuilderClient({
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(
     null,
   );
+  const [selectedExamBoardId, setSelectedExamBoardId] = useState<number | null>(
+    null,
+  );
   const [selectedChapterId, setSelectedChapterId] = useState<number | null>(
     null,
   );
@@ -89,27 +92,31 @@ export function PaperBuilderClient({
     );
   }, [examBoards, selectedQuestionBank]);
 
-  const filteredExamBoardIds = useMemo(() => {
-    return filteredExamBoards.map((board) => board.id);
-  }, [filteredExamBoards]);
-
   // Filter subjects by selected question bank
   const filteredSubjects = useMemo(() => {
     return subjects.filter((subject) =>
-      filteredExamBoardIds.includes(subject.exam_board_id),
+      filteredExamBoards.some((board) => board.id === subject.exam_board_id),
     );
-  }, [subjects, filteredExamBoardIds]);
+  }, [subjects, filteredExamBoards]);
 
-  const filteredSubjectIds = useMemo(() => {
-    return filteredSubjects.map((subject) => subject.id);
-  }, [filteredSubjects]);
+  const examBoardSubjects = useMemo(() => {
+    if (!selectedExamBoardId) return [];
+    return filteredSubjects.filter(
+      (subject) => subject.exam_board_id === selectedExamBoardId,
+    );
+  }, [filteredSubjects, selectedExamBoardId]);
+
+  const examBoardSubjectIds = useMemo(() => {
+    return examBoardSubjects.map((subject) => subject.id);
+  }, [examBoardSubjects]);
 
   // Filter chapters by selected question bank
   const filteredChapters = useMemo(() => {
+    if (!selectedExamBoardId) return [];
     return chapters.filter((chapter) =>
-      filteredSubjectIds.includes(chapter.subject_id),
+      examBoardSubjectIds.includes(chapter.subject_id),
     );
-  }, [chapters, filteredSubjectIds]);
+  }, [chapters, examBoardSubjectIds, selectedExamBoardId]);
 
   // Filter chapters by selected subject
   const subjectChapters = useMemo(() => {
@@ -131,12 +138,17 @@ export function PaperBuilderClient({
   const handleQuestionBankChange = (bank: QuestionBank) => {
     setSelectedQuestionBank(bank);
     // Reset selections when changing question bank
+    setSelectedExamBoardId(null);
     setSelectedSubjectId(null);
     setSelectedChapterId(null);
     setQuestions([]);
   };
 
   const handleGenerateQuestions = async () => {
+    if (!selectedExamBoardId) {
+      setError("Please select an exam board");
+      return;
+    }
     if (!selectedSubjectId) {
       setError("Please select a subject");
       return;
@@ -294,6 +306,38 @@ export function PaperBuilderClient({
               <h2 className="text-xl font-semibold mb-4">Question Selection</h2>
 
               <div className="space-y-4">
+                {/* Exam Board Selection */}
+                <div>
+                  <label
+                    htmlFor="exam-board"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Exam Board *
+                  </label>
+                  <Select
+                    value={selectedExamBoardId?.toString() ?? ""}
+                    onValueChange={(value) => {
+                      const nextExamBoardId = value
+                        ? Number.parseInt(value, 10)
+                        : null;
+                      setSelectedExamBoardId(nextExamBoardId);
+                      setSelectedSubjectId(null);
+                      setSelectedChapterId(null);
+                    }}
+                  >
+                    <SelectTrigger id="exam-board">
+                      <SelectValue placeholder="Select an exam board" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredExamBoards.map((board) => (
+                        <SelectItem key={board.id} value={board.id.toString()}>
+                          {board.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 {/* Subject Selection */}
                 <div>
                   <label
@@ -308,12 +352,19 @@ export function PaperBuilderClient({
                       setSelectedSubjectId(value ? Number(value) : null);
                       setSelectedChapterId(null); // Reset chapter when subject changes
                     }}
+                    disabled={!selectedExamBoardId}
                   >
                     <SelectTrigger id="subject">
-                      <SelectValue placeholder="Select a subject" />
+                      <SelectValue
+                        placeholder={
+                          selectedExamBoardId
+                            ? "Select a subject"
+                            : "Select an exam board first"
+                        }
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      {filteredSubjects.map((subject) => (
+                      {examBoardSubjects.map((subject) => (
                         <SelectItem
                           key={subject.id}
                           value={subject.id.toString()}
@@ -411,7 +462,11 @@ export function PaperBuilderClient({
                 <button
                   type="button"
                   onClick={handleGenerateQuestions}
-                  disabled={loadingQuestions || !selectedSubjectId}
+                  disabled={
+                    loadingQuestions ||
+                    !selectedExamBoardId ||
+                    !selectedSubjectId
+                  }
                   className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
                 >
                   {loadingQuestions
