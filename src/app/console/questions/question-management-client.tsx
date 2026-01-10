@@ -6,13 +6,13 @@ import {
   ChevronDown,
   Loader2,
   Pencil,
-  Plus,
   ScrollText,
   Trash2,
 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BackToTopButton } from "@/components/back-to-top-button";
 import { QuestionCard } from "@/components/question-card";
 import { Button } from "@/components/ui/button";
 import {
@@ -653,7 +653,6 @@ export function QuestionManagement({
     );
   }, [availableTags, editSelectedSubjectIds]);
 
-  const formRef = useRef<HTMLFormElement>(null);
   const imageIdRef = useRef(0);
   const editImageIdRef = useRef(0);
   const answerImageIdRef = useRef(0);
@@ -2130,18 +2129,6 @@ export function QuestionManagement({
                 bank.
               </p>
             </div>
-            <Button
-              onClick={() =>
-                formRef.current?.scrollIntoView({
-                  behavior: "smooth",
-                  block: "start",
-                })
-              }
-              className="gap-2"
-            >
-              <Plus className="size-4" />
-              New Question
-            </Button>
           </header>
 
           <TabsList>
@@ -2159,7 +2146,7 @@ export function QuestionManagement({
               </CardDescription>
             </CardHeader>
 
-            <form ref={formRef} onSubmit={handleCreate} className="space-y-6">
+            <form onSubmit={handleCreate} className="space-y-6">
               <CardContent className="space-y-6">
                 {/* Questionbank Chapter Selection */}
                 <div className="space-y-2">
@@ -2718,7 +2705,7 @@ export function QuestionManagement({
                 </div>
 
                 {/* Row 2: Difficulty */}
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_auto]">
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(220px,340px)_1fr] lg:items-end">
                   <div className="space-y-2">
                     <Label>Difficulty</Label>
                     <div className="flex min-h-11 w-full flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 shadow-sm">
@@ -2749,7 +2736,7 @@ export function QuestionManagement({
                     </div>
                   </div>
 
-                  <div className="flex items-end">
+                  <div className="flex items-end justify-end">
                     <Button
                       variant="outline"
                       size="sm"
@@ -2814,6 +2801,7 @@ export function QuestionManagement({
           </section>
         </div>
       </Tabs>
+      <BackToTopButton />
     </>
   );
 }
