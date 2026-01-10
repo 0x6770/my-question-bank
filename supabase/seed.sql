@@ -1,6 +1,6 @@
 WITH eb AS (
   INSERT INTO public.exam_boards (name, question_bank)
-  VALUES ('Alevel', 'topical questions')
+  VALUES ('Alevel', 'checkpoint')
   ON CONFLICT (name, question_bank) DO UPDATE
     SET name = EXCLUDED.name,
         question_bank = EXCLUDED.question_bank

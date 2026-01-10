@@ -23,8 +23,8 @@ type UserRow = {
 
 type Props = {
   user: UserRow;
-  topicalSubjects: Subject[];
-  pastPaperSubjects: Subject[];
+  checkpointSubjects: Subject[];
+  questionbankSubjects: Subject[];
   examPaperSubjects: Subject[];
   accessGrants: number[];
   adminRole: AdminRole | null;
@@ -90,8 +90,8 @@ function Modal({
 
 export function UserAccessEditor({
   user,
-  topicalSubjects,
-  pastPaperSubjects,
+  checkpointSubjects,
+  questionbankSubjects,
   examPaperSubjects,
   accessGrants,
   adminRole,
@@ -371,14 +371,14 @@ export function UserAccessEditor({
       ) : null}
 
       {renderSubjectSection(
-        "Topical Questions Access",
-        "Manage topical question subjects for this user.",
-        topicalSubjects,
+        "Checkpoint Access",
+        "Manage checkpoint subjects for this user.",
+        checkpointSubjects,
       )}
       {renderSubjectSection(
-        "Past Paper Questions Access",
-        "Manage past paper question subjects for this user.",
-        pastPaperSubjects,
+        "Questionbank Access",
+        "Manage questionbank subjects for this user.",
+        questionbankSubjects,
       )}
       {renderSubjectSection(
         "Exam Paper Access",

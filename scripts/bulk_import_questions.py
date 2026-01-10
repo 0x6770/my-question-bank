@@ -81,7 +81,7 @@ def create_progress() -> Progress:
         refresh_per_second=10,
     )
 # 默认题库类型（可通过命令行参数覆盖）
-DEFAULT_QUESTION_BANK = "past paper questions"
+DEFAULT_QUESTION_BANK = "questionbank"
 LEGACY_QUESTION_BANK_FOR_QUESTIONS = 0
 
 
@@ -1313,9 +1313,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--question-bank",
         type=str,
-        choices=["topical questions", "past paper questions", "exam paper"],
+        choices=["checkpoint", "questionbank", "exam paper"],
         default=None,
-        help="题库类型（默认：past paper questions）",
+        help="题库类型（默认：questionbank）",
     )
     parser.add_argument(
         "--questions-file",

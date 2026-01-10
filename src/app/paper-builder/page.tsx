@@ -28,14 +28,11 @@ export default async function PaperBuilderPage() {
   );
 
   // Only fetch exam boards that the user has access to via their subjects
-  // (filtered to past paper and topical questions for paper builder)
+  // (filtered to questionbank and checkpoint for paper builder)
   const { data: allExamBoards } = await supabase
     .from("exam_boards")
     .select("id, name, question_bank")
-    .in("question_bank", [
-      QUESTION_BANK.PAST_PAPER_QUESTIONS,
-      QUESTION_BANK.TOPICAL_QUESTIONS,
-    ])
+    .in("question_bank", [QUESTION_BANK.QUESTIONBANK, QUESTION_BANK.CHECKPOINT])
     .in("id", Array.from(accessibleExamBoardIds));
 
   const subjectIds = (subjects ?? []).map((s) => s.id);

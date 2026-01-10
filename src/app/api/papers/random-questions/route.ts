@@ -9,7 +9,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
 
   // Parse query parameters
-  const bankParam = searchParams.get("bank"); // "topical" | "past-paper" | "exam-paper"
+  const bankParam = searchParams.get("bank"); // "checkpoint" | "questionbank" | "exam-paper"
   const subjectIdParam = searchParams.get("subjectId");
   const chapterIdParam = searchParams.get("chapterId");
   const difficultyParam = searchParams.get("difficulty");
@@ -39,9 +39,9 @@ export async function GET(request: Request) {
   }
 
   // Map URL parameter to question bank value
-  let selectedBank: QuestionBank = QUESTION_BANK.PAST_PAPER_QUESTIONS;
-  if (bankParam === "topical") {
-    selectedBank = QUESTION_BANK.TOPICAL_QUESTIONS;
+  let selectedBank: QuestionBank = QUESTION_BANK.QUESTIONBANK;
+  if (bankParam === "checkpoint") {
+    selectedBank = QUESTION_BANK.CHECKPOINT;
   } else if (bankParam === "exam-paper") {
     selectedBank = QUESTION_BANK.EXAM_PAPER;
   }

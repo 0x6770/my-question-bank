@@ -88,9 +88,9 @@ export function AppNavbarClient({
   const navItems = useMemo(
     () => [
       { href: "/account", label: "Account" },
-      { href: "/questions?bank=topical", label: "Checkpoint" },
+      { href: "/questions?bank=checkpoint", label: "Checkpoint" },
       { href: "/papers", label: "Exam Paper" },
-      { href: "/questions?bank=past-paper", label: "Questionbank" },
+      { href: "/questions?bank=questionbank", label: "Questionbank" },
       { href: "/paper-builder", label: "Worksheet Builder" },
     ],
     [],

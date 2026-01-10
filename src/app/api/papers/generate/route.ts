@@ -47,11 +47,7 @@ export async function POST(request: Request) {
   }
 
   // Validate question_bank value
-  const validBanks = [
-    "past paper questions",
-    "topical questions",
-    "exam paper",
-  ];
+  const validBanks = ["questionbank", "checkpoint", "exam paper"];
   if (!validBanks.includes(question_bank)) {
     return NextResponse.json(
       { error: "Invalid question_bank value" },

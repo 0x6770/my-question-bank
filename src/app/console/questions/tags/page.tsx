@@ -5,16 +5,13 @@ import { QuestionTagManagementClient } from "./tag-management-client";
 export default async function QuestionTagsPage() {
   const supabase = await createClient();
 
-  // Fetch only subjects from past paper questions and topical questions
+  // Fetch only subjects from questionbank and checkpoint
   const { data: subjects, error: subjectsError } = await supabase
     .from("subjects")
     .select(
       "id, name, created_at, exam_board_id, exam_board:exam_boards!inner(id, name, question_bank, created_at)",
     )
-    .in("exam_board.question_bank", [
-      "past paper questions",
-      "topical questions",
-    ])
+    .in("exam_board.question_bank", ["questionbank", "checkpoint"])
     .order("name", { ascending: true });
 
   // Fetch all question tags with their values

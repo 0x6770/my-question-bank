@@ -44,24 +44,26 @@ export default async function ConsoleQuestionsPage(props: PageProps) {
   const searchParams = await props.searchParams;
   const supabase = await createClient();
 
-  // Map URL parameter to question bank value, default to "past paper questions"
+  // Map URL parameter to question bank value, default to "questionbank"
   const bankParam = searchParams.bank;
-  let selectedBank: QuestionBank = QUESTION_BANK.PAST_PAPER_QUESTIONS;
+  let selectedBank: QuestionBank = QUESTION_BANK.QUESTIONBANK;
 
-  if (bankParam === "topical") {
-    selectedBank = QUESTION_BANK.TOPICAL_QUESTIONS;
+  if (bankParam === "checkpoint") {
+    selectedBank = QUESTION_BANK.CHECKPOINT;
+  } else if (bankParam === "questionbank") {
+    selectedBank = QUESTION_BANK.QUESTIONBANK;
   } else if (bankParam === "exam-paper") {
     selectedBank = QUESTION_BANK.EXAM_PAPER;
   }
 
-  // Get ALL exam boards (for both Past Paper and Topical question banks)
+  // Get ALL exam boards (for both Questionbank and Checkpoint question banks)
   // This allows the form to select chapters from either question bank
   const { data: allExamBoards } = await supabase
     .from("exam_boards")
     .select("id, question_bank")
     .in("question_bank", [
-      QUESTION_BANK.PAST_PAPER_QUESTIONS,
-      QUESTION_BANK.TOPICAL_QUESTIONS,
+      QUESTION_BANK.QUESTIONBANK,
+      QUESTION_BANK.CHECKPOINT,
     ]);
 
   // Get exam boards for the CURRENT selected question bank (for filtering display list)

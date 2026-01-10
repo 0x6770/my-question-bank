@@ -372,9 +372,7 @@ export function QuestionManagement({
   const pastPaperExamBoardIds = useMemo(
     () =>
       allExamBoards
-        .filter(
-          (board) => board.question_bank === QUESTION_BANK.PAST_PAPER_QUESTIONS,
-        )
+        .filter((board) => board.question_bank === QUESTION_BANK.QUESTIONBANK)
         .map((board) => board.id),
     [allExamBoards],
   );
@@ -382,9 +380,7 @@ export function QuestionManagement({
   const typicalExamBoardIds = useMemo(
     () =>
       allExamBoards
-        .filter(
-          (board) => board.question_bank === QUESTION_BANK.TOPICAL_QUESTIONS,
-        )
+        .filter((board) => board.question_bank === QUESTION_BANK.CHECKPOINT)
         .map((board) => board.id),
     [allExamBoards],
   );
@@ -596,9 +592,9 @@ export function QuestionManagement({
   );
 
   const getTabValue = useCallback((bank: QuestionBank): string => {
-    if (bank === QUESTION_BANK.TOPICAL_QUESTIONS) return "topical";
+    if (bank === QUESTION_BANK.CHECKPOINT) return "checkpoint";
     if (bank === QUESTION_BANK.EXAM_PAPER) return "exam-paper";
-    return "past-paper";
+    return "questionbank";
   }, []);
 
   const primeSignedUrlCache = useCallback((list: QuestionSummary[]) => {
@@ -1584,10 +1580,10 @@ export function QuestionManagement({
         ) : null}
         {editingQuestionId === question.id ? (
           <form onSubmit={handleUpdate} className="space-y-4 p-4">
-            {/* Past Paper Questions Chapter Selection */}
+            {/* Questionbank Chapter Selection */}
             <div className="space-y-2">
-              <Label htmlFor="edit-past-paper-chapter">
-                Past Paper Questions
+              <Label htmlFor="edit-questionbank-chapter">
+                Questionbank
                 <span className="ml-2 text-xs text-slate-500">(可选)</span>
               </Label>
               <TreeSelect
@@ -1598,10 +1594,10 @@ export function QuestionManagement({
               />
             </div>
 
-            {/* Topical Questions Chapter Selection */}
+            {/* Checkpoint Chapter Selection */}
             <div className="space-y-2">
               <Label htmlFor="edit-typical-chapter">
-                Topical Questions
+                Checkpoint
                 <span className="ml-2 text-xs text-slate-500">(可选)</span>
               </Label>
               <TreeSelect
@@ -2008,8 +2004,8 @@ export function QuestionManagement({
           </header>
 
           <TabsList>
-            <TabsTrigger value="past-paper">Past Paper Questions</TabsTrigger>
-            <TabsTrigger value="topical">Topical Questions</TabsTrigger>
+            <TabsTrigger value="questionbank">Questionbank</TabsTrigger>
+            <TabsTrigger value="checkpoint">Checkpoint</TabsTrigger>
           </TabsList>
 
           <Card>
@@ -2024,10 +2020,10 @@ export function QuestionManagement({
 
             <form ref={formRef} onSubmit={handleCreate} className="space-y-6">
               <CardContent className="space-y-6">
-                {/* Past Paper Questions Chapter Selection */}
+                {/* Questionbank Chapter Selection */}
                 <div className="space-y-2">
-                  <Label htmlFor="past-paper-chapter">
-                    Past Paper Questions
+                  <Label htmlFor="questionbank-chapter">
+                    Questionbank
                     <span className="ml-2 text-xs text-slate-500">(可选)</span>
                   </Label>
                   <TreeSelect
@@ -2038,10 +2034,10 @@ export function QuestionManagement({
                   />
                 </div>
 
-                {/* Topical Questions Chapter Selection */}
+                {/* Checkpoint Chapter Selection */}
                 <div className="space-y-2">
                   <Label htmlFor="typical-chapter">
-                    Topical Questions
+                    Checkpoint
                     <span className="ml-2 text-xs text-slate-500">(可选)</span>
                   </Label>
                   <TreeSelect

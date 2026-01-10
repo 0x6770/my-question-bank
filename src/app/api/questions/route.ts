@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const pageParam = searchParams.get("page");
   const completionParam = searchParams.get("completion"); // "all" | "completed" | "incompleted"
   const bookmarkParam = searchParams.get("bookmark"); // "all" | "bookmarked"
-  const bankParam = searchParams.get("bank"); // "topical" | "past-paper" | "exam-paper"
+  const bankParam = searchParams.get("bank"); // "checkpoint" | "questionbank" | "exam-paper"
   const tagFiltersParam = searchParams.get("tagFilters"); // "tagName1:valueId1,tagName2:valueId2"
 
   const subjectId = subjectIdParam ? Number.parseInt(subjectIdParam, 10) : null;
@@ -33,10 +33,10 @@ export async function GET(request: Request) {
     }
   }
 
-  // Map URL parameter to question bank value, default to "past paper questions"
-  let selectedBank: QuestionBank = QUESTION_BANK.PAST_PAPER_QUESTIONS;
-  if (bankParam === "topical") {
-    selectedBank = QUESTION_BANK.TOPICAL_QUESTIONS;
+  // Map URL parameter to question bank value, default to "questionbank"
+  let selectedBank: QuestionBank = QUESTION_BANK.QUESTIONBANK;
+  if (bankParam === "checkpoint") {
+    selectedBank = QUESTION_BANK.CHECKPOINT;
   } else if (bankParam === "exam-paper") {
     selectedBank = QUESTION_BANK.EXAM_PAPER;
   }

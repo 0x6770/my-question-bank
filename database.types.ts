@@ -966,10 +966,7 @@ export type Database = {
       };
     };
     Enums: {
-      question_bank:
-        | "exam paper"
-        | "past paper questions"
-        | "topical questions";
+      question_bank: "exam paper" | "questionbank" | "checkpoint";
       user_role: "super_admin" | "admin" | "user";
     };
     CompositeTypes: {
@@ -1104,11 +1101,7 @@ export const Constants = {
   },
   public: {
     Enums: {
-      question_bank: [
-        "exam paper",
-        "past paper questions",
-        "topical questions",
-      ],
+      question_bank: ["exam paper", "questionbank", "checkpoint"],
       user_role: ["super_admin", "admin", "user"],
     },
   },

@@ -380,9 +380,11 @@ export function SelectedQuestionsPanel({
 
           <p className="text-xs text-slate-500 text-center">
             Question bank:{" "}
-            {questionBank === "topical"
-              ? "Topical Questions"
-              : "Past Paper Questions"}
+            {questionBank === "checkpoint"
+              ? "Checkpoint"
+              : questionBank === "questionbank"
+                ? "Questionbank"
+                : "Exam Paper"}
           </p>
         </div>
       )}

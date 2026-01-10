@@ -12,6 +12,19 @@ type Paper = {
   question_count: number;
 };
 
+const formatQuestionBank = (value: string) => {
+  switch (value) {
+    case "questionbank":
+      return "Questionbank";
+    case "checkpoint":
+      return "Checkpoint";
+    case "exam paper":
+      return "Exam Paper";
+    default:
+      return value;
+  }
+};
+
 export default async function PapersListPage() {
   const supabase = await createClient();
 
@@ -130,7 +143,7 @@ export default async function PapersListPage() {
                     </Link>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                    {paper.question_bank}
+                    {formatQuestionBank(paper.question_bank)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                     {paper.question_count}

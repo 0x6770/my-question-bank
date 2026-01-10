@@ -58,7 +58,7 @@ export function PaperBuilderClient({
 
   // Question Bank selection
   const [selectedQuestionBank, setSelectedQuestionBank] =
-    useState<QuestionBank>(QUESTION_BANK.PAST_PAPER_QUESTIONS);
+    useState<QuestionBank>(QUESTION_BANK.QUESTIONBANK);
 
   // Form state
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(
@@ -119,9 +119,13 @@ export function PaperBuilderClient({
 
   // Get bank param for API calls
   const bankParam = useMemo(() => {
-    if (selectedQuestionBank === QUESTION_BANK.TOPICAL_QUESTIONS)
-      return "topical";
-    return "past-paper";
+    if (selectedQuestionBank === QUESTION_BANK.CHECKPOINT) {
+      return "checkpoint";
+    }
+    if (selectedQuestionBank === QUESTION_BANK.EXAM_PAPER) {
+      return "exam-paper";
+    }
+    return "questionbank";
   }, [selectedQuestionBank]);
 
   const handleQuestionBankChange = (bank: QuestionBank) => {
@@ -259,28 +263,26 @@ export function PaperBuilderClient({
             <button
               type="button"
               onClick={() =>
-                handleQuestionBankChange(QUESTION_BANK.PAST_PAPER_QUESTIONS)
+                handleQuestionBankChange(QUESTION_BANK.QUESTIONBANK)
               }
               className={`px-6 py-3 rounded-lg font-medium transition-colors ${
-                selectedQuestionBank === QUESTION_BANK.PAST_PAPER_QUESTIONS
+                selectedQuestionBank === QUESTION_BANK.QUESTIONBANK
                   ? "bg-blue-600 text-white"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             >
-              Past Paper Questions
+              Questionbank
             </button>
             <button
               type="button"
-              onClick={() =>
-                handleQuestionBankChange(QUESTION_BANK.TOPICAL_QUESTIONS)
-              }
+              onClick={() => handleQuestionBankChange(QUESTION_BANK.CHECKPOINT)}
               className={`px-6 py-3 rounded-lg font-medium transition-colors ${
-                selectedQuestionBank === QUESTION_BANK.TOPICAL_QUESTIONS
+                selectedQuestionBank === QUESTION_BANK.CHECKPOINT
                   ? "bg-blue-600 text-white"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             >
-              Topical Questions
+              Checkpoint
             </button>
           </div>
         </div>

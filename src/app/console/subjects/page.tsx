@@ -13,12 +13,14 @@ export default async function ConsoleSubjectsPage(props: PageProps) {
   const searchParams = await props.searchParams;
   const supabase = await createClient();
 
-  // Map URL parameter to question bank value, default to "topical questions"
+  // Map URL parameter to question bank value, default to "checkpoint"
   const bankParam = searchParams.bank;
-  let selectedBank: QuestionBank = QUESTION_BANK.TOPICAL_QUESTIONS;
+  let selectedBank: QuestionBank = QUESTION_BANK.CHECKPOINT;
 
-  if (bankParam === "past-paper") {
-    selectedBank = QUESTION_BANK.PAST_PAPER_QUESTIONS;
+  if (bankParam === "questionbank") {
+    selectedBank = QUESTION_BANK.QUESTIONBANK;
+  } else if (bankParam === "checkpoint") {
+    selectedBank = QUESTION_BANK.CHECKPOINT;
   } else if (bankParam === "exam-paper") {
     selectedBank = QUESTION_BANK.EXAM_PAPER;
   }

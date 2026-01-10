@@ -30,7 +30,7 @@ type QuestionBrowserProps = {
     position: number;
     values: { id: number; value: string; position: number }[] | null;
   }[];
-  questionBank: string; // "topical" | "past-paper" | "exam-paper"
+  questionBank: string; // "checkpoint" | "questionbank" | "exam-paper"
   paperBuilderMode?: boolean;
   selectedQuestionIds?: Set<number>;
   onAddToPaper?: (question: {
@@ -582,7 +582,7 @@ export function QuestionBrowser({
             )}
             <div className="min-w-0 space-y-2">
               <p className="text-sm font-semibold text-slate-700">Difficulty</p>
-              <div className="flex min-h-11 w-full flex-wrap items-center gap-0.2 rounded-xl border border-slate-200 bg-white px-2 py-1.5 shadow-sm">
+              <div className="flex min-h-11 w-full flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 shadow-sm">
                 {difficultyOptions.map((item) => {
                   const checked = difficultySelections.has(item.value);
                   return (
@@ -605,7 +605,7 @@ export function QuestionBrowser({
 
             <div className="min-w-0 space-y-2">
               <p className="text-sm font-semibold text-slate-700">Status</p>
-              <div className="flex min-h-11 w-full flex-wrap items-center gap-0.2 rounded-xl border border-slate-200 bg-white px-2 py-1.5 shadow-sm">
+              <div className="flex min-h-11 w-full flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 shadow-sm">
                 {[
                   { key: "all", label: "All" },
                   { key: "completed", label: "Completed" },

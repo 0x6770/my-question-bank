@@ -9,6 +9,7 @@ import {
   type SelectedQuestion,
   SelectedQuestionsPanel,
 } from "@/components/selected-questions-panel";
+import { QUESTION_BANK } from "@/lib/question-bank";
 
 type QuestionBrowserWithBuilderProps = {
   examBoards: { id: number; name: string }[];
@@ -54,11 +55,14 @@ export function QuestionBrowserWithBuilder({
 
   // Map question bank param to database value
   const questionBankDbValue = useMemo(() => {
-    if (questionBank === "topical") {
-      return "topical questions";
+    if (questionBank === "checkpoint") {
+      return QUESTION_BANK.CHECKPOINT;
     }
-    if (questionBank === "past-paper") {
-      return "past paper questions";
+    if (questionBank === "questionbank") {
+      return QUESTION_BANK.QUESTIONBANK;
+    }
+    if (questionBank === "exam-paper") {
+      return QUESTION_BANK.EXAM_PAPER;
     }
     return questionBank;
   }, [questionBank]);

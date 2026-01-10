@@ -64,13 +64,12 @@ export default async function ConsoleUserDetailPage({
     exam_board: firstOrNull(subject.exam_board),
   }));
 
-  const topicalSubjects = normalizedSubjects.filter(
-    (subject) =>
-      subject.exam_board?.question_bank === QUESTION_BANK.TOPICAL_QUESTIONS,
+  const checkpointSubjects = normalizedSubjects.filter(
+    (subject) => subject.exam_board?.question_bank === QUESTION_BANK.CHECKPOINT,
   );
-  const pastPaperSubjects = normalizedSubjects.filter(
+  const questionbankSubjects = normalizedSubjects.filter(
     (subject) =>
-      subject.exam_board?.question_bank === QUESTION_BANK.PAST_PAPER_QUESTIONS,
+      subject.exam_board?.question_bank === QUESTION_BANK.QUESTIONBANK,
   );
   const examPaperSubjects = normalizedSubjects.filter(
     (subject) => subject.exam_board?.question_bank === QUESTION_BANK.EXAM_PAPER,
@@ -123,8 +122,8 @@ export default async function ConsoleUserDetailPage({
       {profile ? (
         <UserAccessEditor
           user={profile}
-          topicalSubjects={topicalSubjects}
-          pastPaperSubjects={pastPaperSubjects}
+          checkpointSubjects={checkpointSubjects}
+          questionbankSubjects={questionbankSubjects}
           examPaperSubjects={examPaperSubjects}
           accessGrants={accessGrants}
           adminRole={adminRole}

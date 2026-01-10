@@ -810,7 +810,7 @@ export function SubjectManagement({
 
   const handleBankChange = (value: string) => {
     const params = new URLSearchParams(searchParams?.toString() ?? "");
-    if (value === "topical") {
+    if (value === "checkpoint") {
       params.delete("bank"); // default, so remove param
     } else {
       params.set("bank", value);
@@ -820,11 +820,11 @@ export function SubjectManagement({
   };
 
   const currentBankTab =
-    questionBank === QUESTION_BANK.PAST_PAPER_QUESTIONS
-      ? "past-paper"
+    questionBank === QUESTION_BANK.QUESTIONBANK
+      ? "questionbank"
       : questionBank === QUESTION_BANK.EXAM_PAPER
         ? "exam-paper"
-        : "topical";
+        : "checkpoint";
 
   return (
     <div className="flex flex-1 flex-col gap-6">
@@ -840,8 +840,8 @@ export function SubjectManagement({
           </p>
           <Tabs value={currentBankTab} onValueChange={handleBankChange}>
             <TabsList>
-              <TabsTrigger value="past-paper">Past Paper Questions</TabsTrigger>
-              <TabsTrigger value="topical">Topical Questions</TabsTrigger>
+              <TabsTrigger value="questionbank">Questionbank</TabsTrigger>
+              <TabsTrigger value="checkpoint">Checkpoint</TabsTrigger>
               <TabsTrigger value="exam-paper">Exam Paper</TabsTrigger>
             </TabsList>
           </Tabs>
