@@ -5,6 +5,10 @@
   - `/account`：标签切换“收藏 / 已查看答案”，用 QuestionCard 展示，显示收藏时间。
   - `/console/*`：后台管理（subjects/chapters、users）。users 支持为用户勾选可访问的 subjects（实时 upsert 到 user_subject_access）。
 
+## 仓库说明
+- **源代码**：0x6770/my-question-bank
+- **Issues**：myqb/myQuestionBank
+
 ## 主要数据与权限
 - **Supabase 表**：
   - `subjects` / `chapters` / `questions` / `question_images` / `answer_images`.
@@ -30,6 +34,7 @@
 - **改动后必做**：每次修改完成后依次运行 `yarn format src`、`yarn lint src`、`yarn build`，然后用 Next.js MCP 的 `get_errors` 检查是否有报错。
 - **权限/数据验证**：运行 Supabase 迁移（`supabase db reset` 或 migrate），确认 RLS 生效；使用普通用户验证 subject/章节/题目过滤。
 - **功能验证**：题卡全屏切换、书签状态同步、Mark Scheme 点击写入答案查看；账号页收藏/已查看列表；后台授权勾选生效后刷新题库过滤。
+- **GitHub 仓库**：代码在 0x6770/my-question-bank；Issues 在 myqb/myQuestionBank（`gh issue` 相关命令需 `-R myqb/myQuestionBank`）。
 - **MCP 工具**（Next.js 服务器已启用 MCP，端口 3000）：
   - `get_errors`：查看当前编译/运行时错误。
   - `get_routes`：路由列表。
