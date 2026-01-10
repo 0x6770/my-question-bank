@@ -70,6 +70,9 @@ export function PaperBuilderClient({
   const [selectedChapterId, setSelectedChapterId] = useState<number | null>(
     null,
   );
+  const [selectedSubChapterId, setSelectedSubChapterId] = useState<
+    number | null
+  >(null);
   const [selectedDifficulty, setSelectedDifficulty] = useState<number | null>(
     null,
   );
@@ -118,11 +121,46 @@ export function PaperBuilderClient({
     );
   }, [chapters, examBoardSubjectIds, selectedExamBoardId]);
 
-  // Filter chapters by selected subject
   const subjectChapters = useMemo(() => {
     if (!selectedSubjectId) return [];
     return filteredChapters.filter((ch) => ch.subject_id === selectedSubjectId);
   }, [selectedSubjectId, filteredChapters]);
+
+  const rootChapters = useMemo(() => {
+    return subjectChapters.filter(
+      (chapter) => chapter.parent_chapter_id == null,
+    );
+  }, [subjectChapters]);
+
+  const subChapters = useMemo(() => {
+    if (!selectedChapterId) return [];
+    return subjectChapters.filter(
+      (chapter) => chapter.parent_chapter_id === selectedChapterId,
+    );
+  }, [selectedChapterId, subjectChapters]);
+
+  const chapterDisabled = !selectedSubjectId || rootChapters.length === 0;
+  const subChapterDisabled = !selectedChapterId || subChapters.length === 0;
+  const chapterSelectValue = chapterDisabled
+    ? ""
+    : selectedChapterId != null
+      ? selectedChapterId.toString()
+      : "all";
+  const subChapterSelectValue = subChapterDisabled
+    ? ""
+    : selectedSubChapterId != null
+      ? selectedSubChapterId.toString()
+      : "all";
+  const chapterPlaceholder = !selectedSubjectId
+    ? "Select a subject"
+    : rootChapters.length === 0
+      ? "NA"
+      : "All chapters";
+  const subChapterPlaceholder = !selectedChapterId
+    ? "Select a chapter"
+    : subChapters.length === 0
+      ? "NA"
+      : "All subchapters";
 
   // Get bank param for API calls
   const bankParam = useMemo(() => {
@@ -141,6 +179,7 @@ export function PaperBuilderClient({
     setSelectedExamBoardId(null);
     setSelectedSubjectId(null);
     setSelectedChapterId(null);
+    setSelectedSubChapterId(null);
     setQuestions([]);
   };
 
@@ -164,8 +203,9 @@ export function PaperBuilderClient({
         count: questionCount.toString(),
       });
 
-      if (selectedChapterId) {
-        params.append("chapterId", selectedChapterId.toString());
+      const resolvedChapterId = selectedSubChapterId ?? selectedChapterId;
+      if (resolvedChapterId) {
+        params.append("chapterId", resolvedChapterId.toString());
       }
 
       if (selectedDifficulty !== null) {
@@ -323,6 +363,7 @@ export function PaperBuilderClient({
                       setSelectedExamBoardId(nextExamBoardId);
                       setSelectedSubjectId(null);
                       setSelectedChapterId(null);
+                      setSelectedSubChapterId(null);
                     }}
                   >
                     <SelectTrigger id="exam-board">
@@ -350,7 +391,8 @@ export function PaperBuilderClient({
                     value={selectedSubjectId?.toString() ?? ""}
                     onValueChange={(value) => {
                       setSelectedSubjectId(value ? Number(value) : null);
-                      setSelectedChapterId(null); // Reset chapter when subject changes
+                      setSelectedChapterId(null);
+                      setSelectedSubChapterId(null);
                     }}
                     disabled={!selectedExamBoardId}
                   >
@@ -382,20 +424,58 @@ export function PaperBuilderClient({
                     htmlFor="chapter"
                     className="block text-sm font-medium text-gray-700 mb-2"
                   >
-                    Chapter (Optional)
+                    Chapter (Level 1)
                   </label>
                   <Select
-                    value={selectedChapterId?.toString()}
+                    value={chapterSelectValue}
                     onValueChange={(value) => {
-                      setSelectedChapterId(value ? Number(value) : null);
+                      const nextChapterId =
+                        value === "all" ? null : Number.parseInt(value, 10);
+                      setSelectedChapterId(nextChapterId);
+                      setSelectedSubChapterId(null);
                     }}
-                    disabled={!selectedSubjectId}
+                    disabled={chapterDisabled}
                   >
                     <SelectTrigger id="chapter">
-                      <SelectValue placeholder="All chapters" />
+                      <SelectValue placeholder={chapterPlaceholder} />
                     </SelectTrigger>
                     <SelectContent>
-                      {subjectChapters.map((chapter) => (
+                      <SelectItem value="all">All chapters</SelectItem>
+                      {rootChapters.map((chapter) => (
+                        <SelectItem
+                          key={chapter.id}
+                          value={chapter.id.toString()}
+                        >
+                          {chapter.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Subchapter Selection */}
+                <div>
+                  <label
+                    htmlFor="subchapter"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Subchapter (Level 2)
+                  </label>
+                  <Select
+                    value={subChapterSelectValue}
+                    onValueChange={(value) => {
+                      const nextSubChapterId =
+                        value === "all" ? null : Number.parseInt(value, 10);
+                      setSelectedSubChapterId(nextSubChapterId);
+                    }}
+                    disabled={subChapterDisabled}
+                  >
+                    <SelectTrigger id="subchapter">
+                      <SelectValue placeholder={subChapterPlaceholder} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All subchapters</SelectItem>
+                      {subChapters.map((chapter) => (
                         <SelectItem
                           key={chapter.id}
                           value={chapter.id.toString()}
