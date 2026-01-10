@@ -3,6 +3,7 @@
 import {
   ArrowDown,
   ArrowUp,
+  ChevronDown,
   Loader2,
   Pencil,
   Plus,
@@ -76,7 +77,14 @@ type Feedback =
 
 type ExamBoardRow = {
   id: number;
+  name: string;
   question_bank: string;
+};
+
+type SubjectFilterRow = {
+  id: number;
+  name: string;
+  exam_board_id: number;
 };
 
 type AllChapterRow = {
@@ -93,6 +101,7 @@ type QuestionManagementProps = {
   initialChapters: ChapterRow[];
   allChapters: AllChapterRow[]; // All chapters from both question banks
   allExamBoards: ExamBoardRow[]; // All exam boards to identify question banks
+  allSubjects: SubjectFilterRow[]; // All subjects for filtering
   initialQuestions: QuestionSummary[];
   initialHasMore: boolean;
   questionBank: QuestionBank;
@@ -296,6 +305,7 @@ export function QuestionManagement({
   initialChapters,
   allChapters,
   allExamBoards,
+  allSubjects,
   initialQuestions,
   initialHasMore,
   questionBank,
@@ -488,6 +498,109 @@ export function QuestionManagement({
   const [searchedQuestion, setSearchedQuestion] =
     useState<QuestionSummary | null>(null);
 
+  // Filtering states
+  const [filterSubjectId, setFilterSubjectId] = useState<number | null>(null);
+  const [filterChapterId, setFilterChapterId] = useState<number | null>(null);
+  const [filterSubChapterId, setFilterSubChapterId] = useState<number | null>(
+    null,
+  );
+  const [filterDifficulties, setFilterDifficulties] = useState<Set<number>>(
+    new Set(),
+  );
+  const [activeExamBoardId, setActiveExamBoardId] = useState<number | null>(
+    null,
+  );
+
+  // Filter current question bank's exam boards and subjects
+  const currentExamBoards = useMemo(() => {
+    return allExamBoards.filter(
+      (board) => board.question_bank === questionBank,
+    );
+  }, [allExamBoards, questionBank]);
+
+  const currentExamBoardIds = useMemo(() => {
+    return currentExamBoards.map((board) => board.id);
+  }, [currentExamBoards]);
+
+  const currentSubjects = useMemo(() => {
+    return allSubjects.filter((subject) =>
+      currentExamBoardIds.includes(subject.exam_board_id),
+    );
+  }, [allSubjects, currentExamBoardIds]);
+
+  const visibleSubjects = useMemo(() => {
+    if (activeExamBoardId == null) return currentSubjects;
+    return currentSubjects.filter(
+      (subject) => subject.exam_board_id === activeExamBoardId,
+    );
+  }, [activeExamBoardId, currentSubjects]);
+
+  const visibleRootChapters = useMemo(() => {
+    if (filterSubjectId == null) return [];
+    return chapters.filter(
+      (chapter) =>
+        chapter.subject_id === filterSubjectId &&
+        chapter.parent_chapter_id == null,
+    );
+  }, [filterSubjectId, chapters]);
+
+  const visibleSubChapters = useMemo(() => {
+    if (filterChapterId == null) return [];
+    return chapters.filter(
+      (chapter) => chapter.parent_chapter_id === filterChapterId,
+    );
+  }, [filterChapterId, chapters]);
+
+  const toggleFilterDifficulty = (value: number) => {
+    setFilterDifficulties((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) {
+        next.delete(value);
+      } else {
+        next.add(value);
+      }
+      return next;
+    });
+    setPage(1);
+  };
+
+  const handleFilterSubjectSelect = (subjectId: number) => {
+    const subject = currentSubjects.find((item) => item.id === subjectId);
+    setFilterSubjectId(subjectId);
+    setFilterChapterId(null);
+    setFilterSubChapterId(null);
+    if (subject) {
+      setActiveExamBoardId(subject.exam_board_id);
+    }
+    setPage(1);
+  };
+
+  const handleFilterChapterSelect = (chapterId: number | null) => {
+    setFilterChapterId(chapterId);
+    setFilterSubChapterId(null);
+    setPage(1);
+  };
+
+  const handleFilterSubChapterSelect = (chapterId: number | null) => {
+    setFilterSubChapterId(chapterId);
+    setPage(1);
+  };
+
+  const clearFilters = () => {
+    setFilterSubjectId(null);
+    setFilterChapterId(null);
+    setFilterSubChapterId(null);
+    setFilterDifficulties(new Set());
+    setActiveExamBoardId(null);
+    setPage(1);
+  };
+
+  const filtersActive =
+    filterSubjectId != null ||
+    filterChapterId != null ||
+    filterSubChapterId != null ||
+    filterDifficulties.size > 0;
+
   // Get subject IDs from selected chapters
   const selectedSubjectIds = useMemo(() => {
     const subjectIds = new Set<number>();
@@ -623,9 +736,23 @@ export function QuestionManagement({
       setListError(null);
       try {
         const bankValue = getTabValue(questionBank);
-        const response = await fetch(
-          `/api/questions?page=${safePage}&bank=${bankValue}`,
-        );
+        const params = new URLSearchParams();
+        params.set("page", String(safePage));
+        params.set("bank", bankValue);
+
+        // Add filter parameters
+        const resolvedChapterId = filterSubChapterId ?? filterChapterId;
+        if (resolvedChapterId) {
+          params.set("chapterId", String(resolvedChapterId));
+        } else if (filterSubjectId) {
+          params.set("subjectId", String(filterSubjectId));
+        }
+
+        if (filterDifficulties.size > 0) {
+          params.set("difficulties", Array.from(filterDifficulties).join(","));
+        }
+
+        const response = await fetch(`/api/questions?${params.toString()}`);
         if (!response.ok) {
           throw new Error(
             "Failed to load question list, please try again later.",
@@ -652,7 +779,16 @@ export function QuestionManagement({
         setIsLoadingQuestions(false);
       }
     },
-    [mapApiQuestions, primeSignedUrlCache, questionBank, getTabValue],
+    [
+      mapApiQuestions,
+      primeSignedUrlCache,
+      questionBank,
+      getTabValue,
+      filterSubjectId,
+      filterChapterId,
+      filterSubChapterId,
+      filterDifficulties,
+    ],
   );
 
   useEffect(() => {
@@ -1957,6 +2093,11 @@ export function QuestionManagement({
     return () => clearTimeout(timer);
   }, [feedback]);
 
+  // Reload questions when filters or page change
+  useEffect(() => {
+    void loadQuestionsPage(page);
+  }, [page, loadQuestionsPage]);
+
   return (
     <>
       {feedback ? (
@@ -2434,6 +2575,193 @@ export function QuestionManagement({
                   )}
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Question Filters */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Filter Questions</CardTitle>
+              <CardDescription>
+                Filter questions by subject, chapter, and difficulty
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Row 1: Subject + Chapter + Subchapter */}
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="filter-subject">Exam / Subject</Label>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextOpen = activeExamBoardId === null;
+                          if (nextOpen && currentExamBoards.length > 0) {
+                            setActiveExamBoardId(currentExamBoards[0].id);
+                          }
+                        }}
+                        className="flex h-11 w-full min-w-0 items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 text-left text-sm font-medium text-slate-800 shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200"
+                      >
+                        <span className="truncate">
+                          {filterSubjectId
+                            ? currentSubjects.find(
+                                (s) => s.id === filterSubjectId,
+                              )?.name
+                            : "Select a subject"}
+                        </span>
+                        <ChevronDown className="size-4 text-slate-400" />
+                      </button>
+                      {activeExamBoardId && (
+                        <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+                          <div className="max-h-72 overflow-auto">
+                            {visibleSubjects.map((subject) => (
+                              <button
+                                key={subject.id}
+                                type="button"
+                                className={`flex w-full items-start gap-3 px-3 py-2 text-left text-sm font-semibold ${filterSubjectId === subject.id ? "bg-white text-slate-900" : "text-slate-700 hover:bg-slate-50"}`}
+                                onClick={() => {
+                                  handleFilterSubjectSelect(subject.id);
+                                  setActiveExamBoardId(null);
+                                }}
+                              >
+                                <span className="flex-1 whitespace-normal text-left leading-snug break-words">
+                                  {subject.name}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="filter-chapter">Chapter</Label>
+                    <Select
+                      value={
+                        filterChapterId != null
+                          ? String(filterChapterId)
+                          : "all"
+                      }
+                      onValueChange={(value) => {
+                        const valueId =
+                          value === "all" ? null : parseInt(value, 10);
+                        handleFilterChapterSelect(valueId);
+                      }}
+                      disabled={
+                        filterSubjectId == null ||
+                        visibleRootChapters.length === 0
+                      }
+                    >
+                      <SelectTrigger className="h-11 rounded-xl border-slate-200 shadow-sm">
+                        <SelectValue
+                          placeholder={
+                            filterSubjectId == null
+                              ? "Select a subject"
+                              : "All chapters"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All chapters</SelectItem>
+                        {visibleRootChapters.map((chapter) => (
+                          <SelectItem
+                            key={chapter.id}
+                            value={String(chapter.id)}
+                          >
+                            {chapter.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="filter-subchapter">Subchapter</Label>
+                    <Select
+                      value={
+                        filterSubChapterId != null
+                          ? String(filterSubChapterId)
+                          : "all"
+                      }
+                      onValueChange={(value) => {
+                        const valueId =
+                          value === "all" ? null : parseInt(value, 10);
+                        handleFilterSubChapterSelect(valueId);
+                      }}
+                      disabled={
+                        filterChapterId == null ||
+                        visibleSubChapters.length === 0
+                      }
+                    >
+                      <SelectTrigger className="h-11 rounded-xl border-slate-200 shadow-sm">
+                        <SelectValue
+                          placeholder={
+                            filterChapterId == null
+                              ? "Select a chapter"
+                              : "All subchapters"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All subchapters</SelectItem>
+                        {visibleSubChapters.map((chapter) => (
+                          <SelectItem
+                            key={chapter.id}
+                            value={String(chapter.id)}
+                          >
+                            {chapter.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Row 2: Difficulty */}
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_auto]">
+                  <div className="space-y-2">
+                    <Label>Difficulty</Label>
+                    <div className="flex min-h-11 w-full flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 shadow-sm">
+                      {[
+                        { value: 1, label: "Easy" },
+                        { value: 2, label: "Medium" },
+                        { value: 3, label: "Hard" },
+                        { value: 4, label: "Challenge" },
+                      ].map((item) => {
+                        const checked = filterDifficulties.has(item.value);
+                        return (
+                          <label
+                            key={item.value}
+                            className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                          >
+                            <input
+                              type="checkbox"
+                              className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                              checked={checked}
+                              onChange={() =>
+                                toggleFilterDifficulty(item.value)
+                              }
+                            />
+                            <span>{item.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex items-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={clearFilters}
+                      className="h-11 w-full lg:w-auto"
+                      disabled={!filtersActive}
+                    >
+                      Clear Filters
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
 

@@ -60,7 +60,7 @@ export default async function ConsoleQuestionsPage(props: PageProps) {
   // This allows the form to select chapters from either question bank
   const { data: allExamBoards } = await supabase
     .from("exam_boards")
-    .select("id, question_bank")
+    .select("id, name, question_bank")
     .in("question_bank", [
       QUESTION_BANK.QUESTIONBANK,
       QUESTION_BANK.CHECKPOINT,
@@ -78,7 +78,7 @@ export default async function ConsoleQuestionsPage(props: PageProps) {
   const allExamBoardIds = (allExamBoards ?? []).map((board) => board.id);
   const { data: allSubjects } = await supabase
     .from("subjects")
-    .select("id, exam_board_id")
+    .select("id, name, exam_board_id")
     .in("exam_board_id", allExamBoardIds.length > 0 ? allExamBoardIds : [-1]);
 
   // Get subjects for current question bank only (for filtering display list)
@@ -365,6 +365,7 @@ export default async function ConsoleQuestionsPage(props: PageProps) {
       initialChapters={chapterSummaries}
       allChapters={allChapterSummaries}
       allExamBoards={allExamBoards ?? []}
+      allSubjects={allSubjects ?? []}
       initialQuestions={questionSummaries}
       initialHasMore={hasMoreInitial}
       questionBank={selectedBank}
