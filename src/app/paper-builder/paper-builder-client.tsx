@@ -225,6 +225,7 @@ export function PaperBuilderClient({
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [generatingPaper, setGeneratingPaper] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Filter exam boards by selected question bank
   const filteredExamBoards = useMemo(() => {
@@ -356,6 +357,7 @@ export function PaperBuilderClient({
     }
 
     setError(null);
+    setNotice(null);
     setLoadingQuestions(true);
 
     try {
@@ -367,6 +369,12 @@ export function PaperBuilderClient({
         subjectId: selectedSubjectId.toString(),
         count: requestCount.toString(),
       });
+      if (appendMode && questions.length > 0) {
+        params.set(
+          "excludeIds",
+          questions.map((question) => question.id).join(","),
+        );
+      }
 
       const resolvedChapterId = selectedSubChapterId ?? selectedChapterId;
       if (resolvedChapterId) {
@@ -388,19 +396,39 @@ export function PaperBuilderClient({
         throw new Error(data.error || "Failed to generate questions");
       }
 
+      const incoming = data.questions ?? [];
       setQuestions((prev) => {
         if (!appendMode || prev.length === 0) {
-          return data.questions.slice(0, maxQuestionCount);
+          return incoming.slice(0, maxQuestionCount);
         }
         const existingIds = new Set(prev.map((question) => question.id));
         const merged = [...prev];
-        for (const question of data.questions) {
+        for (const question of incoming) {
           if (!existingIds.has(question.id)) {
             merged.push(question);
           }
         }
         return merged.slice(0, maxQuestionCount);
       });
+
+      const requestedCount =
+        typeof data.requestedCount === "number"
+          ? data.requestedCount
+          : requestCount;
+      const availableCount =
+        typeof data.availableCount === "number"
+          ? data.availableCount
+          : incoming.length;
+      const returnedCount =
+        typeof data.returnedCount === "number"
+          ? data.returnedCount
+          : incoming.length;
+
+      if (availableCount < requestedCount) {
+        setNotice(
+          `Only ${availableCount} question${availableCount === 1 ? "" : "s"} available for the current filters. Added ${returnedCount}.`,
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -505,6 +533,11 @@ export function PaperBuilderClient({
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
             {error}
+          </div>
+        )}
+        {notice && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded mb-6">
+            {notice}
           </div>
         )}
 

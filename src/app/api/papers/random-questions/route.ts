@@ -14,6 +14,7 @@ export async function GET(request: Request) {
   const chapterIdParam = searchParams.get("chapterId");
   const difficultyParam = searchParams.get("difficulty");
   const countParam = searchParams.get("count");
+  const excludeIdsParam = searchParams.get("excludeIds");
   const statusParam = searchParams.get("status"); // "all" | "completed" | "incompleted" | "bookmarked"
 
   // Validate required parameters
@@ -30,6 +31,12 @@ export async function GET(request: Request) {
     ? Number.parseInt(difficultyParam, 10)
     : null;
   const count = countParam ? Number.parseInt(countParam, 10) : 10;
+  const excludeIds = excludeIdsParam
+    ? excludeIdsParam
+        .split(",")
+        .map((value) => Number.parseInt(value, 10))
+        .filter((value) => Number.isFinite(value))
+    : [];
   const normalizedStatus =
     statusParam === "complete"
       ? "completed"
@@ -149,7 +156,12 @@ export async function GET(request: Request) {
   }
 
   if (allowedChapterIds.length === 0) {
-    return NextResponse.json({ questions: [] });
+    return NextResponse.json({
+      questions: [],
+      requestedCount: count,
+      availableCount: 0,
+      returnedCount: 0,
+    });
   }
 
   // Step 1: Find question IDs matching the criteria through question_chapters
@@ -164,12 +176,33 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: qcError.message }, { status: 500 });
   }
 
-  const matchingQuestionIds = Array.from(
+  let matchingQuestionIds = Array.from(
     new Set((questionChapterRows ?? []).map((row) => row.question_id)),
   );
 
   if (matchingQuestionIds.length === 0) {
-    return NextResponse.json({ questions: [] });
+    return NextResponse.json({
+      questions: [],
+      requestedCount: count,
+      availableCount: 0,
+      returnedCount: 0,
+    });
+  }
+
+  if (excludeIds.length > 0) {
+    const excludeSet = new Set(excludeIds);
+    matchingQuestionIds = matchingQuestionIds.filter(
+      (id) => !excludeSet.has(id),
+    );
+  }
+
+  if (matchingQuestionIds.length === 0) {
+    return NextResponse.json({
+      questions: [],
+      requestedCount: count,
+      availableCount: 0,
+      returnedCount: 0,
+    });
   }
 
   // Step 2: Randomly select questions
@@ -242,7 +275,12 @@ export async function GET(request: Request) {
     }
     const questionIds = statusFilteredQuestions.map((row) => row.id);
     if (questionIds.length === 0) {
-      return NextResponse.json({ questions: [] });
+      return NextResponse.json({
+        questions: [],
+        requestedCount: count,
+        availableCount: 0,
+        returnedCount: 0,
+      });
     }
 
     const { data: userQuestionRows, error: userQuestionError } = await supabase
@@ -283,6 +321,8 @@ export async function GET(request: Request) {
     }
   }
 
+  const availableCount = statusFilteredQuestions.length;
+
   // Random sampling in JavaScript (since Supabase doesn't support ORDER BY RANDOM() with .select())
   // Shuffle the array using Fisher-Yates algorithm
   const shuffled = [...statusFilteredQuestions];
@@ -298,7 +338,12 @@ export async function GET(request: Request) {
   const questionIds = selectedQuestions.map((q) => (q as QuestionRow).id);
 
   if (questionIds.length === 0) {
-    return NextResponse.json({ questions: [] });
+    return NextResponse.json({
+      questions: [],
+      requestedCount: count,
+      availableCount,
+      returnedCount: 0,
+    });
   }
 
   const { data: allQuestionChapters } = await supabase
@@ -388,5 +433,10 @@ export async function GET(request: Request) {
     })),
   }));
 
-  return NextResponse.json({ questions: withSigned });
+  return NextResponse.json({
+    questions: withSigned,
+    requestedCount: count,
+    availableCount,
+    returnedCount: withSigned.length,
+  });
 }
