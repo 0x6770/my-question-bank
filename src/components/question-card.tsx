@@ -217,9 +217,12 @@ export function QuestionCard({
       ? `Chapter #${question.chapterId}`
       : "Chapter N/A");
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
-  const hasImages =
-    (question.images?.length ?? 0) > 0 ||
-    (question.answerImages?.length ?? 0) > 0;
+  const questionImages = question.images ?? [];
+  const answerImages = question.answerImages ?? [];
+  const hasImages = questionImages.length > 0 || answerImages.length > 0;
+  const hasMultiQuestionImages = questionImages.length > 1;
+  const primaryQuestionImage = questionImages[0];
+  const secondaryQuestionImages = questionImages.slice(1);
   const showQuestionOnly = showQuestion && !showAnswer;
   const showAnswerOnly = showAnswer && !showQuestion;
   const showBoth = showQuestion && showAnswer;
@@ -281,9 +284,9 @@ export function QuestionCard({
               </div>
             )}
             <div className="overflow-hidden">
-              {question.images.length > 0 ? (
+              {questionImages.length > 0 ? (
                 <div className="flex flex-col space-y-0">
-                  {question.images.map((image) => (
+                  {questionImages.map((image) => (
                     <Image
                       key={image.id}
                       src={image.signedUrl ?? image.storage_path}
@@ -491,10 +494,52 @@ export function QuestionCard({
                     <div
                       className={`relative ${showAnswer ? "border-r border-slate-200" : ""}`}
                     >
-                      <div className="absolute inset-0 overflow-auto p-4">
-                        <div className="space-y-4">
-                          {question.images.length > 0 ? (
-                            question.images.map((image) => (
+                      {questionImages.length === 0 ? (
+                        <div className="absolute inset-0 overflow-auto p-4">
+                          <p className="text-sm text-slate-500">
+                            No question images.
+                          </p>
+                        </div>
+                      ) : hasMultiQuestionImages ? (
+                        <div className="absolute inset-0 flex h-full flex-col overflow-hidden md:flex-row">
+                          <div className="flex-1 overflow-auto border-b border-slate-200 p-4 md:border-b-0 md:border-r">
+                            {primaryQuestionImage ? (
+                              <Image
+                                key={primaryQuestionImage.id}
+                                src={
+                                  primaryQuestionImage.signedUrl ??
+                                  primaryQuestionImage.storage_path
+                                }
+                                alt={`Question ${question.id} part ${primaryQuestionImage.position}`}
+                                width={1600}
+                                height={1200}
+                                className="block h-auto w-full object-contain"
+                                sizes="(max-width: 1200px) 100vw, 1000px"
+                                unoptimized
+                              />
+                            ) : null}
+                          </div>
+                          <div className="flex-1 overflow-auto p-4">
+                            <div className="space-y-4">
+                              {secondaryQuestionImages.map((image) => (
+                                <Image
+                                  key={image.id}
+                                  src={image.signedUrl ?? image.storage_path}
+                                  alt={`Question ${question.id} part ${image.position}`}
+                                  width={1600}
+                                  height={1200}
+                                  className="block h-auto w-full object-contain"
+                                  sizes="(max-width: 1200px) 100vw, 1000px"
+                                  unoptimized
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="absolute inset-0 overflow-auto p-4">
+                          <div className="space-y-4">
+                            {questionImages.map((image) => (
                               <Image
                                 key={image.id}
                                 src={image.signedUrl ?? image.storage_path}
@@ -505,22 +550,18 @@ export function QuestionCard({
                                 sizes="(max-width: 1200px) 100vw, 1000px"
                                 unoptimized
                               />
-                            ))
-                          ) : (
-                            <p className="text-sm text-slate-500">
-                              No question images.
-                            </p>
-                          )}
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   ) : null}
                   {showAnswer ? (
                     <div className="relative">
                       <div className="absolute inset-0 overflow-auto p-4">
                         <div className="space-y-4">
-                          {question.answerImages.length > 0 ? (
-                            question.answerImages.map((image) => (
+                          {answerImages.length > 0 ? (
+                            answerImages.map((image) => (
                               <Image
                                 key={image.id}
                                 src={image.signedUrl ?? image.storage_path}
