@@ -1,5 +1,23 @@
 "use client";
 
+import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { GripVertical } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -42,6 +60,121 @@ type Question = {
     signedUrl: string | null;
   }[];
 };
+
+function SortableQuestionRow({
+  question,
+  index,
+  isFirst,
+  isLast,
+  onMoveUp,
+  onMoveDown,
+  onRemove,
+}: {
+  question: Question;
+  index: number;
+  isFirst: boolean;
+  isLast: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onRemove: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: question.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors bg-white"
+    >
+      <div className="flex justify-between items-start mb-2 gap-3">
+        <div className="flex items-start gap-3">
+          <button
+            type="button"
+            className="mt-1 text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing"
+            aria-label="Drag to reorder"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+          <div className="flex-1">
+            <h3 className="font-semibold text-gray-900">
+              Question {index + 1}
+            </h3>
+            <div className="flex gap-4 text-sm text-gray-600 mt-1">
+              <span>ID: {question.id}</span>
+              <span>Marks: {question.marks}</span>
+              <span>Difficulty: {question.difficulty}</span>
+              <span>
+                {question.calculator ? "Calculator" : "No Calculator"}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-2 ml-2">
+          <button
+            type="button"
+            onClick={onMoveUp}
+            disabled={isFirst}
+            className="text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"
+            title="Move up"
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            onClick={onMoveDown}
+            disabled={isLast}
+            className="text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"
+            title="Move down"
+          >
+            ↓
+          </button>
+          <button
+            type="button"
+            onClick={onRemove}
+            className="text-red-600 hover:text-red-800 ml-1"
+            title="Remove question"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      {/* Question Images Preview */}
+      {question.images.length > 0 && (
+        <div className="mt-3">
+          <p className="text-xs text-gray-500 mb-2">
+            {question.images.length} image(s)
+          </p>
+          {question.images[0]?.signedUrl && (
+            <Image
+              src={question.images[0].signedUrl}
+              alt="Question preview"
+              width={400}
+              height={300}
+              className="max-w-full h-auto rounded border border-gray-200"
+              unoptimized
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 type PaperBuilderClientProps = {
   examBoards: Pick<ExamBoardRow, "id" | "name" | "question_bank">[];
@@ -259,6 +392,25 @@ export function PaperBuilderClient({
         newQuestions[index],
       ];
       return newQuestions;
+    });
+  };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    setQuestions((prev) => {
+      const oldIndex = prev.findIndex((q) => q.id === active.id);
+      const newIndex = prev.findIndex((q) => q.id === over.id);
+      if (oldIndex < 0 || newIndex < 0) return prev;
+      return arrayMove(prev, oldIndex, newIndex);
     });
   };
 
@@ -662,79 +814,31 @@ export function PaperBuilderClient({
                   started.
                 </p>
               ) : (
-                <div className="space-y-4">
-                  {questions.map((question, index) => (
-                    <div
-                      key={question.id}
-                      className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors"
-                    >
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-gray-900">
-                            Question {index + 1}
-                          </h3>
-                          <div className="flex gap-4 text-sm text-gray-600 mt-1">
-                            <span>ID: {question.id}</span>
-                            <span>Marks: {question.marks}</span>
-                            <span>Difficulty: {question.difficulty}</span>
-                            <span>
-                              {question.calculator
-                                ? "Calculator"
-                                : "No Calculator"}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex gap-2 ml-2">
-                          <button
-                            type="button"
-                            onClick={() => handleMoveUp(index)}
-                            disabled={index === 0}
-                            className="text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"
-                            title="Move up"
-                          >
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleMoveDown(index)}
-                            disabled={index === questions.length - 1}
-                            className="text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"
-                            title="Move down"
-                          >
-                            ↓
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveQuestion(question.id)}
-                            className="text-red-600 hover:text-red-800 ml-1"
-                            title="Remove question"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Question Images Preview */}
-                      {question.images.length > 0 && (
-                        <div className="mt-3">
-                          <p className="text-xs text-gray-500 mb-2">
-                            {question.images.length} image(s)
-                          </p>
-                          {question.images[0]?.signedUrl && (
-                            <Image
-                              src={question.images[0].signedUrl}
-                              alt="Question preview"
-                              width={400}
-                              height={300}
-                              className="max-w-full h-auto rounded border border-gray-200"
-                              unoptimized
-                            />
-                          )}
-                        </div>
-                      )}
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={questions.map((question) => question.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <div className="space-y-4">
+                      {questions.map((question, index) => (
+                        <SortableQuestionRow
+                          key={question.id}
+                          question={question}
+                          index={index}
+                          isFirst={index === 0}
+                          isLast={index === questions.length - 1}
+                          onMoveUp={() => handleMoveUp(index)}
+                          onMoveDown={() => handleMoveDown(index)}
+                          onRemove={() => handleRemoveQuestion(question.id)}
+                        />
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </SortableContext>
+                </DndContext>
               )}
             </div>
           </div>
