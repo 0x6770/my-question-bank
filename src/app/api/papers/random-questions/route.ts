@@ -247,7 +247,7 @@ export async function GET(request: Request) {
 
     const { data: userQuestionRows, error: userQuestionError } = await supabase
       .from("user_questions")
-      .select("question_id, is_bookmarked, answer_viewed_at")
+      .select("question_id, is_bookmarked, answer_viewed_at, completed_at")
       .eq("user_id", userId)
       .in("question_id", questionIds);
 
@@ -259,12 +259,13 @@ export async function GET(request: Request) {
     }
 
     const bookmarkedIds = new Set<number>();
-    const answeredIds = new Set<number>();
+    const completedIds = new Set<number>();
 
     for (const row of userQuestionRows ?? []) {
       if (row.question_id == null) continue;
       if (row.is_bookmarked) bookmarkedIds.add(row.question_id);
-      if (row.answer_viewed_at) answeredIds.add(row.question_id);
+      if (row.answer_viewed_at || row.completed_at)
+        completedIds.add(row.question_id);
     }
 
     if (statusFilter === "bookmarked") {
@@ -273,11 +274,11 @@ export async function GET(request: Request) {
       );
     } else if (statusFilter === "completed") {
       statusFilteredQuestions = statusFilteredQuestions.filter((question) =>
-        answeredIds.has(question.id),
+        completedIds.has(question.id),
       );
     } else if (statusFilter === "incompleted") {
       statusFilteredQuestions = statusFilteredQuestions.filter(
-        (question) => !answeredIds.has(question.id),
+        (question) => !completedIds.has(question.id),
       );
     }
   }

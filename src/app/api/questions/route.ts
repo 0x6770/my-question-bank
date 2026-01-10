@@ -496,10 +496,11 @@ export async function GET(request: Request) {
   // Bookmarks for current user (if signed in)
   let bookmarksById: Record<number, boolean> = {};
   let answersViewedById: Record<number, boolean> = {};
+  let completedById: Record<number, boolean> = {};
   if (user && withSigned.length > 0) {
     const { data: bookmarkRows } = await supabase
       .from("user_questions")
-      .select("question_id, is_bookmarked, answer_viewed_at")
+      .select("question_id, is_bookmarked, answer_viewed_at, completed_at")
       .in(
         "question_id",
         withSigned.map((q) => q.id),
@@ -513,6 +514,12 @@ export async function GET(request: Request) {
         Boolean(row.answer_viewed_at),
       ]),
     );
+    completedById = Object.fromEntries(
+      (bookmarkRows ?? []).map((row) => [
+        row.question_id,
+        Boolean(row.completed_at || row.answer_viewed_at),
+      ]),
+    );
   }
 
   let filtered = withSigned;
@@ -520,8 +527,8 @@ export async function GET(request: Request) {
     const shouldIncludeViewed = completionParam === "completed";
     filtered = withSigned.filter((question) =>
       shouldIncludeViewed
-        ? answersViewedById[question.id]
-        : !answersViewedById[question.id],
+        ? completedById[question.id]
+        : !completedById[question.id],
     );
   }
 

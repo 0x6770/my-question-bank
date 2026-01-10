@@ -144,6 +144,26 @@ export async function POST(request: Request) {
     );
   }
 
+  const completedAt = new Date().toISOString();
+  const uniqueQuestionIds = Array.from(new Set(question_ids));
+  const { error: completionError } = await supabase
+    .from("user_questions")
+    .upsert(
+      uniqueQuestionIds.map((questionId) => ({
+        user_id: user.id,
+        question_id: questionId,
+        completed_at: completedAt,
+      })),
+      { onConflict: "user_id,question_id" },
+    );
+
+  if (completionError) {
+    console.warn(
+      "Failed to mark generated questions as completed:",
+      completionError,
+    );
+  }
+
   // Step 4: Update quota record with paper ID for tracking
   // This is optional but useful for auditing
   const { data: quotaRow } = await supabase
