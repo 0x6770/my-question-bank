@@ -20,7 +20,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Select,
   SelectContent,
@@ -187,6 +187,7 @@ export function PaperBuilderClient({
   subjects,
   chapters,
 }: PaperBuilderClientProps) {
+  const maxQuestionCount = 30;
   const router = useRouter();
 
   // Question Bank selection
@@ -212,7 +213,8 @@ export function PaperBuilderClient({
   const [statusFilter, setStatusFilter] = useState<
     "all" | "completed" | "incompleted" | "bookmarked"
   >("all");
-  const [questionCount, setQuestionCount] = useState<number>(10);
+  const [questionCountInput, setQuestionCountInput] = useState("10");
+  const [appendMode, setAppendMode] = useState(false);
 
   // Paper state
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -319,7 +321,31 @@ export function PaperBuilderClient({
     setQuestions([]);
   };
 
+  const remainingSlots = Math.max(0, maxQuestionCount - questions.length);
+  const maxSelectableCount = appendMode
+    ? Math.max(1, remainingSlots)
+    : maxQuestionCount;
+
+  useEffect(() => {
+    setQuestionCountInput((prev) => {
+      if (prev.trim() === "") return prev;
+      const parsed = Number.parseInt(prev, 10);
+      if (!Number.isFinite(parsed)) return prev;
+      if (parsed > maxSelectableCount) return String(maxSelectableCount);
+      if (parsed < 1) return "1";
+      return prev;
+    });
+  }, [maxSelectableCount]);
+
   const handleGenerateQuestions = async () => {
+    if (appendMode && remainingSlots <= 0) {
+      setError("Maximum 30 questions per worksheet.");
+      return;
+    }
+    const parsedCount = Number.parseInt(questionCountInput, 10);
+    const safeCount = Number.isFinite(parsedCount)
+      ? Math.min(Math.max(parsedCount, 1), maxSelectableCount)
+      : 1;
     if (!selectedExamBoardId) {
       setError("Please select an exam board");
       return;
@@ -333,10 +359,13 @@ export function PaperBuilderClient({
     setLoadingQuestions(true);
 
     try {
+      const requestCount = appendMode
+        ? Math.min(safeCount, remainingSlots)
+        : safeCount;
       const params = new URLSearchParams({
         bank: bankParam,
         subjectId: selectedSubjectId.toString(),
-        count: questionCount.toString(),
+        count: requestCount.toString(),
       });
 
       const resolvedChapterId = selectedSubChapterId ?? selectedChapterId;
@@ -359,7 +388,19 @@ export function PaperBuilderClient({
         throw new Error(data.error || "Failed to generate questions");
       }
 
-      setQuestions(data.questions);
+      setQuestions((prev) => {
+        if (!appendMode || prev.length === 0) {
+          return data.questions.slice(0, maxQuestionCount);
+        }
+        const existingIds = new Set(prev.map((question) => question.id));
+        const merged = [...prev];
+        for (const question of data.questions) {
+          if (!existingIds.has(question.id)) {
+            merged.push(question);
+          }
+        }
+        return merged.slice(0, maxQuestionCount);
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -716,33 +757,65 @@ export function PaperBuilderClient({
                     id="count"
                     type="number"
                     min="1"
-                    max="30"
-                    value={questionCount}
-                    onChange={(e) =>
-                      setQuestionCount(
-                        Math.max(1, Math.min(30, Number(e.target.value))),
-                      )
-                    }
+                    value={questionCountInput}
+                    onChange={(e) => setQuestionCountInput(e.target.value)}
+                    onBlur={(e) => {
+                      const nextValue = e.target.value.trim();
+                      if (nextValue === "") {
+                        setQuestionCountInput("1");
+                        return;
+                      }
+                      const parsed = Number.parseInt(nextValue, 10);
+                      if (!Number.isFinite(parsed)) {
+                        setQuestionCountInput("1");
+                        return;
+                      }
+                      const clamped = Math.min(
+                        Math.max(parsed, 1),
+                        maxSelectableCount,
+                      );
+                      setQuestionCountInput(String(clamped));
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    max={maxSelectableCount}
                   />
-                  <p className="text-xs text-gray-500 mt-1">Maximum: 30</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Maximum: {maxQuestionCount}
+                    {appendMode ? ` · Remaining slots: ${remainingSlots}` : ""}
+                  </p>
                 </div>
 
                 {/* Generate Button */}
-                <button
-                  type="button"
-                  onClick={handleGenerateQuestions}
-                  disabled={
-                    loadingQuestions ||
-                    !selectedExamBoardId ||
-                    !selectedSubjectId
-                  }
-                  className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                >
-                  {loadingQuestions
-                    ? "Generating..."
-                    : "Generate Random Questions"}
-                </button>
+                <div className="space-y-3">
+                  {questions.length > 0 ? (
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={appendMode}
+                        onChange={(e) => setAppendMode(e.target.checked)}
+                        className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      Append to existing questions
+                    </label>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={handleGenerateQuestions}
+                    disabled={
+                      loadingQuestions ||
+                      !selectedExamBoardId ||
+                      !selectedSubjectId ||
+                      (appendMode && questions.length >= maxQuestionCount)
+                    }
+                    className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {loadingQuestions
+                      ? "Generating..."
+                      : questions.length > 0 && appendMode
+                        ? "Add Random Questions"
+                        : "Generate Random Questions"}
+                  </button>
+                </div>
               </div>
             </div>
 
