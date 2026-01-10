@@ -406,7 +406,7 @@ export function QuestionTagManagementClient({
         </CardHeader>
         <CardContent className="pt-6">
           <form
-            className="grid grid-cols-1 gap-4 md:grid-cols-3"
+            className="grid grid-cols-1 gap-4 md:grid-cols-3 md:items-end"
             onSubmit={handleCreateTag}
           >
             <div className="space-y-2 md:col-span-2">
@@ -418,8 +418,7 @@ export function QuestionTagManagementClient({
                 onChange={(event) => setCreatingTagName(event.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label className="invisible block text-sm">Required</Label>
+            <div className="flex">
               <Button
                 type="button"
                 variant={creatingRequired ? "default" : "outline"}

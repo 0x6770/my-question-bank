@@ -510,6 +510,8 @@ export function QuestionManagement({
   const [activeExamBoardId, setActiveExamBoardId] = useState<number | null>(
     null,
   );
+  const [hierarchyOpen, setHierarchyOpen] = useState(false);
+  const hierarchyRef = useRef<HTMLDivElement>(null);
 
   // Filter current question bank's exam boards and subjects
   const currentExamBoards = useMemo(() => {
@@ -534,6 +536,46 @@ export function QuestionManagement({
       (subject) => subject.exam_board_id === activeExamBoardId,
     );
   }, [activeExamBoardId, currentSubjects]);
+
+  const currentLabel = useMemo(() => {
+    const subject =
+      filterSubjectId != null
+        ? currentSubjects.find((item) => item.id === filterSubjectId)
+        : null;
+    const examName =
+      subject?.exam_board_id != null
+        ? currentExamBoards.find((exam) => exam.id === subject.exam_board_id)
+            ?.name
+        : activeExamBoardId != null
+          ? currentExamBoards.find((exam) => exam.id === activeExamBoardId)
+              ?.name
+          : null;
+
+    if (subject) {
+      return `${examName ? `${examName} / ` : ""}${subject.name}`;
+    }
+
+    return examName ?? "Select a subject";
+  }, [activeExamBoardId, currentExamBoards, currentSubjects, filterSubjectId]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        hierarchyRef.current &&
+        !hierarchyRef.current.contains(event.target as Node)
+      ) {
+        setHierarchyOpen(false);
+      }
+    };
+
+    if (hierarchyOpen) {
+      window.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      window.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [hierarchyOpen]);
 
   const visibleRootChapters = useMemo(() => {
     if (filterSubjectId == null) return [];
@@ -2579,47 +2621,80 @@ export function QuestionManagement({
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                   <div className="space-y-2">
                     <Label htmlFor="filter-subject">Exam / Subject</Label>
-                    <div className="relative">
+                    <div className="relative" ref={hierarchyRef}>
                       <button
                         type="button"
-                        onClick={() => {
-                          const nextOpen = activeExamBoardId === null;
-                          if (nextOpen && currentExamBoards.length > 0) {
-                            setActiveExamBoardId(currentExamBoards[0].id);
-                          }
-                        }}
+                        onClick={() => setHierarchyOpen((prev) => !prev)}
                         className="flex h-11 w-full min-w-0 items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 text-left text-sm font-medium text-slate-800 shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200"
                       >
-                        <span className="truncate">
-                          {filterSubjectId
-                            ? currentSubjects.find(
-                                (s) => s.id === filterSubjectId,
-                              )?.name
-                            : "Select a subject"}
-                        </span>
+                        <span className="truncate">{currentLabel}</span>
                         <ChevronDown className="size-4 text-slate-400" />
                       </button>
-                      {activeExamBoardId && (
-                        <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-                          <div className="max-h-72 overflow-auto">
-                            {visibleSubjects.map((subject) => (
-                              <button
-                                key={subject.id}
-                                type="button"
-                                className={`flex w-full items-start gap-3 px-3 py-2 text-left text-sm font-semibold ${filterSubjectId === subject.id ? "bg-white text-slate-900" : "text-slate-700 hover:bg-slate-50"}`}
-                                onClick={() => {
-                                  handleFilterSubjectSelect(subject.id);
-                                  setActiveExamBoardId(null);
-                                }}
-                              >
-                                <span className="flex-1 whitespace-normal text-left leading-snug break-words">
-                                  {subject.name}
-                                </span>
-                              </button>
-                            ))}
+                      {hierarchyOpen ? (
+                        <div className="absolute z-20 mt-2 w-[min(720px,95vw)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+                          <div className="grid grid-cols-2">
+                            <div className="max-h-72 overflow-auto">
+                              <div className="px-3 py-2 text-sm font-semibold text-slate-700">
+                                Choose exam board
+                              </div>
+                              {currentExamBoards.map((exam) => (
+                                <button
+                                  key={exam.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveExamBoardId(exam.id);
+                                  }}
+                                  onFocus={() => {
+                                    setActiveExamBoardId(exam.id);
+                                  }}
+                                  className={`flex w-full items-start gap-3 px-3 py-2 text-left text-sm font-semibold ${activeExamBoardId === exam.id ? "bg-slate-50 text-slate-900" : "text-slate-700 hover:bg-slate-50"}`}
+                                >
+                                  <span className="flex-1 whitespace-normal text-left leading-snug break-words">
+                                    {exam.name}
+                                  </span>
+                                  <span className="text-slate-400">›</span>
+                                </button>
+                              ))}
+                            </div>
+                            <div className="max-h-72 overflow-auto bg-slate-50">
+                              {activeExamBoardId == null ? (
+                                <div className="px-4 py-6 text-sm text-slate-500">
+                                  Select an exam board first
+                                </div>
+                              ) : visibleSubjects.length === 0 ? (
+                                <div className="px-4 py-6 text-sm text-slate-500">
+                                  No subjects under this exam board
+                                </div>
+                              ) : (
+                                <div className="flex flex-col divide-y divide-slate-200">
+                                  {visibleSubjects.map((subject) => (
+                                    <button
+                                      key={subject.id}
+                                      type="button"
+                                      className={`flex w-full items-start gap-3 px-3 py-2 text-left text-sm font-semibold ${filterSubjectId === subject.id ? "bg-white text-slate-900" : "text-slate-700 hover:bg-white"}`}
+                                      onClick={() => {
+                                        handleFilterSubjectSelect(subject.id);
+                                        setHierarchyOpen(false);
+                                      }}
+                                    >
+                                      <span className="flex-1 whitespace-normal text-left leading-snug break-words">
+                                        {subject.name}
+                                      </span>
+                                      <span className="text-slate-400">›</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="pointer-events-none absolute inset-0">
+                            <div
+                              className="absolute top-0 bottom-0 border-l border-slate-200"
+                              style={{ left: "50%" }}
+                            />
                           </div>
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                   <div className="space-y-2">
