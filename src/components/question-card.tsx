@@ -10,10 +10,10 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "./ui/button";
+import { WatermarkedImage } from "./watermarked-image";
 
 type QuestionImage = {
   id: number;
@@ -286,15 +286,11 @@ export function QuestionCard({
               {questionImages.length > 0 ? (
                 <div className="flex flex-col space-y-0">
                   {questionImages.map((image) => (
-                    <Image
+                    <WatermarkedImage
                       key={image.id}
                       src={image.signedUrl ?? image.storage_path}
                       alt={`Question ${question.id} image`}
-                      width={1600}
-                      height={1200}
-                      className="block h-auto w-full object-contain"
-                      sizes="(max-width: 1000px) 100vw, 900px"
-                      unoptimized
+                      watermarkSrc="/logo.jpg"
                     />
                   ))}
                 </div>
@@ -502,33 +498,25 @@ export function QuestionCard({
                         <div className="absolute inset-0 flex h-full flex-col overflow-hidden md:flex-row">
                           <div className="flex-1 overflow-auto border-b border-slate-200 p-4 md:border-b-0 md:border-r">
                             {primaryQuestionImage ? (
-                              <Image
+                              <WatermarkedImage
                                 key={primaryQuestionImage.id}
                                 src={
                                   primaryQuestionImage.signedUrl ??
                                   primaryQuestionImage.storage_path
                                 }
                                 alt={`Question ${question.id} part ${primaryQuestionImage.position}`}
-                                width={1600}
-                                height={1200}
-                                className="block h-auto w-full object-contain"
-                                sizes="(max-width: 1200px) 100vw, 1000px"
-                                unoptimized
+                                watermarkSrc="/logo.jpg"
                               />
                             ) : null}
                           </div>
                           <div className="flex-1 overflow-auto p-4">
                             <div className="space-y-4">
                               {secondaryQuestionImages.map((image) => (
-                                <Image
+                                <WatermarkedImage
                                   key={image.id}
                                   src={image.signedUrl ?? image.storage_path}
                                   alt={`Question ${question.id} part ${image.position}`}
-                                  width={1600}
-                                  height={1200}
-                                  className="block h-auto w-full object-contain"
-                                  sizes="(max-width: 1200px) 100vw, 1000px"
-                                  unoptimized
+                                  watermarkSrc="/logo.jpg"
                                 />
                               ))}
                             </div>
@@ -538,15 +526,11 @@ export function QuestionCard({
                         <div className="absolute inset-0 overflow-auto p-4">
                           <div className="space-y-4">
                             {questionImages.map((image) => (
-                              <Image
+                              <WatermarkedImage
                                 key={image.id}
                                 src={image.signedUrl ?? image.storage_path}
                                 alt={`Question ${question.id} image`}
-                                width={1600}
-                                height={1200}
-                                className="block h-auto w-full object-contain"
-                                sizes="(max-width: 1200px) 100vw, 1000px"
-                                unoptimized
+                                watermarkSrc="/logo.jpg"
                               />
                             ))}
                           </div>
@@ -560,15 +544,11 @@ export function QuestionCard({
                         <div className="space-y-4">
                           {answerImages.length > 0 ? (
                             answerImages.map((image) => (
-                              <Image
+                              <WatermarkedImage
                                 key={image.id}
                                 src={image.signedUrl ?? image.storage_path}
                                 alt={`Answer for question ${question.id}`}
-                                width={1600}
-                                height={1200}
-                                className="block h-auto w-full object-contain"
-                                sizes="(max-width: 1200px) 100vw, 1000px"
-                                unoptimized
+                                watermarkSrc="/logo.jpg"
                               />
                             ))
                           ) : (

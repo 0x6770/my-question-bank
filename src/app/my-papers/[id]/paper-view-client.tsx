@@ -1,8 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { WatermarkedImage } from "@/components/watermarked-image";
 
 type Question = {
   id: number;
@@ -47,36 +47,27 @@ export function PaperViewClient({ paper }: PaperViewClientProps) {
   const waitForImages = async () => {
     const container = printRef.current;
     if (!container) return true;
-    const images = Array.from(container.querySelectorAll("img"));
-    if (images.length === 0) return true;
 
-    const results = await Promise.all(
-      images.map(
-        (img) =>
-          new Promise<boolean>((resolve) => {
-            if (img.complete && img.naturalWidth > 0) {
-              resolve(true);
-              return;
-            }
-            const handleLoad = () => {
-              cleanup();
-              resolve(true);
-            };
-            const handleError = () => {
-              cleanup();
-              resolve(false);
-            };
-            const cleanup = () => {
-              img.removeEventListener("load", handleLoad);
-              img.removeEventListener("error", handleError);
-            };
-            img.addEventListener("load", handleLoad);
-            img.addEventListener("error", handleError);
-          }),
-      ),
-    );
+    // Check for canvas elements (WatermarkedImage uses canvas)
+    const canvases = Array.from(container.querySelectorAll("canvas"));
 
-    return results.every(Boolean);
+    if (canvases.length === 0) return true;
+
+    // Wait for canvases to have content (width > 0 means image was drawn)
+    const maxWaitTime = 10000; // 10 seconds max
+    const checkInterval = 100;
+    let elapsed = 0;
+
+    while (elapsed < maxWaitTime) {
+      const allReady = canvases.every(
+        (canvas) => canvas.width > 0 && canvas.height > 0,
+      );
+      if (allReady) return true;
+      await new Promise((resolve) => setTimeout(resolve, checkInterval));
+      elapsed += checkInterval;
+    }
+
+    return false;
   };
 
   const handlePrint = async () => {
@@ -204,14 +195,11 @@ export function PaperViewClient({ paper }: PaperViewClientProps) {
                   {question.images.map((image) => (
                     <div key={image.id}>
                       {image.signedUrl && (
-                        <Image
+                        <WatermarkedImage
                           src={image.signedUrl}
                           alt={`Question ${index + 1} part ${image.position}`}
-                          width={800}
-                          height={600}
                           className="max-w-full h-auto border border-gray-200 rounded"
-                          loading="eager"
-                          unoptimized
+                          watermarkSrc="/logo.jpg"
                         />
                       )}
                     </div>
@@ -229,14 +217,11 @@ export function PaperViewClient({ paper }: PaperViewClientProps) {
                     {question.answerImages.map((image) => (
                       <div key={image.id}>
                         {image.signedUrl && (
-                          <Image
+                          <WatermarkedImage
                             src={image.signedUrl}
                             alt={`Answer ${index + 1} part ${image.position}`}
-                            width={800}
-                            height={600}
                             className="max-w-full h-auto border border-gray-200 rounded"
-                            loading="eager"
-                            unoptimized
+                            watermarkSrc="/logo.jpg"
                           />
                         )}
                       </div>

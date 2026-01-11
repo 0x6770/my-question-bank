@@ -18,7 +18,6 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Lock } from "lucide-react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -38,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { WatermarkedImage } from "@/components/watermarked-image";
 import { QUESTION_BANK, type QuestionBank } from "@/lib/question-bank";
 import type { Tables } from "../../../database.types";
 
@@ -210,13 +210,11 @@ function SortableQuestionRow({
             {question.images.length} image(s)
           </p>
           {question.images[0]?.signedUrl && (
-            <Image
+            <WatermarkedImage
               src={question.images[0].signedUrl}
               alt="Question preview"
-              width={400}
-              height={300}
               className="max-w-full h-auto rounded border border-gray-200"
-              unoptimized
+              watermarkSrc="/logo.jpg"
             />
           )}
         </div>
