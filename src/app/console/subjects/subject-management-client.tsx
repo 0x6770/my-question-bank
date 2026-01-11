@@ -188,6 +188,7 @@ export function SubjectManagement({
   const [busySubjectId, setBusySubjectId] = useState<number | null>(null);
   const [busyChapterId, setBusyChapterId] = useState<number | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [isClient, setIsClient] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -195,6 +196,10 @@ export function SubjectManagement({
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Update state when props change (e.g., when switching question bank tabs)
   useEffect(() => {
@@ -760,6 +765,86 @@ export function SubjectManagement({
     );
   };
 
+  const StaticChapterItem = ({
+    chapter,
+    index,
+    subject,
+    depth,
+    childChapters,
+  }: {
+    chapter: ChapterRow;
+    index: number;
+    subject: SubjectRow;
+    depth: number;
+    childChapters: ChapterRow[];
+  }) => {
+    const isBusy = busyChapterId === chapter.id;
+    const orderLabel = `${index + 1}.`;
+
+    return (
+      <li className="rounded-lg border border-slate-200 bg-white/70 px-3 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-300">
+              <GripVertical className="size-4" />
+            </span>
+            {childChapters.length > 0 ? (
+              <div className="text-slate-400">
+                <ChevronRight className="size-4" aria-hidden="true" />
+              </div>
+            ) : null}
+            <span className="text-sm font-semibold text-slate-500">
+              {orderLabel}
+            </span>
+            <span className="font-medium text-slate-700">{chapter.name}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {questionBank !== QUESTION_BANK.EXAM_PAPER && depth === 0 ? (
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                onClick={() => openCreateChapter(subject, chapter.id)}
+                disabled={isBusy}
+              >
+                <Plus className="size-4" aria-hidden="true" />
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              onClick={() => openEditChapter(chapter)}
+              disabled={isBusy}
+              className="text-slate-600 hover:text-slate-900"
+            >
+              <Pencil className="size-4" aria-hidden="true" />
+            </Button>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              onClick={() => handleDeleteChapter(chapter)}
+              disabled={isBusy}
+              className="text-red-500 hover:text-red-600"
+            >
+              {isBusy ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Trash2 className="size-4" aria-hidden="true" />
+              )}
+            </Button>
+          </div>
+        </div>
+        {childChapters.length > 0 ? (
+          <div className="mt-2 text-xs sm:text-sm">
+            {renderChapterTree(childChapters, subject, depth + 1)}
+          </div>
+        ) : null}
+      </li>
+    );
+  };
+
   const renderChapterTree = (
     chaptersList: ChapterRow[],
     subject: SubjectRow,
@@ -769,6 +854,32 @@ export function SubjectManagement({
 
     const parentChapterId =
       chaptersList.length > 0 ? chaptersList[0].parent_chapter_id : null;
+
+    if (!isClient) {
+      return (
+        <ul
+          className={cn(
+            "space-y-2",
+            depth > 0 ? "border-l border-slate-200 pl-4" : null,
+          )}
+        >
+          {chaptersList.map((chapter, index) => {
+            const childChapters =
+              filteredChapterChildrenMap.get(chapter.id) ?? [];
+            return (
+              <StaticChapterItem
+                key={chapter.id}
+                chapter={chapter}
+                index={index}
+                subject={subject}
+                depth={depth}
+                childChapters={childChapters}
+              />
+            );
+          })}
+        </ul>
+      );
+    }
 
     return (
       <DndContext

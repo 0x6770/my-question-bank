@@ -661,6 +661,11 @@ export function QuestionManagement({
     return Array.from(subjectIds);
   }, [pastPaperChapterId, typicalChapterId, allChapters]);
 
+  const selectedCreateBankCount = useMemo(
+    () => [pastPaperChapterId, typicalChapterId].filter(Boolean).length,
+    [pastPaperChapterId, typicalChapterId],
+  );
+
   // Get tags for the selected subjects
   const selectedSubjectTags = useMemo(() => {
     return availableTags.filter((tag) =>
@@ -687,6 +692,11 @@ export function QuestionManagement({
     }
     return Array.from(subjectIds);
   }, [editPastPaperChapterId, editTypicalChapterId, allChapters]);
+
+  const selectedEditBankCount = useMemo(
+    () => [editPastPaperChapterId, editTypicalChapterId].filter(Boolean).length,
+    [editPastPaperChapterId, editTypicalChapterId],
+  );
 
   // Get tags for the edit selected subjects
   const editSelectedSubjectTags = useMemo(() => {
@@ -1761,13 +1771,13 @@ export function QuestionManagement({
             <div className="space-y-2">
               <Label htmlFor="edit-questionbank-chapter">
                 Questionbank
-                <span className="ml-2 text-xs text-slate-500">(可选)</span>
+                <span className="ml-2 text-xs text-slate-500">(optional)</span>
               </Label>
               <TreeSelect
                 data={pastPaperTree}
                 value={editPastPaperChapterId}
                 onValueChange={setEditPastPaperChapterId}
-                placeholder="选择章节..."
+                placeholder="Select chapter..."
               />
             </div>
 
@@ -1775,25 +1785,21 @@ export function QuestionManagement({
             <div className="space-y-2">
               <Label htmlFor="edit-typical-chapter">
                 Checkpoint
-                <span className="ml-2 text-xs text-slate-500">(可选)</span>
+                <span className="ml-2 text-xs text-slate-500">(optional)</span>
               </Label>
               <TreeSelect
                 data={typicalTree}
                 value={editTypicalChapterId}
                 onValueChange={setEditTypicalChapterId}
-                placeholder="选择章节..."
+                placeholder="Select chapter..."
               />
             </div>
 
             {/* Selection summary */}
             {(editPastPaperChapterId || editTypicalChapterId) && (
               <p className="text-xs text-slate-600">
-                已选择{" "}
-                {
-                  [editPastPaperChapterId, editTypicalChapterId].filter(Boolean)
-                    .length
-                }{" "}
-                个题库
+                Selected {selectedEditBankCount} bank
+                {selectedEditBankCount === 1 ? "" : "s"}.
               </p>
             )}
 
@@ -2194,13 +2200,15 @@ export function QuestionManagement({
                 <div className="space-y-2">
                   <Label htmlFor="questionbank-chapter">
                     Questionbank
-                    <span className="ml-2 text-xs text-slate-500">(可选)</span>
+                    <span className="ml-2 text-xs text-slate-500">
+                      (optional)
+                    </span>
                   </Label>
                   <TreeSelect
                     data={pastPaperTree}
                     value={pastPaperChapterId}
                     onValueChange={setPastPaperChapterId}
-                    placeholder="选择章节..."
+                    placeholder="Select chapter..."
                   />
                 </div>
 
@@ -2208,25 +2216,23 @@ export function QuestionManagement({
                 <div className="space-y-2">
                   <Label htmlFor="typical-chapter">
                     Checkpoint
-                    <span className="ml-2 text-xs text-slate-500">(可选)</span>
+                    <span className="ml-2 text-xs text-slate-500">
+                      (optional)
+                    </span>
                   </Label>
                   <TreeSelect
                     data={typicalTree}
                     value={typicalChapterId}
                     onValueChange={setTypicalChapterId}
-                    placeholder="选择章节..."
+                    placeholder="Select chapter..."
                   />
                 </div>
 
                 {/* Selection summary */}
                 {(pastPaperChapterId || typicalChapterId) && (
                   <p className="text-xs text-slate-600">
-                    已选择{" "}
-                    {
-                      [pastPaperChapterId, typicalChapterId].filter(Boolean)
-                        .length
-                    }{" "}
-                    个题库
+                    Selected {selectedCreateBankCount} bank
+                    {selectedCreateBankCount === 1 ? "" : "s"}.
                   </p>
                 )}
 

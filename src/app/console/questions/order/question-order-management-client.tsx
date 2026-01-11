@@ -245,6 +245,49 @@ function SortableQuestionOrderItem({
   );
 }
 
+function StaticQuestionOrderItem({
+  question,
+  index,
+  total,
+  positionValue,
+}: {
+  question: OrderQuestion;
+  index: number;
+  total: number;
+  positionValue: string;
+}) {
+  const questionCardData = buildQuestionCardData(question);
+
+  return (
+    <li className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-start gap-3 p-4">
+        <div className="mt-2 text-slate-300">
+          <GripVertical className="size-5" />
+        </div>
+        <div className="flex-1 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-sm font-medium text-slate-700">
+            <span>Order #{index + 1}</span>
+            <div className="flex items-center gap-2">
+              <Label className="text-xs text-slate-500">Set position</Label>
+              <Input
+                type="number"
+                min={1}
+                max={total}
+                value={positionValue}
+                disabled
+                className="h-9 w-20 text-center"
+              />
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+            <QuestionCard question={questionCardData} disableInteractions />
+          </div>
+        </div>
+      </div>
+    </li>
+  );
+}
+
 export function QuestionOrderManagement({
   questionBank,
   chapters,
@@ -263,6 +306,7 @@ export function QuestionOrderManagement({
   );
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isClient, setIsClient] = useState(false);
   const [pendingOrderChange, setPendingOrderChange] =
     useState<PendingOrderChange | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(
@@ -275,6 +319,10 @@ export function QuestionOrderManagement({
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   useEffect(() => {
     const nextInputs: Record<number, string> = {};
@@ -688,7 +736,7 @@ export function QuestionOrderManagement({
             <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
               No questions found for this chapter.
             </div>
-          ) : (
+          ) : isClient ? (
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
@@ -714,6 +762,18 @@ export function QuestionOrderManagement({
                 </ul>
               </SortableContext>
             </DndContext>
+          ) : (
+            <ul className="space-y-4">
+              {questions.map((question, index) => (
+                <StaticQuestionOrderItem
+                  key={question.id}
+                  question={question}
+                  index={index}
+                  total={questions.length}
+                  positionValue={positionInputs[question.id] ?? ""}
+                />
+              ))}
+            </ul>
           )}
         </CardContent>
       </Card>

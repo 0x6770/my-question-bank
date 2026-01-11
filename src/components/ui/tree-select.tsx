@@ -27,7 +27,7 @@ export function TreeSelect({
   data,
   value,
   onValueChange,
-  placeholder = "选择...",
+  placeholder = "Select...",
   className,
   selectableParents = false,
   disabled = false,
@@ -209,7 +209,7 @@ export function TreeSelect({
             variant="ghost"
             size="icon"
             onClick={() => onValueChange(null)}
-            title="清除选择"
+            title="Clear selection"
             disabled={disabled}
           >
             <X className="h-4 w-4" />
@@ -221,7 +221,9 @@ export function TreeSelect({
         <div className="absolute z-50 mt-1 w-full rounded-md border border-slate-200 bg-white shadow-lg max-h-80 overflow-y-auto">
           <div className="p-1">
             {data.length === 0 ? (
-              <div className="px-3 py-2 text-sm text-slate-500">无可用选项</div>
+              <div className="px-3 py-2 text-sm text-slate-500">
+                No options available
+              </div>
             ) : (
               data.map((node) => renderNode(node, 0))
             )}

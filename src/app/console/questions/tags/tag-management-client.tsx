@@ -216,10 +216,15 @@ export function QuestionTagManagementClient({
   const [editingTagName, setEditingTagName] = useState("");
   const [editingValueId, setEditingValueId] = useState<number | null>(null);
   const [editingValueText, setEditingValueText] = useState("");
+  const [isClient, setIsClient] = useState(false);
   const [message, setMessage] = useState<{
     type: "success" | "error";
     text: string;
   } | null>(loadError ? { type: "error", text: loadError } : null);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const subjectTreeData = useMemo(() => {
     const boardMap = new Map<
@@ -776,46 +781,64 @@ export function QuestionTagManagementClient({
                   </Button>
                 </div>
 
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={(event) => handleValueDragEnd(event, tag.id)}
-                >
-                  <SortableContext
-                    items={getSortedValues(tag).map((v) => v.id)}
-                    strategy={horizontalListSortingStrategy}
+                {isClient ? (
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={(event) => handleValueDragEnd(event, tag.id)}
                   >
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {getSortedValues(tag).map((value) => (
-                        <SortableTagValue
-                          key={value.id}
-                          value={value}
-                          tagId={tag.id}
-                          editingValueId={editingValueId}
-                          editingValueText={editingValueText}
-                          busyId={busyId}
-                          onEditStart={(valueId, valueText) => {
-                            setEditingValueId(valueId);
-                            setEditingValueText(valueText);
-                            setEditingTagId(null);
-                          }}
-                          onEditCancel={() => {
-                            setEditingValueId(null);
-                            setEditingValueText("");
-                          }}
-                          onEditSave={handleRenameValue}
-                          onEditChange={setEditingValueText}
-                          onDelete={handleDeleteValue}
-                        />
-                      ))}
-                      {(tag.values ?? []).length === 0 ? (
-                        <span className="text-xs text-slate-500">
-                          No options yet, please add.
-                        </span>
-                      ) : null}
-                    </div>
-                  </SortableContext>
-                </DndContext>
+                    <SortableContext
+                      items={getSortedValues(tag).map((v) => v.id)}
+                      strategy={horizontalListSortingStrategy}
+                    >
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {getSortedValues(tag).map((value) => (
+                          <SortableTagValue
+                            key={value.id}
+                            value={value}
+                            tagId={tag.id}
+                            editingValueId={editingValueId}
+                            editingValueText={editingValueText}
+                            busyId={busyId}
+                            onEditStart={(valueId, valueText) => {
+                              setEditingValueId(valueId);
+                              setEditingValueText(valueText);
+                              setEditingTagId(null);
+                            }}
+                            onEditCancel={() => {
+                              setEditingValueId(null);
+                              setEditingValueText("");
+                            }}
+                            onEditSave={handleRenameValue}
+                            onEditChange={setEditingValueText}
+                            onDelete={handleDeleteValue}
+                          />
+                        ))}
+                        {(tag.values ?? []).length === 0 ? (
+                          <span className="text-xs text-slate-500">
+                            No options yet, please add.
+                          </span>
+                        ) : null}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
+                ) : (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {getSortedValues(tag).map((value) => (
+                      <span
+                        key={value.id}
+                        className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-sm text-slate-700"
+                      >
+                        {value.value}
+                      </span>
+                    ))}
+                    {(tag.values ?? []).length === 0 ? (
+                      <span className="text-xs text-slate-500">
+                        No options yet, please add.
+                      </span>
+                    ) : null}
+                  </div>
+                )}
 
                 <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
                   <Input
