@@ -41,6 +41,13 @@
   - `get_page_metadata` / `get_project_metadata` / `get_logs` / `get_server_action_by_id`：项目元信息、日志与服务端动作定位。
 - **Supabase 迁移规范**：新增数据库迁移时，使用 `yarn supabase migration new <name>` 生成迁移文件，再按需求编辑。
 
+## Issue 驱动流程
+- 使用 `gh issue view <id> -R myqb/myQuestionBank` 获取需求与上下文。
+- 明确范围与验收标准，确认涉及页面/接口/数据。
+- 按现有规范完成修改并自测。
+- 依次运行 `yarn format src`、`yarn lint src`、`yarn build`，再用 Next.js MCP `get_errors` 复查。
+- 仅提交相关改动，commit message 包含 issue 号（如 `... (issue #30)`）。
+
 ## 数据导入脚本开发规范
 
 ### 脚本概览
