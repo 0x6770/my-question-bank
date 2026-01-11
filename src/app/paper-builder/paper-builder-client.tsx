@@ -17,7 +17,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical } from "lucide-react";
+import { GripVertical, Lock } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -71,13 +71,17 @@ type Question = {
   }[];
 };
 
+type PaperQuestion = Question & {
+  locked: boolean;
+};
+
 type PendingOrderChange = {
   id: number;
   fromIndex: number;
   toIndex: number;
   source: "drag" | "input";
-  previousQuestions: Question[];
-  nextQuestions: Question[];
+  previousQuestions: PaperQuestion[];
+  nextQuestions: PaperQuestion[];
 };
 
 function SortableQuestionRow({
@@ -90,7 +94,7 @@ function SortableQuestionRow({
   onRemove,
   disabled,
 }: {
-  question: Question;
+  question: PaperQuestion;
   index: number;
   total: number;
   positionValue: string;
@@ -139,6 +143,11 @@ function SortableQuestionRow({
           <div className="flex-1">
             <h3 className="font-semibold text-gray-900">
               Question {index + 1}
+              {question.locked ? (
+                <span className="ml-2 inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                  Locked
+                </span>
+              ) : null}
             </h3>
             <div className="flex gap-4 text-sm text-gray-600 mt-1 whitespace-nowrap">
               <span>ID: {question.id}</span>
@@ -254,10 +263,9 @@ export function PaperBuilderClient({
     "all" | "completed" | "incompleted" | "bookmarked"
   >("all");
   const [questionCountInput, setQuestionCountInput] = useState("10");
-  const [appendMode, setAppendMode] = useState(false);
 
   // Paper state
-  const [questions, setQuestions] = useState<Question[]>([]);
+  const [questions, setQuestions] = useState<PaperQuestion[]>([]);
   const [title, setTitle] = useState<string>("Worksheet");
   const [showAnswers, setShowAnswers] = useState<boolean>(false);
   const [positionInputs, setPositionInputs] = useState<Record<number, string>>(
@@ -367,10 +375,34 @@ export function PaperBuilderClient({
     setQuestions([]);
   };
 
+  const { lockedCount, draftCount, lockedQuestionIds, draftQuestionIds } =
+    useMemo(() => {
+      const lockedIds: number[] = [];
+      const draftIds: number[] = [];
+      for (const question of questions) {
+        if (question.locked) {
+          lockedIds.push(question.id);
+        } else {
+          draftIds.push(question.id);
+        }
+      }
+      return {
+        lockedCount: lockedIds.length,
+        draftCount: draftIds.length,
+        lockedQuestionIds: lockedIds,
+        draftQuestionIds: draftIds,
+      };
+    }, [questions]);
+
   const remainingSlots = Math.max(0, maxQuestionCount - questions.length);
-  const maxSelectableCount = appendMode
-    ? Math.max(1, remainingSlots)
-    : maxQuestionCount;
+  const maxSelectableCount = Math.max(
+    1,
+    Math.min(maxQuestionCount, remainingSlots),
+  );
+  const canSelectQuestions =
+    selectedExamBoardId != null && selectedSubjectId != null;
+  const generateButtonLabel =
+    questions.length > 0 ? "Generate Next Batch" : "Generate Random Questions";
 
   useEffect(() => {
     setQuestionCountInput((prev) => {
@@ -391,8 +423,64 @@ export function PaperBuilderClient({
     setPositionInputs(nextInputs);
   }, [questions]);
 
+  const fetchRandomQuestions = async ({
+    count,
+    excludeIds,
+  }: {
+    count: number;
+    excludeIds: number[];
+  }) => {
+    const params = new URLSearchParams({
+      bank: bankParam,
+      subjectId: selectedSubjectId?.toString() ?? "",
+      count: count.toString(),
+    });
+    if (excludeIds.length > 0) {
+      params.set("excludeIds", excludeIds.join(","));
+    }
+
+    const resolvedChapterId = selectedSubChapterId ?? selectedChapterId;
+    if (resolvedChapterId) {
+      params.append("chapterId", resolvedChapterId.toString());
+    }
+
+    if (selectedDifficulty !== null) {
+      params.append("difficulty", selectedDifficulty.toString());
+    }
+
+    if (statusFilter !== "all") {
+      params.append("status", statusFilter);
+    }
+
+    const response = await fetch(`/api/papers/random-questions?${params}`);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to generate questions");
+    }
+
+    const incoming = (data.questions ?? []) as Question[];
+    const requestedCount =
+      typeof data.requestedCount === "number" ? data.requestedCount : count;
+    const availableCount =
+      typeof data.availableCount === "number"
+        ? data.availableCount
+        : incoming.length;
+    const returnedCount =
+      typeof data.returnedCount === "number"
+        ? data.returnedCount
+        : incoming.length;
+
+    return {
+      incoming,
+      requestedCount,
+      availableCount,
+      returnedCount,
+    };
+  };
+
   const handleGenerateQuestions = async () => {
-    if (appendMode && remainingSlots <= 0) {
+    if (remainingSlots <= 0) {
       setError("Maximum 30 questions per worksheet.");
       return;
     }
@@ -414,68 +502,20 @@ export function PaperBuilderClient({
     setLoadingQuestions(true);
 
     try {
-      const requestCount = appendMode
-        ? Math.min(safeCount, remainingSlots)
-        : safeCount;
-      const params = new URLSearchParams({
-        bank: bankParam,
-        subjectId: selectedSubjectId.toString(),
-        count: requestCount.toString(),
-      });
-      if (appendMode && questions.length > 0) {
-        params.set(
-          "excludeIds",
-          questions.map((question) => question.id).join(","),
-        );
-      }
+      const requestCount = Math.min(safeCount, remainingSlots);
+      const { incoming, requestedCount, availableCount, returnedCount } =
+        await fetchRandomQuestions({
+          count: requestCount,
+          excludeIds: lockedQuestionIds,
+        });
 
-      const resolvedChapterId = selectedSubChapterId ?? selectedChapterId;
-      if (resolvedChapterId) {
-        params.append("chapterId", resolvedChapterId.toString());
-      }
-
-      if (selectedDifficulty !== null) {
-        params.append("difficulty", selectedDifficulty.toString());
-      }
-
-      if (statusFilter !== "all") {
-        params.append("status", statusFilter);
-      }
-
-      const response = await fetch(`/api/papers/random-questions?${params}`);
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to generate questions");
-      }
-
-      const incoming = data.questions ?? [];
       setQuestions((prev) => {
-        if (!appendMode || prev.length === 0) {
-          return incoming.slice(0, maxQuestionCount);
-        }
-        const existingIds = new Set(prev.map((question) => question.id));
-        const merged = [...prev];
-        for (const question of incoming) {
-          if (!existingIds.has(question.id)) {
-            merged.push(question);
-          }
-        }
-        return merged.slice(0, maxQuestionCount);
+        const next = [
+          ...prev,
+          ...incoming.map((question) => ({ ...question, locked: false })),
+        ];
+        return next.slice(0, maxQuestionCount);
       });
-
-      const requestedCount =
-        typeof data.requestedCount === "number"
-          ? data.requestedCount
-          : requestCount;
-      const availableCount =
-        typeof data.availableCount === "number"
-          ? data.availableCount
-          : incoming.length;
-      const returnedCount =
-        typeof data.returnedCount === "number"
-          ? data.returnedCount
-          : incoming.length;
 
       if (availableCount < requestedCount) {
         setNotice(
@@ -487,6 +527,73 @@ export function PaperBuilderClient({
     } finally {
       setLoadingQuestions(false);
     }
+  };
+
+  const handleRerandomQuestions = async () => {
+    if (draftCount <= 0) {
+      return;
+    }
+    if (!selectedExamBoardId) {
+      setError("Please select an exam board");
+      return;
+    }
+    if (!selectedSubjectId) {
+      setError("Please select a subject");
+      return;
+    }
+
+    setError(null);
+    setNotice(null);
+    setLoadingQuestions(true);
+
+    try {
+      const excludeIds = Array.from(
+        new Set([...lockedQuestionIds, ...draftQuestionIds]),
+      );
+      const { incoming, requestedCount, availableCount, returnedCount } =
+        await fetchRandomQuestions({
+          count: draftCount,
+          excludeIds,
+        });
+      const replacements = incoming.map((question) => ({
+        ...question,
+        locked: false,
+      }));
+
+      setQuestions((prev) => {
+        let replacementIndex = 0;
+        return prev.map((question) => {
+          if (question.locked) {
+            return question;
+          }
+          const replacement = replacements[replacementIndex];
+          if (replacement) {
+            replacementIndex += 1;
+            return replacement;
+          }
+          return question;
+        });
+      });
+
+      if (availableCount < requestedCount) {
+        setNotice(
+          `Only ${availableCount} question${availableCount === 1 ? "" : "s"} available for the current filters. Refreshed ${returnedCount}.`,
+        );
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setLoadingQuestions(false);
+    }
+  };
+
+  const handleLockCurrentBatch = () => {
+    if (draftCount <= 0) return;
+    setQuestions((prev) =>
+      prev.map((question) =>
+        question.locked ? question : { ...question, locked: true },
+      ),
+    );
   };
 
   const handleRemoveQuestion = (questionId: number) => {
@@ -914,40 +1021,51 @@ export function PaperBuilderClient({
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Maximum: {maxQuestionCount}
-                    {appendMode ? ` · Remaining slots: ${remainingSlots}` : ""}
+                    {` · Remaining slots: ${remainingSlots}`}
+                    {draftCount > 0 ? ` · Current batch: ${draftCount}` : ""}
                   </p>
                 </div>
 
                 {/* Generate Button */}
                 <div className="space-y-3">
-                  {questions.length > 0 ? (
-                    <label className="flex items-center gap-2 text-sm text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={appendMode}
-                        onChange={(e) => setAppendMode(e.target.checked)}
-                        className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      />
-                      Append to existing questions
-                    </label>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={handleGenerateQuestions}
-                    disabled={
-                      loadingQuestions ||
-                      !selectedExamBoardId ||
-                      !selectedSubjectId ||
-                      (appendMode && questions.length >= maxQuestionCount)
-                    }
-                    className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {loadingQuestions
-                      ? "Generating..."
-                      : questions.length > 0 && appendMode
-                        ? "Add Random Questions"
-                        : "Generate Random Questions"}
-                  </button>
+                  {draftCount > 0 ? (
+                    <div className="flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={handleRerandomQuestions}
+                        disabled={loadingQuestions || !canSelectQuestions}
+                        className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {loadingQuestions
+                          ? "Re-randomizing..."
+                          : "Re-randomize Current Batch"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleLockCurrentBatch}
+                        disabled={loadingQuestions}
+                        className="w-full border border-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-50 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <span className="inline-flex items-center justify-center gap-2">
+                          <Lock className="h-4 w-4" />
+                          Lock current batch
+                        </span>
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleGenerateQuestions}
+                      disabled={
+                        loadingQuestions ||
+                        !canSelectQuestions ||
+                        remainingSlots <= 0
+                      }
+                      className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {loadingQuestions ? "Generating..." : generateButtonLabel}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1010,9 +1128,14 @@ export function PaperBuilderClient({
           {/* Right Column: Selected Questions */}
           <div>
             <div className="bg-white shadow rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">
+              <h2 className="text-xl font-semibold mb-1">
                 Selected Questions ({questions.length})
               </h2>
+              {questions.length > 0 ? (
+                <p className="mb-4 text-xs text-slate-500">
+                  Locked: {lockedCount} · Current batch: {draftCount}
+                </p>
+              ) : null}
 
               {questions.length === 0 ? (
                 <p className="text-gray-500 text-center py-8">
