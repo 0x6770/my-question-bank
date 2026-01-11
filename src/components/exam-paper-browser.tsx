@@ -25,7 +25,7 @@ type Subject = {
   exam_board?: { id?: number | null; name?: string | null } | null;
 };
 
-type TagValue = { id: number; value: string; tag_id?: number | null };
+type TagValue = { id: number; value: string; tag_id?: number | null; position?: number | null };
 type Tag = {
   id: number;
   subject_id: number;
@@ -165,9 +165,7 @@ export function ExamPaperBrowser({
         values:
           tag.values
             ?.slice()
-            .sort((a, b) =>
-              (a.value ?? "").localeCompare(b.value ?? "", "zh-CN"),
-            ) ?? [],
+            .sort((a, b) => (a.position ?? 0) - (b.position ?? 0)) ?? [],
       }));
   }, [selectedSubjectId, tagsBySubject]);
 

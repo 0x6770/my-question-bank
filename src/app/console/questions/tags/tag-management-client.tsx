@@ -1,7 +1,28 @@
 "use client";
 
-// biome-ignore lint/correctness/noUnusedImports: lucide icons used in JSX below
-import { BadgeCheck, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  horizontalListSortingStrategy,
+  SortableContext,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
+  BadgeCheck,
+  GripVertical,
+  Loader2,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
@@ -48,6 +69,108 @@ type QuestionTagManagementClientProps = {
   loadError: string | null;
   questionBank: QuestionBank;
 };
+
+type SortableTagValueProps = {
+  value: TagValue;
+  tagId: number;
+  editingValueId: number | null;
+  editingValueText: string;
+  busyId: number | null;
+  onEditStart: (valueId: number, valueText: string) => void;
+  onEditCancel: () => void;
+  onEditSave: (tagId: number, valueId: number, text: string) => void;
+  onEditChange: (text: string) => void;
+  onDelete: (tagId: number, valueId: number) => void;
+};
+
+function SortableTagValue({
+  value,
+  tagId,
+  editingValueId,
+  editingValueText,
+  busyId,
+  onEditStart,
+  onEditCancel,
+  onEditSave,
+  onEditChange,
+  onDelete,
+}: SortableTagValueProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: value.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="group inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-sm text-slate-700"
+    >
+      <button
+        type="button"
+        className="cursor-grab touch-none text-slate-400 hover:text-slate-600"
+        {...attributes}
+        {...listeners}
+        aria-label="Drag to reorder"
+      >
+        <GripVertical className="size-3" />
+      </button>
+      {editingValueId === value.id ? (
+        <>
+          <Input
+            className="h-8 w-32"
+            value={editingValueText}
+            onChange={(event) => onEditChange(event.target.value)}
+          />
+          <Button
+            size="sm"
+            onClick={() => onEditSave(tagId, value.id, editingValueText)}
+            disabled={busyId === value.id}
+          >
+            {busyId === value.id ? (
+              <Loader2 className="mr-1 size-4 animate-spin" />
+            ) : null}
+            Save
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onEditCancel}>
+            Cancel
+          </Button>
+        </>
+      ) : (
+        <>
+          <span>{value.value}</span>
+          <button
+            type="button"
+            className="text-slate-400 transition hover:text-slate-600"
+            onClick={() => onEditStart(value.id, value.value)}
+            aria-label="Edit option"
+          >
+            <Pencil className="size-4" />
+          </button>
+          <button
+            type="button"
+            className="text-slate-400 transition hover:text-red-500"
+            onClick={() => onDelete(tagId, value.id)}
+            disabled={busyId === value.id}
+            aria-label="Delete option"
+          >
+            <Trash2 className="size-4" />
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
 
 export function QuestionTagManagementClient({
   initialSubjects,
@@ -375,6 +498,68 @@ export function QuestionTagManagementClient({
     setBusyId(null);
   };
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    }),
+    useSensor(KeyboardSensor),
+  );
+
+  const handleValueDragEnd = async (event: DragEndEvent, tagId: number) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const tag = tags.find((t) => t.id === tagId);
+    if (!tag?.values) return;
+
+    const sortedValues = [...tag.values].sort(
+      (a, b) => (a.position ?? 0) - (b.position ?? 0),
+    );
+    const oldIndex = sortedValues.findIndex((v) => v.id === active.id);
+    const newIndex = sortedValues.findIndex((v) => v.id === over.id);
+
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(sortedValues, oldIndex, newIndex);
+
+    // Update local state immediately for responsive UI
+    setTags((prev) =>
+      prev.map((t) =>
+        t.id === tagId
+          ? {
+              ...t,
+              values: reordered.map((v, idx) => ({ ...v, position: idx })),
+            }
+          : t,
+      ),
+    );
+
+    // Persist to database
+    resetMessage();
+    const updates = reordered.map((v, idx) => ({ id: v.id, position: idx }));
+    for (const { id, position } of updates) {
+      const { error } = await supabase
+        .from("subject_question_tag_values")
+        .update({ position })
+        .eq("id", id);
+      if (error) {
+        setMessage({
+          type: "error",
+          text: `Failed to update order: ${error.message}`,
+        });
+        return;
+      }
+    }
+    setMessage({ type: "success", text: "Order updated." });
+  };
+
+  // Helper to get sorted values for a tag
+  const getSortedValues = (tag: TagDefinition) => {
+    return [...(tag.values ?? [])].sort(
+      (a, b) => (a.position ?? 0) - (b.position ?? 0),
+    );
+  };
+
   return (
     <div className="flex flex-1 flex-col gap-6">
       <header className="space-y-3">
@@ -591,82 +776,46 @@ export function QuestionTagManagementClient({
                   </Button>
                 </div>
 
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {(tag.values ?? []).map((value) => (
-                    <div
-                      key={value.id}
-                      className="group inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700"
-                    >
-                      {editingValueId === value.id ? (
-                        <>
-                          <Input
-                            className="h-8 w-32"
-                            value={editingValueText}
-                            onChange={(event) =>
-                              setEditingValueText(event.target.value)
-                            }
-                          />
-                          <Button
-                            size="sm"
-                            onClick={() =>
-                              handleRenameValue(
-                                tag.id,
-                                value.id,
-                                editingValueText,
-                              )
-                            }
-                            disabled={busyId === value.id}
-                          >
-                            {busyId === value.id ? (
-                              <Loader2 className="mr-1 size-4 animate-spin" />
-                            ) : null}
-                            Save
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setEditingValueId(null);
-                              setEditingValueText("");
-                            }}
-                          >
-                            Cancel
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <span>{value.value}</span>
-                          <button
-                            type="button"
-                            className="text-slate-400 transition hover:text-slate-600"
-                            onClick={() => {
-                              setEditingValueId(value.id);
-                              setEditingValueText(value.value);
-                              setEditingTagId(null);
-                            }}
-                            aria-label="Edit option"
-                          >
-                            <Pencil className="size-4" />
-                          </button>
-                          <button
-                            type="button"
-                            className="text-slate-400 transition hover:text-red-500"
-                            onClick={() => handleDeleteValue(tag.id, value.id)}
-                            disabled={busyId === value.id}
-                            aria-label="Delete option"
-                          >
-                            <Trash2 className="size-4" />
-                          </button>
-                        </>
-                      )}
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={(event) => handleValueDragEnd(event, tag.id)}
+                >
+                  <SortableContext
+                    items={getSortedValues(tag).map((v) => v.id)}
+                    strategy={horizontalListSortingStrategy}
+                  >
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {getSortedValues(tag).map((value) => (
+                        <SortableTagValue
+                          key={value.id}
+                          value={value}
+                          tagId={tag.id}
+                          editingValueId={editingValueId}
+                          editingValueText={editingValueText}
+                          busyId={busyId}
+                          onEditStart={(valueId, valueText) => {
+                            setEditingValueId(valueId);
+                            setEditingValueText(valueText);
+                            setEditingTagId(null);
+                          }}
+                          onEditCancel={() => {
+                            setEditingValueId(null);
+                            setEditingValueText("");
+                          }}
+                          onEditSave={handleRenameValue}
+                          onEditChange={setEditingValueText}
+                          onDelete={handleDeleteValue}
+                        />
+                      ))}
+                      {(tag.values ?? []).length === 0 ? (
+                        <span className="text-xs text-slate-500">
+                          No options yet, please add.
+                        </span>
+                      ) : null}
                     </div>
-                  ))}
-                  {(tag.values ?? []).length === 0 ? (
-                    <span className="text-xs text-slate-500">
-                      No options yet, please add.
-                    </span>
-                  ) : null}
-                </div>
+                  </SortableContext>
+                </DndContext>
 
                 <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
                   <Input
