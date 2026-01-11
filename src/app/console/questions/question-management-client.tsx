@@ -212,28 +212,50 @@ function isBlobUrl(value: string) {
   return value.startsWith("blob:");
 }
 
-// Build tree structure from chapters grouped by subject
+// Build tree structure from chapters grouped by exam board and subject
 function buildChapterTree(
   chapters: { id: number; label: string }[],
   allChapters: AllChapterRow[],
+  examBoards: ExamBoardRow[],
 ): TreeNode[] {
-  // Group chapters by subject
-  const subjectMap = new Map<
+  const allChapterMap = new Map(allChapters.map((ch) => [ch.id, ch]));
+  const examBoardNameById = new Map(
+    examBoards.map((board) => [board.id, board.name]),
+  );
+
+  // Group chapters by exam board -> subject
+  const examBoardMap = new Map<
     number,
-    { name: string; chapterIds: Set<number> }
+    {
+      name: string;
+      subjectMap: Map<number, { name: string; chapterIds: Set<number> }>;
+    }
   >();
 
   for (const chapter of chapters) {
-    const fullChapter = allChapters.find((ch) => ch.id === chapter.id);
+    const fullChapter = allChapterMap.get(chapter.id);
     if (!fullChapter?.subject) continue;
 
+    const examBoardId = fullChapter.exam_board_id;
+    if (examBoardId == null) continue;
+
+    const examBoardName =
+      examBoardNameById.get(examBoardId) ?? `Exam Board ${examBoardId}`;
     const subjectId = fullChapter.subject.id;
     const subjectName = fullChapter.subject.name;
 
-    if (!subjectMap.has(subjectId)) {
+    if (!examBoardMap.has(examBoardId)) {
+      examBoardMap.set(examBoardId, {
+        name: examBoardName,
+        subjectMap: new Map(),
+      });
+    }
+
+    const subjectMap = examBoardMap.get(examBoardId)?.subjectMap;
+    if (subjectMap && !subjectMap.has(subjectId)) {
       subjectMap.set(subjectId, { name: subjectName, chapterIds: new Set() });
     }
-    subjectMap.get(subjectId)?.chapterIds.add(chapter.id);
+    subjectMap?.get(subjectId)?.chapterIds.add(chapter.id);
   }
 
   // Helper function to build chapter hierarchy
@@ -286,15 +308,27 @@ function buildChapterTree(
       .map(buildNode);
   };
 
-  // Convert to tree structure
+  // Convert to tree structure: exam board -> subject -> chapter
   const tree: TreeNode[] = [];
-  for (const [subjectId, { name, chapterIds }] of subjectMap) {
-    const chapterTree = buildChapterHierarchy(subjectId, chapterIds);
+  for (const [examBoardId, { name, subjectMap }] of examBoardMap) {
+    const subjectNodes = Array.from(subjectMap.entries())
+      .map(([subjectId, { name: subjectName, chapterIds }]) => {
+        const chapterTree = buildChapterHierarchy(subjectId, chapterIds);
+        return {
+          id: `subject-${examBoardId}-${subjectId}`,
+          label: subjectName,
+          children: chapterTree,
+        };
+      })
+      .filter((node) => node.children && node.children.length > 0)
+      .sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
+
+    if (subjectNodes.length === 0) continue;
 
     tree.push({
-      id: `subject-${subjectId}`,
+      id: `exam-board-${examBoardId}`,
       label: name,
-      children: chapterTree,
+      children: subjectNodes,
     });
   }
 
@@ -429,13 +463,13 @@ export function QuestionManagement({
 
   // Build tree data for TreeSelect
   const pastPaperTree = useMemo(
-    () => buildChapterTree(pastPaperChapters, allChapters),
-    [pastPaperChapters, allChapters],
+    () => buildChapterTree(pastPaperChapters, allChapters, allExamBoards),
+    [pastPaperChapters, allChapters, allExamBoards],
   );
 
   const typicalTree = useMemo(
-    () => buildChapterTree(typicalChapters, allChapters),
-    [typicalChapters, allChapters],
+    () => buildChapterTree(typicalChapters, allChapters, allExamBoards),
+    [typicalChapters, allChapters, allExamBoards],
   );
 
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
