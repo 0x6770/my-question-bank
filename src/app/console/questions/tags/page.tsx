@@ -1,17 +1,33 @@
+import { QUESTION_BANK, type QuestionBank } from "@/lib/question-bank";
 import { firstOrNull } from "@/lib/supabase/relations";
 import { createClient } from "@/lib/supabase/server";
 import { QuestionTagManagementClient } from "./tag-management-client";
 
-export default async function QuestionTagsPage() {
+type PageProps = {
+  searchParams: Promise<{
+    bank?: string;
+  }>;
+};
+
+export default async function QuestionTagsPage(props: PageProps) {
+  const searchParams = await props.searchParams;
   const supabase = await createClient();
 
-  // Fetch only subjects from questionbank and checkpoint
+  // Map URL parameter to question bank value, default to "questionbank"
+  const bankParam = searchParams.bank;
+  let selectedBank: QuestionBank = QUESTION_BANK.QUESTIONBANK;
+
+  if (bankParam === "checkpoint") {
+    selectedBank = QUESTION_BANK.CHECKPOINT;
+  }
+
+  // Fetch only subjects from the selected question bank
   const { data: subjects, error: subjectsError } = await supabase
     .from("subjects")
     .select(
       "id, name, created_at, exam_board_id, exam_board:exam_boards!inner(id, name, question_bank, created_at)",
     )
-    .in("exam_board.question_bank", ["questionbank", "checkpoint"])
+    .eq("exam_board.question_bank", selectedBank)
     .order("name", { ascending: true });
 
   // Fetch all question tags with their values
@@ -51,6 +67,7 @@ export default async function QuestionTagsPage() {
       initialSubjects={normalizedSubjects}
       initialTags={tags || []}
       loadError={null}
+      questionBank={selectedBank}
     />
   );
 }

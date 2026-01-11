@@ -2,7 +2,8 @@
 
 // biome-ignore lint/correctness/noUnusedImports: lucide icons used in JSX below
 import { BadgeCheck, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -14,7 +15,9 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type TreeNode, TreeSelect } from "@/components/ui/tree-select";
+import { QUESTION_BANK, type QuestionBank } from "@/lib/question-bank";
 import { createClient } from "@/lib/supabase/client";
 import type { SubjectWithBoard } from "@/lib/supabase/relations";
 import { cn } from "@/lib/utils";
@@ -43,19 +46,44 @@ type QuestionTagManagementClientProps = {
   initialSubjects: SubjectRow[];
   initialTags: TagDefinition[];
   loadError: string | null;
+  questionBank: QuestionBank;
 };
 
 export function QuestionTagManagementClient({
   initialSubjects,
   initialTags,
   loadError,
+  questionBank,
 }: QuestionTagManagementClientProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = useMemo(() => createClient(), []);
-  const [subjects] = useState(initialSubjects);
+  const [subjects, setSubjects] = useState(initialSubjects);
   const [tags, setTags] = useState<TagDefinition[]>(initialTags);
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(
     initialSubjects[0]?.id ?? null,
   );
+
+  // Sync props to state when question bank changes
+  useEffect(() => {
+    setSubjects(initialSubjects);
+    setTags(initialTags);
+    setSelectedSubjectId(initialSubjects[0]?.id ?? null);
+  }, [initialSubjects, initialTags]);
+
+  const currentBankTab =
+    questionBank === QUESTION_BANK.QUESTIONBANK ? "questionbank" : "checkpoint";
+
+  const handleBankChange = (value: string) => {
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    if (value === "questionbank") {
+      params.delete("bank"); // default, so remove param
+    } else {
+      params.set("bank", value);
+    }
+    const query = params.toString();
+    router.push(`/console/questions/tags${query ? `?${query}` : ""}`);
+  };
   const [creatingTagName, setCreatingTagName] = useState("");
   const [creatingRequired, setCreatingRequired] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -349,14 +377,18 @@ export function QuestionTagManagementClient({
 
   return (
     <div className="flex flex-1 flex-col gap-6">
-      <header className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Exam Paper Tags
-        </h1>
+      <header className="space-y-3">
+        <h1 className="text-2xl font-semibold tracking-tight">Question Tags</h1>
         <p className="text-sm text-slate-500">
-          Configure tags and values per subject; creating exam papers will
-          require these selections.
+          Configure tags and values per subject; creating questions will require
+          these selections.
         </p>
+        <Tabs value={currentBankTab} onValueChange={handleBankChange}>
+          <TabsList>
+            <TabsTrigger value="questionbank">Questionbank</TabsTrigger>
+            <TabsTrigger value="checkpoint">Checkpoint</TabsTrigger>
+          </TabsList>
+        </Tabs>
         {message ? (
           <div
             className={cn(
