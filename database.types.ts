@@ -66,6 +66,42 @@ export type Database = {
           },
         ];
       };
+      chapter_question_orders: {
+        Row: {
+          chapter_id: number;
+          created_at: string;
+          position: number;
+          question_id: number;
+        };
+        Insert: {
+          chapter_id: number;
+          created_at?: string;
+          position: number;
+          question_id: number;
+        };
+        Update: {
+          chapter_id?: number;
+          created_at?: string;
+          position?: number;
+          question_id?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "chapter_question_orders_chapter_id_fkey";
+            columns: ["chapter_id"];
+            isOneToOne: false;
+            referencedRelation: "chapters";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "chapter_question_orders_question_id_fkey";
+            columns: ["question_id"];
+            isOneToOne: false;
+            referencedRelation: "questions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       chapters: {
         Row: {
           created_at: string;
@@ -704,35 +740,6 @@ export type Database = {
             columns: ["exam_board_id"];
             isOneToOne: false;
             referencedRelation: "exam_boards";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      tags: {
-        Row: {
-          created_at: string;
-          id: number;
-          name: string;
-          parent_id: number | null;
-        };
-        Insert: {
-          created_at?: string;
-          id?: number;
-          name: string;
-          parent_id?: number | null;
-        };
-        Update: {
-          created_at?: string;
-          id?: number;
-          name?: string;
-          parent_id?: number | null;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "tag_parent_id_fkey";
-            columns: ["parent_id"];
-            isOneToOne: false;
-            referencedRelation: "tags";
             referencedColumns: ["id"];
           },
         ];

@@ -19,6 +19,8 @@ type TreeSelectProps = {
   onValueChange: (value: number | null) => void;
   placeholder?: string;
   className?: string;
+  selectableParents?: boolean;
+  disabled?: boolean;
 };
 
 export function TreeSelect({
@@ -27,6 +29,8 @@ export function TreeSelect({
   onValueChange,
   placeholder = "选择...",
   className,
+  selectableParents = false,
+  disabled = false,
 }: TreeSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string | number>>(
@@ -62,6 +66,10 @@ export function TreeSelect({
 
   // Close dropdown when clicking outside
   useEffect(() => {
+    if (disabled && isOpen) {
+      setIsOpen(false);
+    }
+
     const handleClickOutside = (event: MouseEvent) => {
       if (
         containerRef.current &&
@@ -78,7 +86,7 @@ export function TreeSelect({
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isOpen]);
+  }, [disabled, isOpen]);
 
   const toggleExpand = (id: string | number) => {
     setExpandedIds((prev) => {
@@ -93,7 +101,7 @@ export function TreeSelect({
   };
 
   const handleSelect = (nodeValue: number | undefined) => {
-    if (nodeValue !== undefined) {
+    if (!disabled && nodeValue !== undefined) {
       onValueChange(nodeValue);
       setIsOpen(false);
     }
@@ -103,38 +111,64 @@ export function TreeSelect({
     const hasChildren = node.children && node.children.length > 0;
     const isExpanded = expandedIds.has(node.id);
     const isSelected = node.value !== undefined && node.value === value;
-    const isLeaf = !hasChildren;
+    const canSelect =
+      !disabled &&
+      node.value !== undefined &&
+      (selectableParents || !hasChildren);
+
+    const handleLabelClick = () => {
+      if (disabled) return;
+      if (canSelect) {
+        handleSelect(node.value);
+        return;
+      }
+      if (hasChildren) {
+        toggleExpand(node.id);
+      }
+    };
 
     return (
       <div key={node.id}>
-        <button
-          type="button"
+        <div
           className={cn(
-            "flex items-center gap-1 px-2 py-1.5 text-sm cursor-pointer hover:bg-slate-100 rounded w-full text-left",
+            "flex items-center gap-1 px-2 py-1.5 text-sm rounded w-full text-left",
             isSelected && "bg-slate-100 font-medium",
+            disabled ? "text-slate-400" : "hover:bg-slate-100",
           )}
           style={{ paddingLeft: `${level * 12 + 8}px` }}
-          onClick={() => {
-            if (hasChildren) {
-              toggleExpand(node.id);
-            } else if (isLeaf && node.value !== undefined) {
-              handleSelect(node.value);
-            }
-          }}
         >
           {hasChildren ? (
-            <span className="flex-shrink-0">
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => toggleExpand(node.id)}
+              className={cn(
+                "flex-shrink-0",
+                disabled ? "cursor-not-allowed" : "cursor-pointer",
+              )}
+              aria-label={isExpanded ? "Collapse" : "Expand"}
+            >
               {isExpanded ? (
                 <ChevronDown className="h-4 w-4 text-slate-500" />
               ) : (
                 <ChevronRight className="h-4 w-4 text-slate-500" />
               )}
-            </span>
+            </button>
           ) : (
             <span className="w-4 flex-shrink-0" />
           )}
-          <span className="flex-1 truncate">{node.label}</span>
-        </button>
+          <button
+            type="button"
+            onClick={handleLabelClick}
+            disabled={disabled}
+            className={cn(
+              "flex-1 truncate text-left",
+              disabled ? "cursor-not-allowed" : "cursor-pointer",
+            )}
+          >
+            {node.label}
+          </button>
+        </div>
         {hasChildren && isExpanded && (
           <div>
             {node.children?.map((child) => renderNode(child, level + 1))}
@@ -149,8 +183,15 @@ export function TreeSelect({
       <div className="flex gap-2">
         <button
           type="button"
-          onClick={() => setIsOpen(!isOpen)}
-          className="h-10 w-full flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200 text-left flex items-center justify-between"
+          onClick={() => {
+            if (disabled) return;
+            setIsOpen(!isOpen);
+          }}
+          disabled={disabled}
+          className={cn(
+            "h-10 w-full flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none transition focus-visible:border-slate-900 focus-visible:ring-2 focus-visible:ring-slate-200 text-left flex items-center justify-between",
+            disabled && "cursor-not-allowed bg-slate-50 text-slate-400",
+          )}
         >
           <span className={cn(!selectedLabel && "text-slate-500")}>
             {selectedLabel || placeholder}
@@ -169,6 +210,7 @@ export function TreeSelect({
             size="icon"
             onClick={() => onValueChange(null)}
             title="清除选择"
+            disabled={disabled}
           >
             <X className="h-4 w-4" />
           </Button>

@@ -166,24 +166,45 @@ export async function GET(request: Request) {
     }
   }
 
-  // 第一步：通过 question_chapters 找到符合条件的 question_ids
-  let questionIdsQuery = supabase
-    .from("question_chapters")
-    .select("question_id");
+  const hasChapterFilter = Number.isFinite(chapterId);
+  let orderedQuestionIds: number[] | null = null;
+  let matchingQuestionIds: number[] = [];
 
-  if (allowedChapterIds) {
-    questionIdsQuery = questionIdsQuery.in("chapter_id", allowedChapterIds);
+  // 第一步：根据筛选条件获取 question_ids（chapter 优先使用自定义排序）
+  if (hasChapterFilter) {
+    const { data: orderRows, error: orderError } = await supabase
+      .from("chapter_question_orders")
+      .select("question_id")
+      .eq("chapter_id", chapterId as number)
+      .order("position", { ascending: true });
+
+    if (orderError) {
+      return NextResponse.json({ error: orderError.message }, { status: 500 });
+    }
+
+    orderedQuestionIds = (orderRows ?? []).map((row) => row.question_id);
+    matchingQuestionIds = orderedQuestionIds.slice();
+  } else {
+    // 通过 question_chapters 找到符合条件的 question_ids
+    let questionIdsQuery = supabase
+      .from("question_chapters")
+      .select("question_id");
+
+    if (allowedChapterIds) {
+      questionIdsQuery = questionIdsQuery.in("chapter_id", allowedChapterIds);
+    }
+
+    const { data: questionChapterRows, error: qcError } =
+      await questionIdsQuery;
+
+    if (qcError) {
+      return NextResponse.json({ error: qcError.message }, { status: 500 });
+    }
+
+    matchingQuestionIds = Array.from(
+      new Set((questionChapterRows ?? []).map((row) => row.question_id)),
+    );
   }
-
-  const { data: questionChapterRows, error: qcError } = await questionIdsQuery;
-
-  if (qcError) {
-    return NextResponse.json({ error: qcError.message }, { status: 500 });
-  }
-
-  let matchingQuestionIds = Array.from(
-    new Set((questionChapterRows ?? []).map((row) => row.question_id)),
-  );
 
   if (matchingQuestionIds.length === 0) {
     return NextResponse.json({ questions: [], hasMore: false, page: safePage });
@@ -303,50 +324,47 @@ export async function GET(request: Request) {
     }
   }
 
-  // 第二步：查询题目详情
-  let query = supabase
-    .from("questions")
-    .select(
-      `
-        id,
-        marks,
-        difficulty,
-        calculator,
-        created_at,
-        question_images (
-          id,
-          storage_path,
-          position
-        ),
-        answer_images (
-          id,
-          storage_path,
-          position
-        )
-      `,
-    )
-    .in("id", matchingQuestionIds)
-    .range(offset, offset + fetchLimit - 1);
-
-  if (bookmarkedQuestionIds) {
-    query = query.in("id", bookmarkedQuestionIds);
-  }
-
-  if (difficultySet && difficultySet.size > 0) {
-    query = query.in("difficulty", Array.from(difficultySet));
-  }
-
-  const { data: questions, error } = await query.order("created_at", {
-    ascending: false,
-  });
-
-  if (error) {
-    return NextResponse.json(
-      { error: error.message },
-      {
-        status: 500,
-      },
+  if (orderedQuestionIds && bookmarkedQuestionIds) {
+    const bookmarkedSet = new Set(bookmarkedQuestionIds);
+    matchingQuestionIds = matchingQuestionIds.filter((id) =>
+      bookmarkedSet.has(id),
     );
+
+    if (matchingQuestionIds.length === 0) {
+      return NextResponse.json({
+        questions: [],
+        hasMore: false,
+        page: safePage,
+      });
+    }
+  }
+
+  if (orderedQuestionIds && difficultySet && difficultySet.size > 0) {
+    const { data: difficultyRows, error: difficultyError } = await supabase
+      .from("questions")
+      .select("id")
+      .in("id", matchingQuestionIds)
+      .in("difficulty", Array.from(difficultySet));
+
+    if (difficultyError) {
+      return NextResponse.json(
+        { error: difficultyError.message },
+        { status: 500 },
+      );
+    }
+
+    const allowedIds = new Set((difficultyRows ?? []).map((row) => row.id));
+    matchingQuestionIds = matchingQuestionIds.filter((id) =>
+      allowedIds.has(id),
+    );
+
+    if (matchingQuestionIds.length === 0) {
+      return NextResponse.json({
+        questions: [],
+        hasMore: false,
+        page: safePage,
+      });
+    }
   }
 
   type QuestionRow = Omit<
@@ -368,6 +386,110 @@ export async function GET(request: Request) {
         }[]
       | null;
   };
+
+  // 第二步：查询题目详情
+  let questions: QuestionRow[] | null = null;
+  let queryError: string | null = null;
+
+  if (orderedQuestionIds) {
+    const pageQuestionIds = matchingQuestionIds.slice(
+      offset,
+      offset + fetchLimit,
+    );
+
+    if (pageQuestionIds.length === 0) {
+      return NextResponse.json({
+        questions: [],
+        hasMore: false,
+        page: safePage,
+      });
+    }
+
+    const { data, error } = await supabase
+      .from("questions")
+      .select(
+        `
+          id,
+          marks,
+          difficulty,
+          calculator,
+          created_at,
+          question_images (
+            id,
+            storage_path,
+            position
+          ),
+          answer_images (
+            id,
+            storage_path,
+            position
+          )
+        `,
+      )
+      .in("id", pageQuestionIds);
+
+    if (error) {
+      queryError = error.message;
+    } else {
+      const questionById = new Map(
+        (data ?? []).map((row) => [row.id, row as QuestionRow]),
+      );
+      questions = pageQuestionIds
+        .map((id) => questionById.get(id))
+        .filter((row): row is QuestionRow => Boolean(row));
+    }
+  } else {
+    let query = supabase
+      .from("questions")
+      .select(
+        `
+          id,
+          marks,
+          difficulty,
+          calculator,
+          created_at,
+          question_images (
+            id,
+            storage_path,
+            position
+          ),
+          answer_images (
+            id,
+            storage_path,
+            position
+          )
+        `,
+      )
+      .in("id", matchingQuestionIds)
+      .range(offset, offset + fetchLimit - 1);
+
+    if (bookmarkedQuestionIds) {
+      query = query.in("id", bookmarkedQuestionIds);
+    }
+
+    if (difficultySet && difficultySet.size > 0) {
+      query = query.in("difficulty", Array.from(difficultySet));
+    }
+
+    const { data, error } = await query.order("created_at", {
+      ascending: false,
+    });
+
+    if (error) {
+      queryError = error.message;
+    } else {
+      questions = data ?? [];
+    }
+  }
+
+  if (queryError) {
+    return NextResponse.json(
+      { error: queryError },
+      {
+        status: 500,
+      },
+    );
+  }
 
   // 第三步：获取每个题目的所有 chapters
   const questionIds = (questions ?? []).map((q) => (q as QuestionRow).id);

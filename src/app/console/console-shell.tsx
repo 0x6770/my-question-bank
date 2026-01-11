@@ -23,6 +23,7 @@ const navItems: NavItem[] = [
     label: "Questions",
     icon: FileQuestion,
     children: [
+      { href: "/console/questions/order", label: "Order" },
       { href: "/console/subjects", label: "Subjects" },
       { href: "/console/questions/tags", label: "Tags" },
     ],
