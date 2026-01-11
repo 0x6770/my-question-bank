@@ -25,7 +25,12 @@ type Subject = {
   exam_board?: { id?: number | null; name?: string | null } | null;
 };
 
-type TagValue = { id: number; value: string; tag_id?: number | null; position?: number | null };
+type TagValue = {
+  id: number;
+  value: string;
+  tag_id?: number | null;
+  position?: number | null;
+};
 type Tag = {
   id: number;
   subject_id: number;
@@ -169,6 +174,29 @@ export function ExamPaperBrowser({
       }));
   }, [selectedSubjectId, tagsBySubject]);
 
+  const tagIdByName = useMemo(() => {
+    const map = new Map<(typeof DEFAULT_TAG_NAMES)[number], number>();
+    for (const tag of currentSubjectTags) {
+      map.set(
+        tag.name.toLowerCase() as (typeof DEFAULT_TAG_NAMES)[number],
+        tag.id,
+      );
+    }
+    return map;
+  }, [currentSubjectTags]);
+
+  const getPaperTagValue = useCallback(
+    (paper: ExamPaper, tagName: (typeof DEFAULT_TAG_NAMES)[number]) => {
+      const tagId = tagIdByName.get(tagName);
+      if (!tagId) return null;
+      const match = paper.tag_values?.find(
+        (entry) => entry.tag_value?.tag_id === tagId,
+      );
+      return match?.tag_value?.value ?? null;
+    },
+    [tagIdByName],
+  );
+
   const filteredPapers = useMemo(() => {
     if (!papers.length) return [];
     const filtered = papers.filter((paper) => {
@@ -189,49 +217,55 @@ export function ExamPaperBrowser({
       a: string | null | undefined,
       b: string | null | undefined,
     ) => getSafe(a).localeCompare(getSafe(b), "zh-CN");
+    const getYearValue = (paper: ExamPaper) => {
+      const tagValue = getPaperTagValue(paper, "year");
+      if (!tagValue) return Number.NEGATIVE_INFINITY;
+      const numeric = Number.parseInt(tagValue, 10);
+      return Number.isFinite(numeric) ? numeric : Number.NEGATIVE_INFINITY;
+    };
+    const getSeasonValue = (paper: ExamPaper) =>
+      getPaperTagValue(paper, "season") ?? "";
+    const getPaperValue = (paper: ExamPaper) =>
+      getPaperTagValue(paper, "paper") ?? "";
+    const getTimeZoneValue = (paper: ExamPaper) =>
+      getPaperTagValue(paper, "time zone") ?? "";
     const compareByField = (
       a: ExamPaper,
       b: ExamPaper,
       direction: "asc" | "desc",
     ) => {
       if (sortField === "year") {
-        const yearA = a.year ?? -Infinity;
-        const yearB = b.year ?? -Infinity;
+        const yearA = getYearValue(a);
+        const yearB = getYearValue(b);
         return direction === "desc" ? yearB - yearA : yearA - yearB;
       }
       if (sortField === "season") {
         return direction === "desc"
-          ? -compareString(a.season, b.season)
-          : compareString(a.season, b.season);
+          ? -compareString(getSeasonValue(a), getSeasonValue(b))
+          : compareString(getSeasonValue(a), getSeasonValue(b));
       }
       if (sortField === "paper") {
-        const cmp = compareString(
-          a.paper_code ?? a.paper_label,
-          b.paper_code ?? b.paper_label,
-        );
+        const cmp = compareString(getPaperValue(a), getPaperValue(b));
         return direction === "desc" ? -cmp : cmp;
       }
-      const cmp = compareString(a.time_zone, b.time_zone);
+      const cmp = compareString(getTimeZoneValue(a), getTimeZoneValue(b));
       return direction === "desc" ? -cmp : cmp;
     };
     filtered.sort((a, b) => {
       const cmp = compareByField(a, b, sortDirection);
       if (cmp !== 0) return cmp;
       // fallback: year desc then season/paper/time_zone for stability
-      const yearA = a.year ?? -Infinity;
-      const yearB = b.year ?? -Infinity;
+      const yearA = getYearValue(a);
+      const yearB = getYearValue(b);
       if (yearA !== yearB) return yearB - yearA;
-      const seasonCmp = compareString(a.season, b.season);
+      const seasonCmp = compareString(getSeasonValue(a), getSeasonValue(b));
       if (seasonCmp !== 0) return seasonCmp;
-      const paperCmp = compareString(
-        a.paper_code ?? a.paper_label,
-        b.paper_code ?? b.paper_label,
-      );
+      const paperCmp = compareString(getPaperValue(a), getPaperValue(b));
       if (paperCmp !== 0) return paperCmp;
-      return compareString(a.time_zone, b.time_zone);
+      return compareString(getTimeZoneValue(a), getTimeZoneValue(b));
     });
     return filtered;
-  }, [filters, papers, sortDirection, sortField]);
+  }, [filters, papers, sortDirection, sortField, getPaperTagValue]);
 
   const fetchSignedUrl = async (path: string | null) => {
     if (!path) return null;
@@ -648,62 +682,66 @@ export function ExamPaperBrowser({
                     </td>
                   </tr>
                 ) : (
-                  filteredPapers.map((paper) => (
-                    <tr
-                      key={paper.id}
-                      className="border-b border-slate-100 hover:bg-slate-50/70"
-                    >
-                      <td className="px-4 py-3">{paper.year ?? "--"}</td>
-                      <td className="px-4 py-3">{paper.season ?? "--"}</td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-slate-900">
-                          {paper.paper_code ?? "--"}
-                        </div>
-                        {paper.paper_label &&
-                        paper.paper_label !== paper.paper_code ? (
-                          <div className="text-xs text-slate-500">
-                            {paper.paper_label}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-3">{paper.time_zone ?? "--"}</td>
-                      <td className="px-4 py-3">
-                        {paper.question_paper_path ? (
-                          <button
-                            type="button"
-                            className="text-blue-600 underline underline-offset-4"
-                            onClick={() =>
-                              handleOpenPdf(paper.question_paper_path)
-                            }
-                          >
-                            view
-                          </button>
-                        ) : (
-                          <span className="text-xs text-slate-500">--</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {paper.mark_scheme_path ? (
-                          <button
-                            type="button"
-                            className="text-blue-600 underline underline-offset-4"
-                            onClick={() =>
-                              handleOpenPdf(paper.mark_scheme_path)
-                            }
-                          >
-                            view
-                          </button>
-                        ) : (
-                          <span className="text-xs text-slate-500">--</span>
-                        )}
-                      </td>
-                      {hasActions ? (
+                  filteredPapers.map((paper) => {
+                    const yearLabel = getPaperTagValue(paper, "year");
+                    const seasonLabel =
+                      getPaperTagValue(paper, "season") ?? null;
+                    const paperPrimary =
+                      getPaperTagValue(paper, "paper") ?? "--";
+                    const timeZoneLabel =
+                      getPaperTagValue(paper, "time zone") ?? null;
+
+                    return (
+                      <tr
+                        key={paper.id}
+                        className="border-b border-slate-100 hover:bg-slate-50/70"
+                      >
+                        <td className="px-4 py-3">{yearLabel ?? "--"}</td>
+                        <td className="px-4 py-3">{seasonLabel ?? "--"}</td>
                         <td className="px-4 py-3">
-                          {renderActions ? renderActions(paper) : null}
+                          <div className="font-medium text-slate-900">
+                            {paperPrimary}
+                          </div>
                         </td>
-                      ) : null}
-                    </tr>
-                  ))
+                        <td className="px-4 py-3">{timeZoneLabel ?? "--"}</td>
+                        <td className="px-4 py-3">
+                          {paper.question_paper_path ? (
+                            <button
+                              type="button"
+                              className="text-blue-600 underline underline-offset-4"
+                              onClick={() =>
+                                handleOpenPdf(paper.question_paper_path)
+                              }
+                            >
+                              view
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-500">--</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {paper.mark_scheme_path ? (
+                            <button
+                              type="button"
+                              className="text-blue-600 underline underline-offset-4"
+                              onClick={() =>
+                                handleOpenPdf(paper.mark_scheme_path)
+                              }
+                            >
+                              view
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-500">--</span>
+                          )}
+                        </td>
+                        {hasActions ? (
+                          <td className="px-4 py-3">
+                            {renderActions ? renderActions(paper) : null}
+                          </td>
+                        ) : null}
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

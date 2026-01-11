@@ -147,6 +147,13 @@ export function ExamPaperManagement({
     }
     return map;
   }, [subjectTags]);
+  const tagNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const tag of subjectTags) {
+      map.set(tag.id, tag.name.toLowerCase());
+    }
+    return map;
+  }, [subjectTags]);
   const examBoards = useMemo(() => {
     const map = new Map<number, string>();
     for (const subject of subjects) {
@@ -204,6 +211,16 @@ export function ExamPaperManagement({
   >(null);
 
   const resetMessage = () => setMessage(null);
+  const resolvePaperLabel = useCallback(
+    (paper: BrowserExamPaper) => {
+      const paperTagValue = paper.tag_values?.find((entry) => {
+        const tagId = entry.tag_value?.tag_id;
+        return tagId ? tagNameById.get(tagId) === "paper" : false;
+      })?.tag_value?.value;
+      return paperTagValue ?? `paper ${paper.id}`;
+    },
+    [tagNameById],
+  );
 
   const uploadPdf = useCallback(
     async (paperId: number, file: File, kind: PdfKind, upsert = false) => {
@@ -571,11 +588,7 @@ export function ExamPaperManagement({
 
   const handleDelete = async (paper: BrowserExamPaper) => {
     resetMessage();
-    if (
-      !window.confirm(
-        `Delete exam paper ${paper.paper_label ?? paper.paper_code}?`,
-      )
-    ) {
+    if (!window.confirm(`Delete exam paper ${resolvePaperLabel(paper)}?`)) {
       return;
     }
     setDeletingId(paper.id);
