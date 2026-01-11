@@ -22,6 +22,16 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -61,22 +71,33 @@ type Question = {
   }[];
 };
 
+type PendingOrderChange = {
+  id: number;
+  fromIndex: number;
+  toIndex: number;
+  source: "drag" | "input";
+  previousQuestions: Question[];
+  nextQuestions: Question[];
+};
+
 function SortableQuestionRow({
   question,
   index,
-  isFirst,
-  isLast,
-  onMoveUp,
-  onMoveDown,
+  total,
+  positionValue,
+  onPositionChange,
+  onPositionCommit,
   onRemove,
+  disabled,
 }: {
   question: Question;
   index: number;
-  isFirst: boolean;
-  isLast: boolean;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
+  total: number;
+  positionValue: string;
+  onPositionChange: (id: number, value: string) => void;
+  onPositionCommit: (id: number) => void;
   onRemove: () => void;
+  disabled: boolean;
 }) {
   const {
     attributes,
@@ -85,7 +106,7 @@ function SortableQuestionRow({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: question.id });
+  } = useSortable({ id: question.id, disabled });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -103,7 +124,12 @@ function SortableQuestionRow({
         <div className="flex items-start gap-3">
           <button
             type="button"
-            className="mt-1 text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing"
+            disabled={disabled}
+            className={`mt-1 text-gray-400 ${
+              disabled
+                ? "cursor-not-allowed text-gray-300"
+                : "hover:text-gray-600 cursor-grab active:cursor-grabbing"
+            }`}
             aria-label="Drag to reorder"
             {...attributes}
             {...listeners}
@@ -114,7 +140,7 @@ function SortableQuestionRow({
             <h3 className="font-semibold text-gray-900">
               Question {index + 1}
             </h3>
-            <div className="flex gap-4 text-sm text-gray-600 mt-1">
+            <div className="flex gap-4 text-sm text-gray-600 mt-1 whitespace-nowrap">
               <span>ID: {question.id}</span>
               <span>Marks: {question.marks}</span>
               <span>Difficulty: {question.difficulty}</span>
@@ -124,29 +150,43 @@ function SortableQuestionRow({
             </div>
           </div>
         </div>
-        <div className="flex gap-2 ml-2">
-          <button
-            type="button"
-            onClick={onMoveUp}
-            disabled={isFirst}
-            className="text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"
-            title="Move up"
-          >
-            ↑
-          </button>
-          <button
-            type="button"
-            onClick={onMoveDown}
-            disabled={isLast}
-            className="text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"
-            title="Move down"
-          >
-            ↓
-          </button>
+        <div className="flex items-center gap-3 ml-2">
+          <div className="flex items-center gap-2">
+            <Label
+              className="text-xs text-slate-500 whitespace-nowrap"
+              htmlFor={`question-position-${question.id}`}
+            >
+              Set position
+            </Label>
+            <Input
+              id={`question-position-${question.id}`}
+              type="number"
+              min={1}
+              max={total}
+              value={positionValue}
+              onChange={(event) =>
+                onPositionChange(question.id, event.target.value)
+              }
+              onBlur={() => onPositionCommit(question.id)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  onPositionCommit(question.id);
+                }
+              }}
+              className="h-9 w-20 text-center"
+              disabled={disabled}
+            />
+          </div>
           <button
             type="button"
             onClick={onRemove}
-            className="text-red-600 hover:text-red-800 ml-1"
+            disabled={disabled}
+            className={`text-red-600 ${
+              disabled
+                ? "cursor-not-allowed text-red-300"
+                : "hover:text-red-800"
+            }`}
             title="Remove question"
           >
             ✕
@@ -220,6 +260,11 @@ export function PaperBuilderClient({
   const [questions, setQuestions] = useState<Question[]>([]);
   const [title, setTitle] = useState<string>("Worksheet");
   const [showAnswers, setShowAnswers] = useState<boolean>(false);
+  const [positionInputs, setPositionInputs] = useState<Record<number, string>>(
+    {},
+  );
+  const [pendingOrderChange, setPendingOrderChange] =
+    useState<PendingOrderChange | null>(null);
 
   // Loading states
   const [loadingQuestions, setLoadingQuestions] = useState(false);
@@ -338,6 +383,14 @@ export function PaperBuilderClient({
     });
   }, [maxSelectableCount]);
 
+  useEffect(() => {
+    const nextInputs: Record<number, string> = {};
+    questions.forEach((question, index) => {
+      nextInputs[question.id] = String(index + 1);
+    });
+    setPositionInputs(nextInputs);
+  }, [questions]);
+
   const handleGenerateQuestions = async () => {
     if (appendMode && remainingSlots <= 0) {
       setError("Maximum 30 questions per worksheet.");
@@ -440,30 +493,6 @@ export function PaperBuilderClient({
     setQuestions((prev) => prev.filter((q) => q.id !== questionId));
   };
 
-  const handleMoveUp = (index: number) => {
-    if (index === 0) return; // Already at the top
-    setQuestions((prev) => {
-      const newQuestions = [...prev];
-      [newQuestions[index - 1], newQuestions[index]] = [
-        newQuestions[index],
-        newQuestions[index - 1],
-      ];
-      return newQuestions;
-    });
-  };
-
-  const handleMoveDown = (index: number) => {
-    setQuestions((prev) => {
-      if (index === prev.length - 1) return prev; // Already at the bottom
-      const newQuestions = [...prev];
-      [newQuestions[index], newQuestions[index + 1]] = [
-        newQuestions[index + 1],
-        newQuestions[index],
-      ];
-      return newQuestions;
-    });
-  };
-
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -472,15 +501,86 @@ export function PaperBuilderClient({
   );
 
   const handleDragEnd = (event: DragEndEvent) => {
+    if (pendingOrderChange) return;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    setQuestions((prev) => {
-      const oldIndex = prev.findIndex((q) => q.id === active.id);
-      const newIndex = prev.findIndex((q) => q.id === over.id);
-      if (oldIndex < 0 || newIndex < 0) return prev;
-      return arrayMove(prev, oldIndex, newIndex);
+    const oldIndex = questions.findIndex((q) => q.id === active.id);
+    const newIndex = questions.findIndex((q) => q.id === over.id);
+    if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return;
+
+    const next = arrayMove(questions, oldIndex, newIndex);
+    setQuestions(next);
+    setPendingOrderChange({
+      id: questions[oldIndex]?.id ?? Number(active.id),
+      fromIndex: oldIndex,
+      toIndex: newIndex,
+      source: "drag",
+      previousQuestions: questions,
+      nextQuestions: next,
     });
+  };
+
+  const handlePositionChange = (id: number, value: string) => {
+    setPositionInputs((prev) => ({ ...prev, [id]: value }));
+  };
+
+  const handlePositionCommit = (id: number) => {
+    if (pendingOrderChange) return;
+    const total = questions.length;
+    const rawValue = positionInputs[id];
+    const parsed = Number.parseInt(rawValue ?? "", 10);
+    if (!Number.isFinite(parsed) || total === 0) {
+      setPositionInputs((prev) => ({
+        ...prev,
+        [id]: String(questions.findIndex((q) => q.id === id) + 1),
+      }));
+      return;
+    }
+
+    const clampedPosition = Math.min(total, Math.max(1, parsed));
+    const nextIndex = clampedPosition - 1;
+    const currentIndex = questions.findIndex((q) => q.id === id);
+    if (currentIndex === -1) return;
+    if (currentIndex === nextIndex) {
+      setPositionInputs((prev) => ({
+        ...prev,
+        [id]: String(currentIndex + 1),
+      }));
+      return;
+    }
+
+    const next = arrayMove(questions, currentIndex, nextIndex);
+    setQuestions(next);
+    setPendingOrderChange({
+      id,
+      fromIndex: currentIndex,
+      toIndex: nextIndex,
+      source: "input",
+      previousQuestions: questions,
+      nextQuestions: next,
+    });
+  };
+
+  const pendingOrderDetails = useMemo(() => {
+    if (!pendingOrderChange) return null;
+    return {
+      id: pendingOrderChange.id,
+      fromPosition: pendingOrderChange.fromIndex + 1,
+      toPosition: pendingOrderChange.toIndex + 1,
+      source: pendingOrderChange.source,
+    };
+  }, [pendingOrderChange]);
+
+  const handleCancelOrderChange = () => {
+    if (!pendingOrderChange) return;
+    setQuestions(pendingOrderChange.previousQuestions);
+    setPendingOrderChange(null);
+  };
+
+  const handleConfirmOrderChange = () => {
+    if (!pendingOrderChange) return;
+    setPendingOrderChange(null);
   };
 
   const handleGeneratePaper = async () => {
@@ -572,7 +672,7 @@ export function PaperBuilderClient({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
           {/* Left Column: Question Selection */}
           <div className="space-y-6">
             <div className="bg-white shadow rounded-lg p-6">
@@ -935,11 +1035,12 @@ export function PaperBuilderClient({
                           key={question.id}
                           question={question}
                           index={index}
-                          isFirst={index === 0}
-                          isLast={index === questions.length - 1}
-                          onMoveUp={() => handleMoveUp(index)}
-                          onMoveDown={() => handleMoveDown(index)}
+                          total={questions.length}
+                          positionValue={positionInputs[question.id] ?? ""}
+                          onPositionChange={handlePositionChange}
+                          onPositionCommit={handlePositionCommit}
                           onRemove={() => handleRemoveQuestion(question.id)}
+                          disabled={pendingOrderChange != null}
                         />
                       ))}
                     </div>
@@ -950,6 +1051,43 @@ export function PaperBuilderClient({
           </div>
         </div>
       </div>
+
+      <Dialog
+        open={pendingOrderChange != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleCancelOrderChange();
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm order change</DialogTitle>
+            <DialogDescription>
+              {pendingOrderDetails
+                ? `Move question #${pendingOrderDetails.id} from position ${pendingOrderDetails.fromPosition} to ${pendingOrderDetails.toPosition}?`
+                : "The selected question is no longer available."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              type="button"
+              className="h-9 rounded-md border border-slate-200 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              onClick={handleCancelOrderChange}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="h-9 rounded-md bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800"
+              onClick={handleConfirmOrderChange}
+              disabled={!pendingOrderDetails}
+            >
+              Confirm
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
