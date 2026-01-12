@@ -226,6 +226,7 @@ export function QuestionCard({
   const showQuestionOnly = showQuestion && !showAnswer;
   const showAnswerOnly = showAnswer && !showQuestion;
   const showBoth = showQuestion && showAnswer;
+  const useSplitQuestionLayout = hasMultiQuestionImages && showQuestionOnly;
   // TODO: Re-enable question tag pills (Paper/Topic) once the tag UX is finalized.
   const showQuestionTags = false;
 
@@ -494,7 +495,7 @@ export function QuestionCard({
                             No question images.
                           </p>
                         </div>
-                      ) : hasMultiQuestionImages ? (
+                      ) : useSplitQuestionLayout ? (
                         <div className="absolute inset-0 flex h-full flex-col overflow-hidden md:flex-row">
                           <div className="flex-1 overflow-auto border-b border-slate-200 p-4 md:border-b-0 md:border-r">
                             {primaryQuestionImage ? (
