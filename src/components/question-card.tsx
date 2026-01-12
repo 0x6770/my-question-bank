@@ -153,10 +153,10 @@ export function QuestionCard({
     }
   };
 
-  const handleViewAnswer = async () => {
+  const requestAnswerView = async () => {
     if (!userId) {
       setAnswerError("Please log in to view answers.");
-      return;
+      return false;
     }
     setViewingAnswer(true);
     setAnswerError(null);
@@ -180,24 +180,38 @@ export function QuestionCard({
         } else {
           setAnswerError(data.message || "Failed to view answer");
         }
-        return;
+        return false;
       }
 
       // Quota check passed, show answer
       setIsAnswerViewed(true);
-      // Open fullscreen mode and switch to Answer view
-      setFullscreenOpen(true);
-      setShowQuestion(false);
-      setShowAnswer(true);
+      return true;
     } catch (error) {
       setAnswerError(
         error instanceof Error
           ? error.message
           : "Failed to view answer, please try again later.",
       );
+      return false;
     } finally {
       setViewingAnswer(false);
     }
+  };
+
+  const handleViewAnswer = async () => {
+    const ok = await requestAnswerView();
+    if (!ok) return;
+    // Open fullscreen mode and switch to Answer view
+    setFullscreenOpen(true);
+    setShowQuestion(false);
+    setShowAnswer(true);
+  };
+
+  const handleFullscreenAnswerView = async (mode: "answer" | "both") => {
+    const ok = await requestAnswerView();
+    if (!ok) return;
+    setShowQuestion(mode === "both");
+    setShowAnswer(true);
   };
 
   const meta = difficultyMeta[question.difficulty] ?? {
@@ -446,8 +460,7 @@ export function QuestionCard({
                   <button
                     type="button"
                     onClick={() => {
-                      setShowQuestion(false);
-                      setShowAnswer(true);
+                      void handleFullscreenAnswerView("answer");
                     }}
                     className={`px-3 py-1 font-medium transition ${showAnswerOnly ? "bg-sky-100 text-slate-900" : "bg-white text-slate-600 hover:bg-slate-50"} border-r border-slate-200`}
                   >
@@ -456,8 +469,7 @@ export function QuestionCard({
                   <button
                     type="button"
                     onClick={() => {
-                      setShowQuestion(true);
-                      setShowAnswer(true);
+                      void handleFullscreenAnswerView("both");
                     }}
                     className={`px-3 py-1 font-medium transition ${showBoth ? "bg-sky-100 text-slate-900" : "bg-white text-slate-600 hover:bg-slate-50"}`}
                   >
