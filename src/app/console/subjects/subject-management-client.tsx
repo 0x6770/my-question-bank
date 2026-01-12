@@ -1252,14 +1252,22 @@ export function SubjectManagement({
                 : modalState?.type === "editSubject"
                   ? "Rename Subject"
                   : modalState?.type === "createChapter"
-                    ? "New Chapter"
+                    ? modalState.parentChapterId == null
+                      ? "New Chapter"
+                      : "New Sub-chapter"
                     : "Rename Chapter"
         }
         description={
           modalState?.type === "createSubject" && modalState.board
             ? `Exam board: ${modalState.board.name}`
             : modalState?.type === "createChapter" && modalState.subject
-              ? `Subject: ${modalState.subject.name}`
+              ? modalState.parentChapterId == null
+                ? `Subject: ${modalState.subject.name}`
+                : `Subject: ${modalState.subject.name} / Chapter: ${
+                    chapters.find(
+                      (chapter) => chapter.id === modalState.parentChapterId,
+                    )?.name ?? `Chapter #${modalState.parentChapterId}`
+                  }`
               : undefined
         }
         onClose={closeModal}
