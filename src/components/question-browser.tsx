@@ -582,13 +582,13 @@ export function QuestionBrowser({
             )}
             <div className="min-w-0 space-y-2">
               <p className="text-sm font-semibold text-slate-700">Difficulty</p>
-              <div className="flex min-h-11 w-full flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 shadow-sm">
+              <div className="flex min-h-11 w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
                 {difficultyOptions.map((item) => {
                   const checked = difficultySelections.has(item.value);
                   return (
                     <label
                       key={item.value}
-                      className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                      className="inline-flex items-center gap-2 rounded-md px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-100"
                     >
                       <input
                         type="checkbox"
@@ -605,7 +605,7 @@ export function QuestionBrowser({
 
             <div className="min-w-0 space-y-2">
               <p className="text-sm font-semibold text-slate-700">Status</p>
-              <div className="flex min-h-11 w-full flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 shadow-sm">
+              <div className="flex min-h-11 w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
                 {[
                   { key: "all", label: "All" },
                   { key: "completed", label: "Completed" },
@@ -614,7 +614,7 @@ export function QuestionBrowser({
                 ].map((item) => (
                   <label
                     key={item.key}
-                    className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-sm font-medium ${
+                    className={`inline-flex items-center gap-2 rounded-md px-2 py-1 text-sm font-medium ${
                       statusFilter === item.key
                         ? "bg-sky-50 text-slate-900"
                         : "text-slate-700 hover:bg-slate-100"
