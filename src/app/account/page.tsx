@@ -80,14 +80,8 @@ export default async function AccountPage() {
         difficulty,
         calculator,
         created_at,
-        chapter_id,
         question_images ( id, storage_path, position ),
-        answer_images ( id, storage_path, position ),
-        chapters (
-          name,
-          subject_id,
-          subjects ( name )
-        )
+        answer_images ( id, storage_path, position )
       `,
       )
       .in("id", questionIds)
@@ -96,6 +90,25 @@ export default async function AccountPage() {
     if (error || !data) {
       questionError = error?.message ?? "Failed to load bookmarked questions.";
     } else {
+      const { data: questionChapters, error: chapterError } = await supabase
+        .from("question_chapters")
+        .select(
+          `
+          question_id,
+          chapters (
+            id,
+            name,
+            subject_id,
+            subjects ( name )
+          )
+        `,
+        )
+        .in("question_id", questionIds);
+
+      if (chapterError) {
+        questionError = chapterError.message ?? "Failed to load chapters.";
+      }
+
       const questionImagePaths = new Set<string>();
       const answerImagePaths = new Set<string>();
 
@@ -134,32 +147,61 @@ export default async function AccountPage() {
         }
       });
 
-      questions = data.map((row) => ({
-        id: row.id,
-        marks: row.marks ?? 0,
-        difficulty: row.difficulty ?? 1,
-        calculator: row.calculator ?? false,
-        createdAt: row.created_at,
-        bookmarkedAt: bookmarkedAtMap.get(row.id) ?? null,
-        chapterId: row.chapter_id ?? null,
-        chapterName: row.chapters?.[0]?.name ?? null,
-        subjectId: row.chapters?.[0]?.subject_id ?? null,
-        subjectName: row.chapters?.[0]?.subjects?.[0]?.name ?? null,
-        images: (row.question_images ?? [])
-          .slice()
-          .sort((a, b) => a.position - b.position)
-          .map((img) => ({
-            ...img,
-            signedUrl: questionSignedMap[img.storage_path] ?? null,
-          })),
-        answerImages: (row.answer_images ?? [])
-          .slice()
-          .sort((a, b) => a.position - b.position)
-          .map((img) => ({
-            ...img,
-            signedUrl: answerSignedMap[img.storage_path] ?? null,
-          })),
-      }));
+      const questionChapterMap = new Map<
+        number,
+        {
+          id: number;
+          name: string;
+          subjectId: number | null;
+          subjectName: string | null;
+        }
+      >();
+
+      (questionChapters ?? []).forEach((row) => {
+        const chapter = Array.isArray(row.chapters)
+          ? row.chapters[0]
+          : row.chapters;
+        if (!chapter || questionChapterMap.has(row.question_id)) return;
+        const subject = Array.isArray(chapter.subjects)
+          ? chapter.subjects[0]
+          : chapter.subjects;
+        questionChapterMap.set(row.question_id, {
+          id: chapter.id,
+          name: chapter.name,
+          subjectId: chapter.subject_id ?? null,
+          subjectName: subject?.name ?? null,
+        });
+      });
+
+      questions = data.map((row) => {
+        const chapter = questionChapterMap.get(row.id) ?? null;
+        return {
+          id: row.id,
+          marks: row.marks ?? 0,
+          difficulty: row.difficulty ?? 1,
+          calculator: row.calculator ?? false,
+          createdAt: row.created_at,
+          bookmarkedAt: bookmarkedAtMap.get(row.id) ?? null,
+          chapterId: chapter?.id ?? null,
+          chapterName: chapter?.name ?? null,
+          subjectId: chapter?.subjectId ?? null,
+          subjectName: chapter?.subjectName ?? null,
+          images: (row.question_images ?? [])
+            .slice()
+            .sort((a, b) => a.position - b.position)
+            .map((img) => ({
+              ...img,
+              signedUrl: questionSignedMap[img.storage_path] ?? null,
+            })),
+          answerImages: (row.answer_images ?? [])
+            .slice()
+            .sort((a, b) => a.position - b.position)
+            .map((img) => ({
+              ...img,
+              signedUrl: answerSignedMap[img.storage_path] ?? null,
+            })),
+        };
+      });
     }
   }
 
