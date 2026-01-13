@@ -5,14 +5,15 @@ Features
 - 读取 data/ 下的 exams/subjects/tags/questions NDJSON（路径可自定义）
 - 显示 exam / subject 列表、题目数量、常见年份
 - 交互式选择 subject（默认导出全部题目）并生成 bulk_import.py 期望的 JSON 数组
-- 自动把远程图片 URL 映射为本地 images/ 下的文件名（已下载好的情况）
+- 自动把远程图片 URL 映射为本地 test/png 目录下的文件名（已下载好的情况）
 - 可选：提供章节名称 -> ID 的映射文件（JSON），否则保留 chapterName 并将 chapterId 置为 null
 
 用法示例
   python scripts/convert_backup.py \
     --env_file .env.development \
     --data-dir data \
-    --images-dir images \
+    --test-dir images/test \
+    --png-dir images/png \
     --output data/converted.json
 
 交互流程
@@ -32,8 +33,10 @@ import re
 import sys
 import threading
 import uuid
+from bisect import bisect_left, bisect_right
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -76,10 +79,14 @@ def create_progress() -> Progress:
         TimeElapsedColumn(),
         TextColumn("•"),
         TimeRemainingColumn(),
-        TextColumn("[green]{task.fields[success]}✓[/green] [red]{task.fields[failed]}✗[/red]"),
+        TextColumn(
+            "[green]{task.fields[success]}✓[/green] [red]{task.fields[failed]}✗[/red]"
+        ),
         console=console,
         refresh_per_second=10,
     )
+
+
 # 默认题库类型（可通过命令行参数覆盖）
 DEFAULT_QUESTION_BANK = "questionbank"
 LEGACY_QUESTION_BANK_FOR_QUESTIONS = 0
@@ -88,6 +95,7 @@ LEGACY_QUESTION_BANK_FOR_QUESTIONS = 0
 # === Error Reporting System ===
 class ErrorType(str, Enum):
     """错误类型枚举"""
+
     MISSING_IMAGE = "missing_image"
     CHAPTER_MAPPING_FAILED = "chapter_mapping_failed"
     INVALID_DATA_FORMAT = "invalid_data_format"
@@ -99,6 +107,7 @@ class ErrorType(str, Enum):
 
 class ConversionError:
     """转换错误详情"""
+
     def __init__(
         self,
         source_id: str,
@@ -126,6 +135,7 @@ class ConversionError:
 
 class ErrorReport:
     """错误报告容器"""
+
     def __init__(self):
         self.errors: List[ConversionError] = []
         self.total_processed = 0
@@ -166,12 +176,16 @@ class ErrorReport:
             encoding="utf-8",
         )
         logger.info(f"错误报告已保存到: {output_path}")
-        logger.info(f"处理统计: 总数={self.total_processed}, 成功={self.successful}, 失败={self.failed}")
+        logger.info(
+            f"处理统计: 总数={self.total_processed}, 成功={self.successful}, 失败={self.failed}"
+        )
 
 
 def resolve_question_bank_value(client, preferred: str, fallback: int) -> str | int:
     try:
-        client.table("exam_boards").select("id").eq("question_bank", preferred).limit(1).execute()
+        client.table("exam_boards").select("id").eq("question_bank", preferred).limit(
+            1
+        ).execute()
         return preferred
     except Exception as exc:  # noqa: BLE001
         message = None
@@ -284,23 +298,20 @@ def load_chapter_map(path: Path | None) -> dict[str, int]:
         return {}
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
-        raise ValueError(
-            'Chapter map must be a JSON object: {"Chapter Name": 123}')
+        raise ValueError('Chapter map must be a JSON object: {"Chapter Name": 123}')
     result: dict[str, int] = {}
     for key, value in data.items():
         try:
             result[str(key)] = int(value)
         except Exception as exc:  # noqa: BLE001
-            raise ValueError(
-                f"Invalid chapter id for {key!r}: {value!r}") from exc
+            raise ValueError(f"Invalid chapter id for {key!r}: {value!r}") from exc
     return result
 
 
 class Settings(BaseSettings):
     supabase_url: str | None = Field(
         None,
-        validation_alias=AliasChoices(
-            "SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"),
+        validation_alias=AliasChoices("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"),
     )
     supabase_secret_key: str | None = Field(
         None,
@@ -310,8 +321,7 @@ class Settings(BaseSettings):
     )
     question_bucket: str = Field(
         "question_images",
-        validation_alias=AliasChoices(
-            "QUESTION_BUCKET", "QUESTION_IMAGES_BUCKET"),
+        validation_alias=AliasChoices("QUESTION_BUCKET", "QUESTION_IMAGES_BUCKET"),
     )
     answer_bucket: str = Field(
         "answer_images",
@@ -351,8 +361,7 @@ def summarize_questions(questions_path: Path) -> dict[str, dict[str, Any]]:
 
 
 def read_questions_with_stats_and_cache(
-    questions_path: Path,
-    subjects_to_cache: Optional[set[str]] = None
+    questions_path: Path, subjects_to_cache: Optional[set[str]] = None
 ) -> tuple[dict[str, dict[str, Any]], dict[str, list[dict[str, Any]]]]:
     """Read questions file once, returning stats and optionally cached data.
 
@@ -400,18 +409,23 @@ def read_questions_with_stats_and_cache(
 
 def print_subjects(options: list[dict[str, Any]]):
     logger.info("\n可选科目 (按 exam / subject 排序)：")
-    header = f"{'序号':<4} {'Exam':<15} {'Subject':<40} {'题目数':>7} {'年份(Top5)':<30}"
+    header = (
+        f"{'序号':<4} {'Exam':<15} {'Subject':<40} {'题目数':>7} {'年份(Top5)':<30}"
+    )
     logger.info(header)
     logger.info("-" * len(header))
     for idx, opt in enumerate(options, start=1):
-        top_years = ", ".join(
-            f"{y}({c})" for y, c in opt["years"].most_common(5)) or "-"
+        top_years = (
+            ", ".join(f"{y}({c})" for y, c in opt["years"].most_common(5)) or "-"
+        )
         logger.info(
             f"{idx:<4} {opt['exam']:<15} {opt['name']:<40} {opt['total']:<7} {top_years:<30}"
         )
 
 
-def choose_subjects_interactive(options: list[dict[str, Any]], enable_multi: bool = True) -> List[dict[str, Any]]:
+def choose_subjects_interactive(
+    options: list[dict[str, Any]], enable_multi: bool = True
+) -> List[dict[str, Any]]:
     """Interactive subject selection using inquirer (arrow keys + spacebar)
 
     Args:
@@ -428,10 +442,15 @@ def choose_subjects_interactive(options: list[dict[str, Any]], enable_multi: boo
     inquirer_choices = []
     for idx, opt in enumerate(options, start=1):
         # Create a compact display string
-        exam = opt.get('exam', '-')[:12]
-        name = opt.get('name', '(unknown)')[:30]
-        total = opt.get('total', 0)
-        top_years = ", ".join(f"{y}({c})" for y, c in opt.get('years', Counter()).most_common(3)) or "-"
+        exam = opt.get("exam", "-")[:12]
+        name = opt.get("name", "(unknown)")[:30]
+        total = opt.get("total", 0)
+        top_years = (
+            ", ".join(
+                f"{y}({c})" for y, c in opt.get("years", Counter()).most_common(3)
+            )
+            or "-"
+        )
         display = f"{idx:>2}. {exam:<12} {name:<30} {total:>4}题  {top_years:<20}"
         inquirer_choices.append((display, idx - 1))  # store display and index
 
@@ -439,7 +458,7 @@ def choose_subjects_interactive(options: list[dict[str, Any]], enable_multi: boo
         # Multi-selection with checkboxes
         questions = [
             inquirer.Checkbox(
-                'selected',
+                "selected",
                 message="选择科目 (空格键选择/取消，回车确认)",
                 choices=[choice[0] for choice in inquirer_choices],
                 default=[],
@@ -448,11 +467,11 @@ def choose_subjects_interactive(options: list[dict[str, Any]], enable_multi: boo
 
         try:
             answers = inquirer.prompt(questions)
-            if not answers or 'selected' not in answers:
+            if not answers or "selected" not in answers:
                 logger.info("已取消选择。")
                 return []
 
-            selected_displays = answers['selected']
+            selected_displays = answers["selected"]
             # Map back to original options
             selected_indices = []
             for display in selected_displays:
@@ -464,7 +483,9 @@ def choose_subjects_interactive(options: list[dict[str, Any]], enable_multi: boo
 
             selected = [options[i] for i in selected_indices]
             if selected:
-                logger.info(f"已选择 {len(selected)} 个科目: {', '.join(s['name'] for s in selected)}")
+                logger.info(
+                    f"已选择 {len(selected)} 个科目: {', '.join(s['name'] for s in selected)}"
+                )
             return selected
 
         except KeyboardInterrupt:
@@ -478,7 +499,7 @@ def choose_subjects_interactive(options: list[dict[str, Any]], enable_multi: boo
         # Single selection with list
         questions = [
             inquirer.List(
-                'selected',
+                "selected",
                 message="选择科目 (上下键选择，回车确认)",
                 choices=[choice[0] for choice in inquirer_choices],
             )
@@ -486,11 +507,11 @@ def choose_subjects_interactive(options: list[dict[str, Any]], enable_multi: boo
 
         try:
             answers = inquirer.prompt(questions)
-            if not answers or 'selected' not in answers:
+            if not answers or "selected" not in answers:
                 logger.info("已取消选择。")
                 return []
 
-            selected_display = answers['selected']
+            selected_display = answers["selected"]
             # Find the selected index
             selected_index = None
             for idx, (disp, opt_idx) in enumerate(inquirer_choices):
@@ -513,7 +534,9 @@ def choose_subjects_interactive(options: list[dict[str, Any]], enable_multi: boo
             return choose_multiple_options_text(options, enable_multi)
 
 
-def choose_multiple_options_text(options: list[dict[str, Any]], enable_multi: bool = True) -> List[dict[str, Any]]:
+def choose_multiple_options_text(
+    options: list[dict[str, Any]], enable_multi: bool = True
+) -> List[dict[str, Any]]:
     """Text-based subject selection (fallback when inquirer fails)
 
     Args:
@@ -564,8 +587,10 @@ def choose_multiple_options_text(options: list[dict[str, Any]], enable_multi: bo
                 logger.warning("没有有效的选择")
                 continue
 
-            selected = [options[i-1] for i in selected_indices]
-            logger.info(f"已选择 {len(selected)} 个subject: {', '.join(s['name'] for s in selected)}")
+            selected = [options[i - 1] for i in selected_indices]
+            logger.info(
+                f"已选择 {len(selected)} 个subject: {', '.join(s['name'] for s in selected)}"
+            )
             return selected
 
         except ValueError as e:
@@ -625,7 +650,9 @@ def parse_multi_selection(input_str: str, max_option: int) -> List[int]:
     return sorted(selected_indices)
 
 
-def choose_multiple_options(options: list[dict[str, Any]], enable_multi: bool = True) -> List[dict[str, Any]]:
+def choose_multiple_options(
+    options: list[dict[str, Any]], enable_multi: bool = True
+) -> List[dict[str, Any]]:
     """交互式选择多个subject（使用现代化界面：上下键+空格键）
 
     Args:
@@ -639,22 +666,98 @@ def choose_multiple_options(options: list[dict[str, Any]], enable_multi: bool = 
     return choose_subjects_interactive(options, enable_multi)
 
 
-def find_image_path(relative_path: Path | None, filename: str, root: Path) -> Path | None:
-    """Return an existing image path under the given root (prefers the URL subpath)."""
-    if relative_path:
-        candidate = root / relative_path
-        if candidate.exists():
-            return candidate
-    candidate = root / filename
-    if candidate.exists():
-        return candidate
+PAIR_TIME_DIFF_MS = 60_000
+
+_IMAGE_INDEX_CACHE: dict[Path, tuple[list[int], list["ImageFile"]]] = {}
+
+
+@dataclass(frozen=True)
+class ImageFile:
+    path: Path
+    timestamp: int
+
+
+def extract_timestamp(filename: str) -> Optional[int]:
+    matches = re.findall(r"\d{8,}", filename)
+    if not matches:
+        return None
+    for length in (13, 10):
+        for match in reversed(matches):
+            if len(match) == length:
+                return int(match)
+    max_len = max(len(match) for match in matches)
+    for match in reversed(matches):
+        if len(match) == max_len:
+            return int(match)
     return None
+
+
+def build_image_index(image_dir: Path) -> tuple[list[int], list[ImageFile]]:
+    if not image_dir.exists():
+        return ([], [])
+    files: list[ImageFile] = []
+    for file_path in image_dir.iterdir():
+        if not file_path.is_file():
+            continue
+        timestamp = extract_timestamp(file_path.name)
+        if timestamp is None:
+            continue
+        files.append(ImageFile(path=file_path, timestamp=timestamp))
+    files.sort(key=lambda x: x.timestamp)
+    timestamps = [file.timestamp for file in files]
+    return (timestamps, files)
+
+
+def get_image_index(image_dir: Path) -> tuple[list[int], list[ImageFile]]:
+    cached = _IMAGE_INDEX_CACHE.get(image_dir)
+    if cached is None:
+        cached = build_image_index(image_dir)
+        _IMAGE_INDEX_CACHE[image_dir] = cached
+    return cached
+
+
+def find_best_match(image_dir: Path, target_ts: int) -> Path | None:
+    timestamps, files = get_image_index(image_dir)
+    if not files:
+        return None
+    lower = target_ts - PAIR_TIME_DIFF_MS
+    upper = target_ts + PAIR_TIME_DIFF_MS
+    left = bisect_left(timestamps, lower)
+    right = bisect_right(timestamps, upper)
+    if left == right:
+        return None
+    best = min(
+        files[left:right],
+        key=lambda file: (abs(target_ts - file.timestamp), file.timestamp),
+    )
+    logger.info(
+        f"Found best match for ({target_ts = }): {best.path = } {best.timestamp = }"
+    )
+    return best.path
+
+
+def resolve_test_image(filename: str, test_dir: Path) -> Path | None:
+    if not filename:
+        return None
+    candidate = test_dir / filename
+    return candidate if candidate.exists() else None
+
+
+def resolve_png_match_for_avif(url: str, png_dir: Path) -> Path | None:
+    if not url:
+        return None
+    target_ts = extract_timestamp(url)
+    logger.info(f"Looking for best match from avif url timestamp {target_ts}")
+    if target_ts is None:
+        return None
+    return find_best_match(png_dir, target_ts)
 
 
 def extract_images(
     blocks: list[dict[str, Any]],
     kind: str,
-    image_root: Path,
+    test_dir: Path,
+    png_dir: Path,
     missing: set[str],
 ) -> tuple[Optional[list[str]], list[str]]:
     """提取图片路径，如果图片缺失则返回None和缺失文件列表"""
@@ -667,24 +770,40 @@ def extract_images(
         url = file_info.get("url") or ""
         url_path = Path(urlparse(url).path)
         filename = url_path.name
-        relative_path = Path(str(url_path).lstrip("/")) if filename else None
+        logger.info(f"Processing image: url={url}, filename={filename}")
         if not filename:
             continue
-        found = find_image_path(relative_path, filename, image_root)
+        if "test" not in url_path.parts and "avif" not in url_path.parts:
+            marker = f"unsupported_path:{url_path}"
+            logger.error(
+                "Unsupported image url path (expect /test/ or /avif/): %s",
+                url,
+            )
+            missing.add(marker)
+            missing_local.append(marker)
+            continue
+        if "test" in url_path.parts:
+            found = resolve_test_image(filename, test_dir)
+        elif "avif" in url_path.parts:
+            found = resolve_png_match_for_avif(url, png_dir)
+        else:
+            found = None
         if found:
             paths.append(str(found))
         else:
-            fallback = relative_path or Path(filename)
+            fallback = Path(filename)
             missing.add(str(fallback))
             missing_local.append(str(fallback))
-            # 不添加不存在的路径，返回None表示图片缺失
-            return None, missing_local
+    if missing_local:
+        # 不添加不存在的路径，返回None表示图片缺失
+        return None, missing_local
     return paths, missing_local
 
 
 def build_output_item(
     obj: dict[str, Any],
-    image_root: Path,
+    test_dir: Path,
+    png_dir: Path,
     chapter_map: dict[str, int],
     missing_images: set[str],
     error_report: Optional[ErrorReport] = None,
@@ -700,7 +819,9 @@ def build_output_item(
     sub_chapter_name: str | None = None
 
     if raw_chapter_name is not None:
-        parent_chapter_name, sub_chapter_name = parse_chapter_name(str(raw_chapter_name))
+        parent_chapter_name, sub_chapter_name = parse_chapter_name(
+            str(raw_chapter_name)
+        )
 
         # 查找 chapter_id 的优先级：
         # 1. 完整的 parent@sub 格式
@@ -718,9 +839,11 @@ def build_output_item(
 
     blocks = obj.get("blocks", []) or []
     question_images, missing_q = extract_images(
-        blocks, "image", image_root, missing_images)
+        blocks, "image", test_dir, png_dir, missing_images
+    )
     answer_images, missing_a = extract_images(
-        blocks, "imageAnswer", image_root, missing_images)
+        blocks, "imageAnswer", test_dir, png_dir, missing_images
+    )
 
     missing_local = missing_q + missing_a
 
@@ -733,18 +856,24 @@ def build_output_item(
                 missing_filenames.extend(missing_q)
             if answer_images is None:
                 missing_filenames.extend(missing_a)
-            error_report.add_error(ConversionError(
-                source_id=obj.get("_id", "unknown"),
-                error_type=ErrorType.MISSING_IMAGE,
-                message=f"Missing images: {', '.join(missing_filenames)}",
-                context={
-                    "missing_question_images": missing_q if question_images is None else [],
-                    "missing_answer_images": missing_a if answer_images is None else [],
-                    "subject_id": obj.get("subject"),
-                    "subject_name": subject_name,
-                    "exam": obj.get("exam"),
-                },
-            ))
+            error_report.add_error(
+                ConversionError(
+                    source_id=obj.get("_id", "unknown"),
+                    error_type=ErrorType.MISSING_IMAGE,
+                    message=f"Missing images: {', '.join(missing_filenames)}",
+                    context={
+                        "missing_question_images": missing_q
+                        if question_images is None
+                        else [],
+                        "missing_answer_images": missing_a
+                        if answer_images is None
+                        else [],
+                        "subject_id": obj.get("subject"),
+                        "subject_name": subject_name,
+                        "exam": obj.get("exam"),
+                    },
+                )
+            )
         return None, missing_local
 
     # 章节映射失败处理（不阻止转换，但记录警告）
@@ -753,19 +882,21 @@ def build_output_item(
         missing_local.append(marker)
         missing_images.add(marker)
         if error_report:
-            error_report.add_error(ConversionError(
-                source_id=obj.get("_id", "unknown"),
-                error_type=ErrorType.CHAPTER_MAPPING_FAILED,
-                message=f"Chapter '{raw_chapter_name}' not found in mapping",
-                context={
-                    "raw_chapter_name": raw_chapter_name,
-                    "parent_chapter": parent_chapter_name,
-                    "sub_chapter": sub_chapter_name,
-                    "available_chapters": list(chapter_map.keys()),
-                    "subject_id": obj.get("subject"),
-                    "subject_name": subject_name,
-                },
-            ))
+            error_report.add_error(
+                ConversionError(
+                    source_id=obj.get("_id", "unknown"),
+                    error_type=ErrorType.CHAPTER_MAPPING_FAILED,
+                    message=f"Chapter '{raw_chapter_name}' not found in mapping",
+                    context={
+                        "raw_chapter_name": raw_chapter_name,
+                        "parent_chapter": parent_chapter_name,
+                        "sub_chapter": sub_chapter_name,
+                        "available_chapters": list(chapter_map.keys()),
+                        "subject_id": obj.get("subject"),
+                        "subject_name": subject_name,
+                    },
+                )
+            )
         # 注意：这里不返回None，允许chapterId为null继续转换
 
     # 支持多个 chapter_ids（数组格式）
@@ -779,7 +910,7 @@ def build_output_item(
         "difficulty": obj.get("difficulty") or 1,
         "calculator": bool(obj.get("calculator", True)),
         "questionImages": question_images or [],  # 确保是列表
-        "answerImages": answer_images or [],      # 确保是列表
+        "answerImages": answer_images or [],  # 确保是列表
         "meta": {
             "year": properties.get("year"),
             "paper": properties.get("paper"),
@@ -813,7 +944,8 @@ def count_questions_for_subject(questions_path: Path, subject_id: str) -> int:
 def convert_subject(
     subject_id: str,
     questions_path: Path,
-    image_root: Path,
+    test_dir: Path,
+    png_dir: Path,
     chapter_map: dict[str, int],
     limit: int | None,
     error_report: Optional[ErrorReport] = None,
@@ -833,7 +965,9 @@ def convert_subject(
     success_count = 0
     failed_count = 0
 
-    def process_questions(task_id: TaskID | None = None, progress: Progress | None = None):
+    def process_questions(
+        task_id: TaskID | None = None, progress: Progress | None = None
+    ):
         nonlocal success_count, failed_count
         with questions_path.open("r", encoding="utf-8") as f:
             for line in f:
@@ -849,7 +983,8 @@ def convert_subject(
 
                 item, missing_local = build_output_item(
                     obj,
-                    image_root=image_root,
+                    test_dir=test_dir,
+                    png_dir=png_dir,
                     chapter_map=chapter_map,
                     missing_images=missing_images,
                     error_report=error_report,
@@ -862,7 +997,12 @@ def convert_subject(
                 if missing_local:
                     failed_count += 1
                     if progress and task_id is not None:
-                        progress.update(task_id, advance=1, success=success_count, failed=failed_count)
+                        progress.update(
+                            task_id,
+                            advance=1,
+                            success=success_count,
+                            failed=failed_count,
+                        )
                     continue
 
                 if item:
@@ -872,7 +1012,9 @@ def convert_subject(
                         error_report.add_success()
 
                 if progress and task_id is not None:
-                    progress.update(task_id, advance=1, success=success_count, failed=failed_count)
+                    progress.update(
+                        task_id, advance=1, success=success_count, failed=failed_count
+                    )
 
     if show_progress and total_count > 0:
         with create_progress() as progress:
@@ -884,7 +1026,9 @@ def convert_subject(
             )
             process_questions(task_id, progress)
         if error_report:
-            console.print(f"[green]转换完成:[/green] {len(results)} 成功, {error_report.failed} 失败")
+            console.print(
+                f"[green]转换完成:[/green] {len(results)} 成功, {error_report.failed} 失败"
+            )
     else:
         process_questions()
         if error_report:
@@ -896,7 +1040,8 @@ def convert_subject(
 def convert_subject_from_cache(
     subject_id: str,
     cached_questions: list[dict[str, Any]],
-    image_root: Path,
+    test_dir: Path,
+    png_dir: Path,
     chapter_map: dict[str, int],
     limit: int | None,
     error_report: Optional[ErrorReport] = None,
@@ -908,7 +1053,8 @@ def convert_subject_from_cache(
     Args:
         subject_id: Subject ID (for logging)
         cached_questions: List of question objects from cache
-        image_root: Root directory for images
+        test_dir: Directory containing test files
+        png_dir: Directory containing png files
         chapter_map: Chapter name to ID mapping
         limit: Maximum number of questions to convert
         error_report: Optional error report object
@@ -938,7 +1084,8 @@ def convert_subject_from_cache(
 
             item, missing_local = build_output_item(
                 obj,
-                image_root=image_root,
+                test_dir=test_dir,
+                png_dir=png_dir,
                 chapter_map=chapter_map,
                 missing_images=missing_images,
                 error_report=error_report,
@@ -951,7 +1098,9 @@ def convert_subject_from_cache(
             if missing_local:
                 failed_count += 1
                 if progress and task_id is not None:
-                    progress.update(task_id, advance=1, success=success_count, failed=failed_count)
+                    progress.update(
+                        task_id, advance=1, success=success_count, failed=failed_count
+                    )
                 continue
 
             if item:
@@ -961,7 +1110,9 @@ def convert_subject_from_cache(
                     error_report.add_success()
 
             if progress and task_id is not None:
-                progress.update(task_id, advance=1, success=success_count, failed=failed_count)
+                progress.update(
+                    task_id, advance=1, success=success_count, failed=failed_count
+                )
 
     if show_progress and total_count > 0:
         with create_progress() as progress:
@@ -973,7 +1124,9 @@ def convert_subject_from_cache(
             )
             process_cached(task_id, progress)
         if error_report:
-            console.print(f"[green]转换完成:[/green] {len(results)} 成功, {error_report.failed} 失败")
+            console.print(
+                f"[green]转换完成:[/green] {len(results)} 成功, {error_report.failed} 失败"
+            )
     else:
         process_cached()
         if error_report:
@@ -994,7 +1147,7 @@ def upload_file(supabase, bucket: str, file_path: Path) -> str:
     for ext in known_exts:
         idx = lowered.find(ext)
         if idx != -1:
-            ext_guess = raw_name[idx: idx + len(ext)]
+            ext_guess = raw_name[idx : idx + len(ext)]
             break
     if ext_guess is None:
         name_for_guess = raw_name.split("-", 1)[0]
@@ -1064,12 +1217,16 @@ def upload_items(
         if not chapter_ids or len(chapter_ids) == 0:
             error_msg = "上传需要至少一个 chapterId，请提供 --chapter-map 或使用 --sync-db 生成映射。"
             if error_report:
-                error_report.add_error(ConversionError(
-                    source_id=item.get("meta", {}).get("sourceId", f"item_{item_idx}"),
-                    error_type=ErrorType.VALIDATION_ERROR,
-                    message=error_msg,
-                    context={"item_index": item_idx, "chapter_ids": chapter_ids},
-                ))
+                error_report.add_error(
+                    ConversionError(
+                        source_id=item.get("meta", {}).get(
+                            "sourceId", f"item_{item_idx}"
+                        ),
+                        error_type=ErrorType.VALIDATION_ERROR,
+                        message=error_msg,
+                        context={"item_index": item_idx, "chapter_ids": chapter_ids},
+                    )
+                )
                 with lock:
                     failed += 1
                 return False
@@ -1091,7 +1248,7 @@ def upload_items(
                     "p_difficulty": difficulty,
                     "p_calculator": calculator,
                     "p_chapter_ids": chapter_ids,
-                }
+                },
             ).execute()
 
             q_error = getattr(q_resp, "error", None)
@@ -1111,7 +1268,8 @@ def upload_items(
             try:
                 for idx, img_path in enumerate(q_imgs):
                     storage_path = upload_file(
-                        supabase, question_bucket, Path(img_path))
+                        supabase, question_bucket, Path(img_path)
+                    )
                     uploaded_q.append(
                         {
                             "question_id": q_id,
@@ -1122,8 +1280,7 @@ def upload_items(
                 insert_images(supabase, "question_images", uploaded_q)
 
                 for idx, img_path in enumerate(a_imgs):
-                    storage_path = upload_file(
-                        supabase, answer_bucket, Path(img_path))
+                    storage_path = upload_file(supabase, answer_bucket, Path(img_path))
                     uploaded_a.append(
                         {
                             "question_id": q_id,
@@ -1136,20 +1293,26 @@ def upload_items(
             except Exception as exc:  # noqa: BLE001
                 supabase.table("questions").delete().eq("id", q_id).execute()
                 if verbose:
-                    console.print(f"[red]题目 #{q_id} 上传失败，已删除 question 记录。错误: {exc}[/red]")
+                    console.print(
+                        f"[red]题目 #{q_id} 上传失败，已删除 question 记录。错误: {exc}[/red]"
+                    )
 
                 if error_report:
-                    error_report.add_error(ConversionError(
-                        source_id=item.get("meta", {}).get("sourceId", f"item_{item_idx}"),
-                        error_type=ErrorType.UPLOAD_FAILED,
-                        message=f"上传失败: {exc}",
-                        context={
-                            "question_id": q_id,
-                            "chapter_ids": chapter_ids,
-                            "item_index": item_idx,
-                            "error_details": str(exc),
-                        },
-                    ))
+                    error_report.add_error(
+                        ConversionError(
+                            source_id=item.get("meta", {}).get(
+                                "sourceId", f"item_{item_idx}"
+                            ),
+                            error_type=ErrorType.UPLOAD_FAILED,
+                            message=f"上传失败: {exc}",
+                            context={
+                                "question_id": q_id,
+                                "chapter_ids": chapter_ids,
+                                "item_index": item_idx,
+                                "error_details": str(exc),
+                            },
+                        )
+                    )
                 raise
 
             with lock:
@@ -1162,16 +1325,20 @@ def upload_items(
 
         except Exception as exc:  # noqa: BLE001
             if error_report:
-                error_report.add_error(ConversionError(
-                    source_id=item.get("meta", {}).get("sourceId", f"item_{item_idx}"),
-                    error_type=ErrorType.UPLOAD_FAILED,
-                    message=f"上传失败: {exc}",
-                    context={
-                        "item_index": item_idx,
-                        "chapter_ids": chapter_ids,
-                        "error_details": str(exc),
-                    },
-                ))
+                error_report.add_error(
+                    ConversionError(
+                        source_id=item.get("meta", {}).get(
+                            "sourceId", f"item_{item_idx}"
+                        ),
+                        error_type=ErrorType.UPLOAD_FAILED,
+                        message=f"上传失败: {exc}",
+                        context={
+                            "item_index": item_idx,
+                            "chapter_ids": chapter_ids,
+                            "error_details": str(exc),
+                        },
+                    )
+                )
                 with lock:
                     failed += 1
                 if verbose:
@@ -1183,7 +1350,9 @@ def upload_items(
     # 并发上传
     if show_progress and len(items) > 0:
         with create_progress() as progress:
-            task_id = progress.add_task("上传题目", total=len(items), success=0, failed=0)
+            task_id = progress.add_task(
+                "上传题目", total=len(items), success=0, failed=0
+            )
 
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # 提交所有任务
@@ -1202,7 +1371,9 @@ def upload_items(
 
                     # 更新进度条（线程安全）
                     with lock:
-                        progress.update(task_id, advance=1, success=success, failed=failed)
+                        progress.update(
+                            task_id, advance=1, success=success, failed=failed
+                        )
 
         console.print(f"[green]上传完成:[/green] {success}/{len(items)} 成功")
     else:
@@ -1225,14 +1396,28 @@ def upload_items(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Convert legacy NDJSON backup into bulk_import input")
-    parser.add_argument("--data-dir", type=Path,
-                        default=Path("data"), help="目录，包含备份 NDJSON 文件")
+        description="Convert legacy NDJSON backup into bulk_import input"
+    )
     parser.add_argument(
-        "--images-dir",
+        "--data-dir", type=Path, default=Path("data"), help="目录，包含备份 NDJSON 文件"
+    )
+    parser.add_argument(
+        "--test-dir",
         type=Path,
-        default=Path("images"),
-        help="图片根目录（按 URL 子路径查找，默认 images/）",
+        default=Path("images/test"),
+        help="test 图片目录（默认 images/test）",
+    )
+    parser.add_argument(
+        "--png-dir",
+        type=Path,
+        default=Path("images/png"),
+        help="png 图片目录（默认 images/png）",
+    )
+    parser.add_argument(
+        "--max-diff",
+        type=int,
+        default=PAIR_TIME_DIFF_MS,
+        help="匹配图片时间差上限(毫秒)，默认 60000",
     )
     parser.add_argument(
         "--sync-db",
@@ -1262,10 +1447,18 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="导出题目数量（默认全部）",
     )
-    parser.add_argument("--output", type=Path, default=None,
-                        help="输出路径（默认 data/converted_<subject>.json）")
-    parser.add_argument("--chapter-map", type=Path,
-                        default=None, help="可选：章节名称到 ID 的映射 JSON 文件")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="输出路径（默认 data/converted_<subject>.json）",
+    )
+    parser.add_argument(
+        "--chapter-map",
+        type=Path,
+        default=None,
+        help="可选：章节名称到 ID 的映射 JSON 文件",
+    )
     parser.add_argument(
         "--env-file",
         "--env_file",
@@ -1293,7 +1486,8 @@ def parse_args() -> argparse.Namespace:
         help="禁用进度条显示",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         default=False,
         help="显示详细日志（包括 HTTP 请求）",
@@ -1344,7 +1538,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-workers",
         type=int,
-        default=5,
+        default=1,
         help="并发上传线程数（默认：5）",
     )
     return parser.parse_args()
@@ -1352,6 +1546,8 @@ def parse_args() -> argparse.Namespace:
 
 def main():
     args = parse_args()
+    global PAIR_TIME_DIFF_MS
+    PAIR_TIME_DIFF_MS = args.max_diff
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
@@ -1362,7 +1558,9 @@ def main():
         logging.getLogger("hpack").setLevel(logging.WARNING)
 
     if args.env_file is None:
-        logger.error("Error: Missing --env_file, please specify the environment variable file path.")
+        logger.error(
+            "Error: Missing --env_file, please specify the environment variable file path."
+        )
         return
     env_file = args.env_file
     settings = Settings(  # type: ignore[call-arg]
@@ -1371,16 +1569,25 @@ def main():
     )
 
     data_dir: Path = args.data_dir
-    image_root: Path = args.images_dir
+    test_dir: Path = args.test_dir
+    png_dir: Path = args.png_dir
     supabase_url = settings.supabase_url
     supabase_key = settings.supabase_secret_key
     question_bucket = args.question_bucket or settings.question_bucket
     answer_bucket = args.answer_bucket or settings.answer_bucket
     # Determine file paths
-    default_questions = data_dir / "database_export-myquestionbank-9gcfve68fe4574af-questions.json"
-    default_exams = data_dir / "database_export-myquestionbank-9gcfve68fe4574af-exams.json"
-    default_subjects = data_dir / "database_export-myquestionbank-9gcfve68fe4574af-subjects.json"
-    default_tags = data_dir / "database_export-myquestionbank-9gcfve68fe4574af-tags.json"
+    default_questions = (
+        data_dir / "database_export-myquestionbank-9gcfve68fe4574af-questions.json"
+    )
+    default_exams = (
+        data_dir / "database_export-myquestionbank-9gcfve68fe4574af-exams.json"
+    )
+    default_subjects = (
+        data_dir / "database_export-myquestionbank-9gcfve68fe4574af-subjects.json"
+    )
+    default_tags = (
+        data_dir / "database_export-myquestionbank-9gcfve68fe4574af-tags.json"
+    )
 
     questions_path = args.questions_file or default_questions
     exams_path = args.exams_file or default_exams
@@ -1408,7 +1615,8 @@ def main():
     for subj in subjects:
         subject_id = subj.get("_id")
         st = stats.get(
-            subject_id, {"total": 0, "years": Counter(), "chapters": Counter()})
+            subject_id, {"total": 0, "years": Counter(), "chapters": Counter()}
+        )
         exam_name = exam_by_id.get(subj.get("exam", ""), {}).get("name", "-")
         subject_rows.append(
             {
@@ -1442,8 +1650,7 @@ def main():
     else:
         # 交互式选择
         chosen_subjects = choose_multiple_options(
-            subject_rows,
-            enable_multi=args.multi_select
+            subject_rows, enable_multi=args.multi_select
         )
 
     if not chosen_subjects:
@@ -1453,7 +1660,9 @@ def main():
     # 记录选择结果
     logger.info("\n已选择科目：")
     for i, chosen in enumerate(chosen_subjects, start=1):
-        logger.info(f"  {i}. {chosen['exam']} - {chosen['name']} (ID: {chosen['id']}, 题目数: {chosen['total']})")
+        logger.info(
+            f"  {i}. {chosen['exam']} - {chosen['name']} (ID: {chosen['id']}, 题目数: {chosen['total']})"
+        )
 
     # 为所有选中的subject获取配置信息
     subject_configs = []
@@ -1477,48 +1686,49 @@ def main():
                 opts = tag.get("options") or []
                 tag_years = flatten_options(opts)
 
-        subject_configs.append({
-            "subject_id": subject_id,
-            "subject_name": subject_name,
-            "exam_name": exam_name,
-            "tag_chapters": tag_chapters,
-            "tag_years": tag_years,
-            "chapter_hierarchy": chapter_hierarchy,  # 新增：章节层级关系
-            "total_questions": chosen["total"],
-            "chapters": chosen["chapters"],
-            "years": chosen["years"],
-            "chapter_map": {},  # 每个subject独立的chapter映射
-        })
+        subject_configs.append(
+            {
+                "subject_id": subject_id,
+                "subject_name": subject_name,
+                "exam_name": exam_name,
+                "tag_chapters": tag_chapters,
+                "tag_years": tag_years,
+                "chapter_hierarchy": chapter_hierarchy,  # 新增：章节层级关系
+                "total_questions": chosen["total"],
+                "chapters": chosen["chapters"],
+                "years": chosen["years"],
+                "chapter_map": {},  # 每个subject独立的chapter映射
+            }
+        )
 
     # 显示每个subject的配置信息
     for config in subject_configs:
         logger.info(f"\n科目: {config['exam_name']} - {config['subject_name']}")
-        if config['tag_chapters']:
+        if config["tag_chapters"]:
             logger.info(
                 f"  章节（来自tags，{len(config['tag_chapters'])}个）: "
                 f"{', '.join(config['tag_chapters'][:5])}"
                 f"{' …' if len(config['tag_chapters']) > 5 else ''}"
             )
         else:
-            top_chapters = ", ".join(
-                name for name, _ in config['chapters'].most_common(5)) or "-"
+            top_chapters = (
+                ", ".join(name for name, _ in config["chapters"].most_common(5)) or "-"
+            )
             logger.info(f"  章节（从题目提取）: {top_chapters}")
 
-        if config['tag_years']:
+        if config["tag_years"]:
             logger.info(f"  年份（来自tags）: {', '.join(config['tag_years'][:5])}")
         else:
-            top_years = ", ".join(
-                year for year, _ in config['years'].most_common(5)) or "-"
+            top_years = (
+                ", ".join(year for year, _ in config["years"].most_common(5)) or "-"
+            )
             logger.info(f"  年份（从题目提取）: {top_years}")
 
     # 询问转换限制（对所有subject适用）
     total_questions = sum(c["total_questions"] for c in subject_configs)
-    default_limit_label = (
-        str(args.count) if args.count else f"全部({total_questions})"
-    )
+    default_limit_label = str(args.count) if args.count else f"全部({total_questions})"
     try:
-        limit_raw = input(
-            f"要导出的总题目数量? [默认 {default_limit_label}]: ").strip()
+        limit_raw = input(f"要导出的总题目数量? [默认 {default_limit_label}]: ").strip()
         limit = int(limit_raw) if limit_raw else args.count
     except ValueError:
         logger.warning("输入非法，使用默认全部。")
@@ -1528,9 +1738,14 @@ def main():
     output_path: Path | None = None
     if args.generate_converted_json:
         if len(subject_configs) == 1 and not args.output:
-            default_output = data_dir / f"converted_{slugify(subject_configs[0]['subject_name'])}.json"
+            default_output = (
+                data_dir
+                / f"converted_{slugify(subject_configs[0]['subject_name'])}.json"
+            )
         else:
-            default_output = args.output or (data_dir / "converted_multiple_subjects.json")
+            default_output = args.output or (
+                data_dir / "converted_multiple_subjects.json"
+            )
 
         output_path_raw = input(f"输出文件路径? [默认 {default_output}]: ").strip()
         output_path = Path(output_path_raw) if output_path_raw else Path(default_output)
@@ -1552,8 +1767,11 @@ def main():
             logger.error("Error: Missing Supabase configuration, cannot sync database.")
             return
 
-        consent = input(
-            "允许在 Supabase 创建缺失的 exam/subject/chapters 吗? (y/N): ").strip().lower()
+        consent = (
+            input("允许在 Supabase 创建缺失的 exam/subject/chapters 吗? (y/N): ")
+            .strip()
+            .lower()
+        )
         if consent not in {"y", "yes"}:
             logger.info("已取消同步数据库。")
             return
@@ -1586,9 +1804,9 @@ def main():
                     .eq("question_bank", question_bank_value)
                     .execute()
                 )
-                data = getattr(exam_resp, 'data', [])
+                data = getattr(exam_resp, "data", [])
                 if data and isinstance(data, list) and len(data) > 0:
-                    exam_id = data[0].get('id')
+                    exam_id = data[0].get("id")
                 else:
                     exam_id = None
                 if not exam_id:
@@ -1596,27 +1814,40 @@ def main():
                         insert_exam = (
                             supabase_client.table("exam_boards")
                             .insert(
-                                {"name": exam_name, "question_bank": question_bank_value},
+                                {
+                                    "name": exam_name,
+                                    "question_bank": question_bank_value,
+                                },
                             )
                             .execute()
                         )
-                        insert_data = getattr(insert_exam, 'data', [])
-                        if insert_data and isinstance(insert_data, list) and len(insert_data) > 0:
-                            exam_id = insert_data[0].get('id')
+                        insert_data = getattr(insert_exam, "data", [])
+                        if (
+                            insert_data
+                            and isinstance(insert_data, list)
+                            and len(insert_data) > 0
+                        ):
+                            exam_id = insert_data[0].get("id")
                         else:
                             exam_id = None
                         if exam_id:
-                            logger.info(f"已创建 exam_board: {exam_name} (id={exam_id})")
+                            logger.info(
+                                f"已创建 exam_board: {exam_name} (id={exam_id})"
+                            )
                         else:
-                            raise RuntimeError(f"Failed to create exam_board: {exam_name}, no data returned")
+                            raise RuntimeError(
+                                f"Failed to create exam_board: {exam_name}, no data returned"
+                            )
                     except Exception as exc:  # noqa: BLE001
                         logger.error(f"Error: Failed to create exam_board: {exc}")
-                        error_report.add_error(ConversionError(
-                            source_id=f"exam_{exam_name}",
-                            error_type=ErrorType.DATABASE_ERROR,
-                            message=f"Failed to create exam_board: {exc}",
-                            context={"exam_name": exam_name},
-                        ))
+                        error_report.add_error(
+                            ConversionError(
+                                source_id=f"exam_{exam_name}",
+                                error_type=ErrorType.DATABASE_ERROR,
+                                message=f"Failed to create exam_board: {exc}",
+                                context={"exam_name": exam_name},
+                            )
+                        )
                         continue
                 else:
                     logger.info(f"已存在 exam_board: {exam_name} (id={exam_id})")
@@ -1632,9 +1863,13 @@ def main():
                 .eq("exam_board_id", exam_id)
                 .execute()
             )
-            subject_data = getattr(subject_resp, 'data', [])
-            if subject_data and isinstance(subject_data, list) and len(subject_data) > 0:
-                subject_db_id = subject_data[0].get('id')
+            subject_data = getattr(subject_resp, "data", [])
+            if (
+                subject_data
+                and isinstance(subject_data, list)
+                and len(subject_data) > 0
+            ):
+                subject_db_id = subject_data[0].get("id")
             else:
                 subject_db_id = None
             if not subject_db_id:
@@ -1644,23 +1879,33 @@ def main():
                         .insert({"name": subject_name, "exam_board_id": exam_id})
                         .execute()
                     )
-                    insert_subj_data = getattr(insert_subj, 'data', [])
-                    if insert_subj_data and isinstance(insert_subj_data, list) and len(insert_subj_data) > 0:
-                        subject_db_id = insert_subj_data[0].get('id')
+                    insert_subj_data = getattr(insert_subj, "data", [])
+                    if (
+                        insert_subj_data
+                        and isinstance(insert_subj_data, list)
+                        and len(insert_subj_data) > 0
+                    ):
+                        subject_db_id = insert_subj_data[0].get("id")
                     else:
                         subject_db_id = None
                     if subject_db_id:
-                        logger.info(f"已创建 subject: {subject_name} (id={subject_db_id})")
+                        logger.info(
+                            f"已创建 subject: {subject_name} (id={subject_db_id})"
+                        )
                     else:
-                        raise RuntimeError(f"Failed to create subject: {subject_name}, no data returned")
+                        raise RuntimeError(
+                            f"Failed to create subject: {subject_name}, no data returned"
+                        )
                 except Exception as exc:  # noqa: BLE001
                     logger.error(f"Error: Failed to create subject: {exc}")
-                    error_report.add_error(ConversionError(
-                        source_id=subject_id,
-                        error_type=ErrorType.DATABASE_ERROR,
-                        message=f"Failed to create subject: {exc}",
-                        context={"subject_name": subject_name, "exam_id": exam_id},
-                    ))
+                    error_report.add_error(
+                        ConversionError(
+                            source_id=subject_id,
+                            error_type=ErrorType.DATABASE_ERROR,
+                            message=f"Failed to create subject: {exc}",
+                            context={"subject_name": subject_name, "exam_id": exam_id},
+                        )
+                    )
                     continue
             else:
                 logger.info(f"已存在 subject: {subject_name} (id={subject_db_id})")
@@ -1668,7 +1913,9 @@ def main():
             subject_db_mappings[subject_id] = subject_db_id
 
             # 处理chapters（使用 tags 中的层级关系）
-            chapter_hierarchy: dict[str, list[str]] = config.get("chapter_hierarchy", {})
+            chapter_hierarchy: dict[str, list[str]] = config.get(
+                "chapter_hierarchy", {}
+            )
 
             # 从 hierarchy 提取 parent 和 sub-chapter
             parent_chapters: list[str] = chapter_hierarchy.get("", [])  # 顶级章节
@@ -1686,7 +1933,7 @@ def main():
                 .eq("subject_id", subject_db_id)
                 .execute()
             )
-            chapter_data = getattr(chapter_resp, 'data', [])
+            chapter_data = getattr(chapter_resp, "data", [])
             if not isinstance(chapter_data, list):
                 chapter_data = []
 
@@ -1695,10 +1942,10 @@ def main():
             existing_by_id: dict[int, str] = {}
             for row in chapter_data:
                 if isinstance(row, dict):
-                    name = row.get('name')
-                    row_id = row.get('id')
-                    position = row.get('position', 0)
-                    parent_id = row.get('parent_chapter_id')
+                    name = row.get("name")
+                    row_id = row.get("id")
+                    position = row.get("position", 0)
+                    parent_id = row.get("parent_chapter_id")
                     if isinstance(position, (int, float)):
                         position = int(position)
                     else:
@@ -1725,7 +1972,9 @@ def main():
                 logger.info(f"已存在 {len(existing_by_name)} 个章节")
 
             # 第一步：创建缺失的 parent chapters（保持原始顺序）
-            missing_parents = [p for p in parent_chapters if p and p not in existing_by_name]
+            missing_parents = [
+                p for p in parent_chapters if p and p not in existing_by_name
+            ]
             if missing_parents:
                 if existing_by_name:
                     max_pos = max(pos for _, pos, _ in existing_by_name.values())
@@ -1733,21 +1982,27 @@ def main():
                 else:
                     next_pos = 1
                 to_insert = [
-                    {"name": name, "subject_id": subject_db_id,
-                        "position": idx + next_pos, "parent_chapter_id": None}
+                    {
+                        "name": name,
+                        "subject_id": subject_db_id,
+                        "position": idx + next_pos,
+                        "parent_chapter_id": None,
+                    }
                     for idx, name in enumerate(missing_parents)
                 ]
                 try:
-                    insert_resp = supabase_client.table("chapters").insert(to_insert).execute()
-                    insert_data = getattr(insert_resp, 'data', [])
+                    insert_resp = (
+                        supabase_client.table("chapters").insert(to_insert).execute()
+                    )
+                    insert_data = getattr(insert_resp, "data", [])
                     if not isinstance(insert_data, list):
                         insert_data = []
 
                     for row in insert_data:
                         if isinstance(row, dict):
-                            name = row.get('name')
-                            row_id = row.get('id')
-                            pos = row.get('position', 0)
+                            name = row.get("name")
+                            row_id = row.get("id")
+                            pos = row.get("position", 0)
                             if name is not None and row_id is not None:
                                 existing_by_name[str(name)] = (int(row_id), pos, None)
                                 existing_by_id[int(row_id)] = str(name)
@@ -1756,22 +2011,27 @@ def main():
                     logger.info(f"已创建 {len(missing_parents)} 个父章节")
                 except Exception as exc:  # noqa: BLE001
                     logger.error(f"Error: Failed to create parent chapters: {exc}")
-                    error_report.add_error(ConversionError(
-                        source_id=subject_id,
-                        error_type=ErrorType.DATABASE_ERROR,
-                        message=f"Failed to create parent chapters: {exc}",
-                        context={
-                            "subject_name": subject_name,
-                            "missing_parents": missing_parents,
-                        },
-                    ))
+                    error_report.add_error(
+                        ConversionError(
+                            source_id=subject_id,
+                            error_type=ErrorType.DATABASE_ERROR,
+                            message=f"Failed to create parent chapters: {exc}",
+                            context={
+                                "subject_name": subject_name,
+                                "missing_parents": missing_parents,
+                            },
+                        )
+                    )
                     continue
 
             # 第二步：创建缺失的 sub-chapters
             missing_subs: list[tuple[str, str]] = []  # (sub_name, parent_name)
             for sub_name, parent_name in sub_chapters.items():
                 full_key = get_chapter_key(parent_name, sub_name)
-                if full_key not in local_chapter_map and sub_name not in existing_by_name:
+                if (
+                    full_key not in local_chapter_map
+                    and sub_name not in existing_by_name
+                ):
                     missing_subs.append((sub_name, parent_name))
 
             if missing_subs:
@@ -1787,45 +2047,61 @@ def main():
                     parent_info = existing_by_name.get(parent_name)
                     parent_id = parent_info[0] if parent_info else None
                     if parent_id is None:
-                        logger.warning(f"无法找到父章节 '{parent_name}'，跳过子章节 '{sub_name}'")
+                        logger.warning(
+                            f"无法找到父章节 '{parent_name}'，跳过子章节 '{sub_name}'"
+                        )
                         continue
-                    to_insert.append({
-                        "name": sub_name,
-                        "subject_id": subject_db_id,
-                        "position": idx + next_pos,
-                        "parent_chapter_id": parent_id,
-                    })
+                    to_insert.append(
+                        {
+                            "name": sub_name,
+                            "subject_id": subject_db_id,
+                            "position": idx + next_pos,
+                            "parent_chapter_id": parent_id,
+                        }
+                    )
 
                 if to_insert:
                     try:
-                        insert_resp = supabase_client.table("chapters").insert(to_insert).execute()
-                        insert_data = getattr(insert_resp, 'data', [])
+                        insert_resp = (
+                            supabase_client.table("chapters")
+                            .insert(to_insert)
+                            .execute()
+                        )
+                        insert_data = getattr(insert_resp, "data", [])
                         if not isinstance(insert_data, list):
                             insert_data = []
 
                         for row in insert_data:
                             if isinstance(row, dict):
-                                name = row.get('name')
-                                row_id = row.get('id')
-                                parent_id = row.get('parent_chapter_id')
-                                if name is not None and row_id is not None and parent_id is not None:
+                                name = row.get("name")
+                                row_id = row.get("id")
+                                parent_id = row.get("parent_chapter_id")
+                                if (
+                                    name is not None
+                                    and row_id is not None
+                                    and parent_id is not None
+                                ):
                                     parent_name = existing_by_id.get(parent_id, "")
                                     full_key = get_chapter_key(parent_name, str(name))
                                     local_chapter_map[full_key] = int(row_id)
                                     local_chapter_map[str(name)] = int(row_id)
-                                    logger.info(f"已创建子章节: {name} (id={row_id}, parent={parent_name})")
+                                    logger.info(
+                                        f"已创建子章节: {name} (id={row_id}, parent={parent_name})"
+                                    )
                         logger.info(f"已创建 {len(to_insert)} 个子章节")
                     except Exception as exc:  # noqa: BLE001
                         logger.error(f"Error: Failed to create sub-chapters: {exc}")
-                        error_report.add_error(ConversionError(
-                            source_id=subject_id,
-                            error_type=ErrorType.DATABASE_ERROR,
-                            message=f"Failed to create sub-chapters: {exc}",
-                            context={
-                                "subject_name": subject_name,
-                                "missing_subs": [s[0] for s in missing_subs],
-                            },
-                        ))
+                        error_report.add_error(
+                            ConversionError(
+                                source_id=subject_id,
+                                error_type=ErrorType.DATABASE_ERROR,
+                                message=f"Failed to create sub-chapters: {exc}",
+                                context={
+                                    "subject_name": subject_name,
+                                    "missing_subs": [s[0] for s in missing_subs],
+                                },
+                            )
+                        )
                         continue
 
             # 将本subject的chapter_map存储到subject_configs中
@@ -1833,10 +2109,14 @@ def main():
             for cfg in subject_configs:
                 if cfg["subject_id"] == subject_id:
                     # 确保类型兼容：local_chapter_map -> dict[str, int]
-                    cfg["chapter_map"] = {str(k): int(v) for k, v in local_chapter_map.items()}
+                    cfg["chapter_map"] = {
+                        str(k): int(v) for k, v in local_chapter_map.items()
+                    }
                     break
 
-        logger.info(f"数据库同步完成: {len(subject_db_mappings)}/{len(subject_configs)} 个subject同步成功")
+        logger.info(
+            f"数据库同步完成: {len(subject_db_mappings)}/{len(subject_configs)} 个subject同步成功"
+        )
 
     # 转换所有选中的subject
     logger.info("\n开始转换题目（仅保留图片齐全的题目）...")
@@ -1861,7 +2141,8 @@ def main():
         converted, missing_images = convert_subject(
             subject_id=subject_id,
             questions_path=questions_path,
-            image_root=image_root,
+            test_dir=test_dir,
+            png_dir=png_dir,
             chapter_map=subject_chapter_map,
             limit=limit,  # 注意：这里的limit是所有subject共享的
             error_report=error_report,
@@ -1883,8 +2164,9 @@ def main():
     # 保存转换结果（如果启用）
     if args.generate_converted_json and output_path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(
-            all_converted, indent=2, ensure_ascii=False), encoding="utf-8")
+        output_path.write_text(
+            json.dumps(all_converted, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
         logger.info(f"已写入 {len(all_converted)} 条题目到 {output_path}")
     else:
         logger.info(f"转换完成: {len(all_converted)} 个题目（未生成中间JSON文件）")
@@ -1893,36 +2175,50 @@ def main():
     if args.upload:
         if supabase_client is None:
             logger.error(
-                "Error: Upload requires Supabase configuration, please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.")
+                "Error: Upload requires Supabase configuration, please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY."
+            )
             return
 
         # 检查是否有缺少 chapterIds 的题目
         missing_chapter_items = [
-            i for i, item in enumerate(all_converted)
+            i
+            for i, item in enumerate(all_converted)
             if not item.get("chapterIds") or len(item.get("chapterIds", [])) == 0
         ]
         if missing_chapter_items:
-            logger.warning(f"Warning: {len(missing_chapter_items)} questions are missing chapterIds")
+            logger.warning(
+                f"Warning: {len(missing_chapter_items)} questions are missing chapterIds"
+            )
             if error_report:
                 for idx in missing_chapter_items[:10]:  # 只报告前10个
                     item = all_converted[idx]
-                    error_report.add_error(ConversionError(
-                        source_id=item.get("meta", {}).get("sourceId", f"item_{idx+1}"),
-                        error_type=ErrorType.VALIDATION_ERROR,
-                        message="Missing chapterIds, cannot upload",
-                        context={"item_index": idx + 1, "subject": item.get("meta", {}).get("subject")},
-                    ))
+                    error_report.add_error(
+                        ConversionError(
+                            source_id=item.get("meta", {}).get(
+                                "sourceId", f"item_{idx + 1}"
+                            ),
+                            error_type=ErrorType.VALIDATION_ERROR,
+                            message="Missing chapterIds, cannot upload",
+                            context={
+                                "item_index": idx + 1,
+                                "subject": item.get("meta", {}).get("subject"),
+                            },
+                        )
+                    )
             logger.warning("These questions will be skipped during upload")
             # 过滤掉缺少 chapterIds 的题目
             upload_items_list = [
-                item for item in all_converted
+                item
+                for item in all_converted
                 if item.get("chapterIds") and len(item.get("chapterIds", [])) > 0
             ]
         else:
             upload_items_list = all_converted
 
         if not upload_items_list:
-            logger.error("Error: No valid questions to upload (all questions are missing chapterIds)")
+            logger.error(
+                "Error: No valid questions to upload (all questions are missing chapterIds)"
+            )
             return
 
         logger.info(
@@ -1939,7 +2235,9 @@ def main():
                 verbose=args.verbose,
                 max_workers=args.max_workers,
             )
-            console.print(f"[green]上传完成:[/green] {uploaded}/{len(upload_items_list)} 条。")
+            console.print(
+                f"[green]上传完成:[/green] {uploaded}/{len(upload_items_list)} 条。"
+            )
         except Exception as exc:  # noqa: BLE001
             logger.exception(f"Error: Upload failed: {exc}")
             # 错误已通过error_report记录
@@ -1949,7 +2247,7 @@ def main():
         error_report.save(args.error_report)
 
     # 最终统计
-    logger.info(f"\n{'='*50}")
+    logger.info(f"\n{'=' * 50}")
     logger.info("转换统计:")
     logger.info(f"  处理科目数: {len(subject_configs)}")
     logger.info(f"  总题目数: {error_report.total_processed}")
@@ -1958,11 +2256,13 @@ def main():
 
     if not chapter_map and not args.sync_db:
         logger.warning(
-            "Warning: No chapter-map provided, chapterIds will be empty, only chapterName is preserved. Please map chapter IDs before import.")
+            "Warning: No chapter-map provided, chapterIds will be empty, only chapterName is preserved. Please map chapter IDs before import."
+        )
     if all_missing_images:
         missing_list = ", ".join(sorted(list(all_missing_images))[:10])  # 只显示前10个
         logger.warning(
-            f"Warning: {len(all_missing_images)} images not found in {image_root} (examples: {missing_list}...)")
+            f"Warning: {len(all_missing_images)} images not found in {test_dir} or {png_dir} (examples: {missing_list}...)"
+        )
         logger.info("(These questions have been skipped)")
     else:
         logger.info("Image/chapter check: All found.")
