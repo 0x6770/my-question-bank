@@ -134,6 +134,32 @@ type SubjectQuestionTag = {
 
 const _PAGE_SIZE = 20;
 const NONE_SELECT_VALUE = "__none__";
+const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg"]);
+const ALLOWED_IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg"]);
+
+const isAllowedImageFile = (file: File) => {
+  if (ALLOWED_IMAGE_TYPES.has(file.type)) {
+    return true;
+  }
+  const ext = file.name.split(".").pop()?.toLowerCase();
+  return !!ext && ALLOWED_IMAGE_EXTENSIONS.has(ext);
+};
+
+const splitAllowedImageFiles = (files: FileList | null) => {
+  const valid: File[] = [];
+  const invalid: File[] = [];
+  if (!files) {
+    return { valid, invalid };
+  }
+  Array.from(files).forEach((file) => {
+    if (isAllowedImageFile(file)) {
+      valid.push(file);
+    } else {
+      invalid.push(file);
+    }
+  });
+  return { valid, invalid };
+};
 
 type QuestionApiResponse = {
   questions: Array<{
@@ -998,7 +1024,18 @@ export function QuestionManagement({
   const handleAddImageFiles = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files) return;
-    const next: FormImage[] = Array.from(files).map((file) => ({
+    const { valid, invalid } = splitAllowedImageFiles(files);
+    if (invalid.length > 0) {
+      setFeedback({
+        type: "error",
+        message: "Only PNG or JPG images are allowed.",
+      });
+    }
+    if (valid.length === 0) {
+      event.target.value = "";
+      return;
+    }
+    const next: FormImage[] = valid.map((file) => ({
       id: `local-${imageIdRef.current++}`,
       url: URL.createObjectURL(file),
       file,
@@ -1028,7 +1065,18 @@ export function QuestionManagement({
   ) => {
     const files = event.target.files;
     if (!files) return;
-    const next: FormImage[] = Array.from(files).map((file) => ({
+    const { valid, invalid } = splitAllowedImageFiles(files);
+    if (invalid.length > 0) {
+      setFeedback({
+        type: "error",
+        message: "Only PNG or JPG images are allowed.",
+      });
+    }
+    if (valid.length === 0) {
+      event.target.value = "";
+      return;
+    }
+    const next: FormImage[] = valid.map((file) => ({
       id: `local-answer-${answerImageIdRef.current++}`,
       url: URL.createObjectURL(file),
       file,
@@ -1426,7 +1474,18 @@ export function QuestionManagement({
   ) => {
     const files = event.target.files;
     if (!files) return;
-    const next: FormImage[] = Array.from(files).map((file) => ({
+    const { valid, invalid } = splitAllowedImageFiles(files);
+    if (invalid.length > 0) {
+      setFeedback({
+        type: "error",
+        message: "Only PNG or JPG images are allowed.",
+      });
+    }
+    if (valid.length === 0) {
+      event.target.value = "";
+      return;
+    }
+    const next: FormImage[] = valid.map((file) => ({
       id: `edit-${editImageIdRef.current++}`,
       url: URL.createObjectURL(file),
       file,
@@ -1456,7 +1515,18 @@ export function QuestionManagement({
   ) => {
     const files = event.target.files;
     if (!files) return;
-    const next: FormImage[] = Array.from(files).map((file) => ({
+    const { valid, invalid } = splitAllowedImageFiles(files);
+    if (invalid.length > 0) {
+      setFeedback({
+        type: "error",
+        message: "Only PNG or JPG images are allowed.",
+      });
+    }
+    if (valid.length === 0) {
+      event.target.value = "";
+      return;
+    }
+    const next: FormImage[] = valid.map((file) => ({
       id: `edit-answer-${editAnswerImageIdRef.current++}`,
       url: URL.createObjectURL(file),
       file,
@@ -1982,15 +2052,15 @@ export function QuestionManagement({
                   <Input
                     id="edit-image"
                     type="file"
-                    accept="image/*"
+                    accept="image/png,image/jpeg"
                     multiple
                     onChange={handleEditAddImageFiles}
                     className="max-w-xl flex-1"
                   />
                 </div>
                 <p className="mt-1 text-xs text-slate-500">
-                  Upload question images; they display in list order and can be
-                  reordered.
+                  Upload question images (PNG/JPG only); they display in list
+                  order and can be reordered.
                 </p>
               </div>
 
@@ -2064,15 +2134,15 @@ export function QuestionManagement({
                   <Input
                     id="edit-answer-image"
                     type="file"
-                    accept="image/*"
+                    accept="image/png,image/jpeg"
                     multiple
                     onChange={handleEditAddAnswerImageFiles}
                     className="max-w-xl flex-1"
                   />
                 </div>
                 <p className="mt-1 text-xs text-slate-500">
-                  Upload answer images; they display in list order and can be
-                  reordered.
+                  Upload answer images (PNG/JPG only); they display in list
+                  order and can be reordered.
                 </p>
               </div>
 
@@ -2415,15 +2485,15 @@ export function QuestionManagement({
                       <Input
                         id="question-image"
                         type="file"
-                        accept="image/*"
+                        accept="image/png,image/jpeg"
                         multiple
                         onChange={handleAddImageFiles}
                         className="max-w-xl flex-1"
                       />
                     </div>
                     <p className="mt-1 text-xs text-slate-500">
-                      Select one or more images to upload; they display in list
-                      order and can be reordered.
+                      Select one or more images (PNG/JPG only); they display in
+                      list order and can be reordered.
                     </p>
                   </div>
 
@@ -2498,15 +2568,15 @@ export function QuestionManagement({
                       <Input
                         id="answer-image"
                         type="file"
-                        accept="image/*"
+                        accept="image/png,image/jpeg"
                         multiple
                         onChange={handleAddAnswerImageFiles}
                         className="max-w-xl flex-1"
                       />
                     </div>
                     <p className="mt-1 text-xs text-slate-500">
-                      Upload answer images; they display in list order and can
-                      be reordered.
+                      Upload answer images (PNG/JPG only); they display in list
+                      order and can be reordered.
                     </p>
                   </div>
 
