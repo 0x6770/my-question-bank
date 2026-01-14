@@ -350,7 +350,7 @@ export function PaperBuilderClient({
     ? "Select a chapter"
     : subChapters.length === 0
       ? "NA"
-      : "All subchapters";
+      : "All concepts";
 
   // Get bank param for API calls
   const bankParam = useMemo(() => {
@@ -862,7 +862,7 @@ export function PaperBuilderClient({
                     htmlFor="chapter"
                     className="block text-sm font-medium text-gray-700 mb-2"
                   >
-                    Chapter (Level 1)
+                    Chapter
                   </label>
                   <Select
                     value={chapterSelectValue}
@@ -897,7 +897,7 @@ export function PaperBuilderClient({
                     htmlFor="subchapter"
                     className="block text-sm font-medium text-gray-700 mb-2"
                   >
-                    Subchapter (Level 2)
+                    Subchapter
                   </label>
                   <Select
                     value={subChapterSelectValue}
@@ -912,7 +912,7 @@ export function PaperBuilderClient({
                       <SelectValue placeholder={subChapterPlaceholder} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All subchapters</SelectItem>
+                      <SelectItem value="all">All concepts</SelectItem>
                       {subChapters.map((chapter) => (
                         <SelectItem
                           key={chapter.id}

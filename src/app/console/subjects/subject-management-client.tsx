@@ -583,7 +583,7 @@ export function SubjectManagement({
 
   const handleDeleteChapter = async (chapter: ChapterRow) => {
     const confirmed = window.confirm(
-      `Delete chapter "${chapter.name}" and all subchapters?`,
+      `Delete chapter "${chapter.name}" and all concepts?`,
     );
     if (!confirmed) return;
     setBusyChapterId(chapter.id);
@@ -603,7 +603,7 @@ export function SubjectManagement({
     pushToast(
       "success",
       idsToDelete.length > 1
-        ? `Deleted chapter and ${idsToDelete.length - 1} subchapters`
+        ? `Deleted chapter and ${idsToDelete.length - 1} concepts`
         : "Deleted chapter",
     );
   };

@@ -3014,7 +3014,7 @@ export function QuestionManagement({
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="filter-subchapter">Subchapter</Label>
+                    <Label htmlFor="filter-concept">Concept</Label>
                     <Select
                       value={
                         filterSubChapterId != null
@@ -3036,12 +3036,12 @@ export function QuestionManagement({
                           placeholder={
                             filterChapterId == null
                               ? "Select a chapter"
-                              : "All subchapters"
+                              : "All concepts"
                           }
                         />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All subchapters</SelectItem>
+                        <SelectItem value="all">All concepts</SelectItem>
                         {visibleSubChapters.map((chapter) => (
                           <SelectItem
                             key={chapter.id}

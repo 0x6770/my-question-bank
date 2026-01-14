@@ -678,7 +678,7 @@ export function QuestionOrderManagement({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="order-chapter">Chapter / Subchapter</Label>
+              <Label htmlFor="order-chapter">Chapter / Concept</Label>
               <TreeSelect
                 data={chapterTreeData}
                 value={selectedChapterId}

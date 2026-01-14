@@ -384,7 +384,7 @@ export function QuestionBrowser({
       ? "Select a chapter"
       : visibleSubChapters.length === 0
         ? "NA"
-        : "All subchapters";
+        : "All concepts";
 
   const filtersActive =
     selectedSubjectId != null ||
@@ -413,7 +413,7 @@ export function QuestionBrowser({
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:items-end">
             <div className="space-y-2">
               <p className="text-sm font-semibold text-slate-700">
-                Exam / Subject (Level 1)
+                Exam / Subject
               </p>
               <div className="relative" ref={hierarchyRef}>
                 <button
@@ -492,9 +492,7 @@ export function QuestionBrowser({
               </div>
             </div>
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-slate-700">
-                Chapter (Level 2)
-              </p>
+              <p className="text-sm font-semibold text-slate-700">Chapter</p>
               <Select
                 value={chapterSelectValue}
                 onValueChange={(value) => {
@@ -517,9 +515,7 @@ export function QuestionBrowser({
               </Select>
             </div>
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-slate-700">
-                Subchapter (Level 2)
-              </p>
+              <p className="text-sm font-semibold text-slate-700">Concept</p>
               <Select
                 value={subChapterSelectValue}
                 onValueChange={(value) => {
@@ -532,7 +528,7 @@ export function QuestionBrowser({
                   <SelectValue placeholder={subChapterPlaceholder} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All subchapters</SelectItem>
+                  <SelectItem value="all">All concepts</SelectItem>
                   {visibleSubChapters.map((chapter) => (
                     <SelectItem key={chapter.id} value={String(chapter.id)}>
                       {chapter.name}
