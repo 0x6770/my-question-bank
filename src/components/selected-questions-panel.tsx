@@ -18,7 +18,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { ChevronDown, ChevronUp, GripVertical, Trash2, X } from "lucide-react";
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +60,10 @@ type SelectedQuestionsPanelProps = {
 function SortableQuestionItem({
   question,
   index,
+  total,
+  positionValue,
+  onPositionChange,
+  onPositionCommit,
   onRemove,
   onMoveUp,
   onMoveDown,
@@ -68,6 +72,10 @@ function SortableQuestionItem({
 }: {
   question: SelectedQuestion;
   index: number;
+  total: number;
+  positionValue: string;
+  onPositionChange: (id: number, value: string) => void;
+  onPositionCommit: (id: number) => void;
   onRemove: (id: number) => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
@@ -153,12 +161,38 @@ function SortableQuestionItem({
           )}
 
           {/* Move Up/Down Buttons */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2">
+              <Label
+                htmlFor={`question-position-${question.id}`}
+                className="text-xs font-medium text-slate-500"
+              >
+                Position
+              </Label>
+              <Input
+                id={`question-position-${question.id}`}
+                type="number"
+                min={1}
+                max={total}
+                value={positionValue}
+                onChange={(event) =>
+                  onPositionChange(question.id, event.target.value)
+                }
+                onBlur={() => onPositionCommit(question.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    onPositionCommit(question.id);
+                  }
+                }}
+                className="h-8 w-16 text-center text-xs"
+              />
+            </div>
             <button
               type="button"
               onClick={onMoveUp}
               disabled={isFirst}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
               title="Move up"
             >
               <ChevronUp className="size-3" />
@@ -168,7 +202,7 @@ function SortableQuestionItem({
               type="button"
               onClick={onMoveDown}
               disabled={isLast}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
               title="Move down"
             >
               <ChevronDown className="size-3" />
@@ -195,6 +229,17 @@ export function SelectedQuestionsPanel({
   isGenerating = false,
 }: SelectedQuestionsPanelProps) {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [positionInputs, setPositionInputs] = useState<Record<number, string>>(
+    {},
+  );
+
+  useEffect(() => {
+    const nextInputs: Record<number, string> = {};
+    selectedQuestions.forEach((question, index) => {
+      nextInputs[question.id] = String(index + 1);
+    });
+    setPositionInputs(nextInputs);
+  }, [selectedQuestions]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -223,6 +268,37 @@ export function SelectedQuestionsPanel({
     if (index < selectedQuestions.length - 1) {
       onReorder(index, index + 1);
     }
+  };
+
+  const handlePositionChange = (id: number, value: string) => {
+    setPositionInputs((prev) => ({ ...prev, [id]: value }));
+  };
+
+  const handlePositionCommit = (id: number) => {
+    const total = selectedQuestions.length;
+    const rawValue = positionInputs[id];
+    const parsed = Number.parseInt(rawValue ?? "", 10);
+    if (!Number.isFinite(parsed) || total === 0) {
+      setPositionInputs((prev) => ({
+        ...prev,
+        [id]: String(selectedQuestions.findIndex((q) => q.id === id) + 1),
+      }));
+      return;
+    }
+
+    const clampedPosition = Math.min(total, Math.max(1, parsed));
+    const nextIndex = clampedPosition - 1;
+    const currentIndex = selectedQuestions.findIndex((q) => q.id === id);
+    if (currentIndex === -1) return;
+    if (currentIndex === nextIndex) {
+      setPositionInputs((prev) => ({
+        ...prev,
+        [id]: String(currentIndex + 1),
+      }));
+      return;
+    }
+
+    onReorder(currentIndex, nextIndex);
   };
 
   const handleClearAll = () => {
@@ -322,6 +398,10 @@ export function SelectedQuestionsPanel({
                     key={question.id}
                     question={question}
                     index={index}
+                    total={questionCount}
+                    positionValue={positionInputs[question.id] ?? ""}
+                    onPositionChange={handlePositionChange}
+                    onPositionCommit={handlePositionCommit}
                     onRemove={onRemove}
                     onMoveUp={() => handleMoveUp(index)}
                     onMoveDown={() => handleMoveDown(index)}
