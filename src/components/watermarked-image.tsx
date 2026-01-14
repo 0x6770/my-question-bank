@@ -19,6 +19,8 @@ type WatermarkedImageProps = {
   watermarkPattern?: "single" | "tiled";
   /** Spacing between tiled watermarks */
   watermarkSpacing?: number;
+  watermarkPosition?: "center" | "top-left";
+  watermarkPadding?: number;
 };
 
 export function WatermarkedImage({
@@ -27,11 +29,13 @@ export function WatermarkedImage({
   className = "",
   watermarkSrc,
   watermarkText = "MyQuestionBank",
-  watermarkOpacity = 0.04,
-  watermarkRotation = -20,
-  watermarkSize = 700,
-  watermarkPattern = "tiled",
+  watermarkOpacity = 0.1,
+  watermarkRotation = 0,
+  watermarkSize = 500,
+  watermarkPattern = "single",
   watermarkSpacing = 120,
+  watermarkPosition = "top-left",
+  watermarkPadding = 24,
 }: WatermarkedImageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -51,10 +55,10 @@ export function WatermarkedImage({
       ctx.globalAlpha = watermarkOpacity;
       ctx.fillStyle = "#000000";
       ctx.font = "bold 24px Arial, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
 
       if (watermarkPattern === "tiled") {
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
         const textWidth = ctx.measureText(watermarkText).width;
         const spacingX = textWidth + 80;
         const spacingY = 72;
@@ -75,14 +79,29 @@ export function WatermarkedImage({
           }
         }
       } else {
-        ctx.translate(canvasWidth / 2, canvasHeight / 2);
+        if (watermarkPosition === "top-left") {
+          ctx.textAlign = "left";
+          ctx.textBaseline = "top";
+          ctx.translate(watermarkPadding, watermarkPadding);
+        } else {
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.translate(canvasWidth / 2, canvasHeight / 2);
+        }
         ctx.rotate((watermarkRotation * Math.PI) / 180);
         ctx.fillText(watermarkText, 0, 0);
       }
 
       ctx.restore();
     },
-    [watermarkText, watermarkOpacity, watermarkRotation, watermarkPattern],
+    [
+      watermarkText,
+      watermarkOpacity,
+      watermarkRotation,
+      watermarkPattern,
+      watermarkPosition,
+      watermarkPadding,
+    ],
   );
 
   const drawImageWatermark = useCallback(
@@ -128,7 +147,14 @@ export function WatermarkedImage({
           }
         }
       } else {
-        // Single watermark in center
+        // Single watermark
+        if (watermarkPosition === "top-left") {
+          ctx.translate(watermarkPadding, watermarkPadding);
+          ctx.rotate((watermarkRotation * Math.PI) / 180);
+          ctx.drawImage(watermarkImg, 0, 0, wmWidth, wmHeight);
+          ctx.restore();
+          return;
+        }
         ctx.translate(canvasWidth / 2, canvasHeight / 2);
         ctx.rotate((watermarkRotation * Math.PI) / 180);
         ctx.drawImage(
@@ -148,6 +174,8 @@ export function WatermarkedImage({
       watermarkSize,
       watermarkPattern,
       watermarkSpacing,
+      watermarkPosition,
+      watermarkPadding,
     ],
   );
 
