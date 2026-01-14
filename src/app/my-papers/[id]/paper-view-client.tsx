@@ -133,11 +133,16 @@ const pdfStyles = StyleSheet.create({
   questionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 6,
   },
   questionTitle: {
     fontSize: 12,
     fontWeight: 600,
+  },
+  calculatorTag: {
+    fontSize: 10,
+    color: "#6b7280",
   },
   marks: {
     fontSize: 10,
@@ -278,6 +283,9 @@ function PaperPdfDocument({
           <View key={question.id} style={pdfStyles.questionBlock}>
             <View style={pdfStyles.questionHeader}>
               <Text style={pdfStyles.questionTitle}>Question {index + 1}</Text>
+              {!question.calculator ? (
+                <Text style={pdfStyles.calculatorTag}>[No calculator]</Text>
+              ) : null}
               <Text style={pdfStyles.marks}>
                 [{question.marks} mark{question.marks !== 1 ? "s" : ""}]
               </Text>
@@ -595,17 +603,18 @@ export function PaperViewClient({ paper }: PaperViewClientProps) {
             <div key={question.id} className="page-break-inside-avoid">
               {/* Question Header */}
               <div className="mb-4">
-                <div className="flex items-baseline justify-between mb-2">
-                  <h2 className="text-lg font-semibold">
+                <div className="mb-2 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-baseline gap-2">
+                  <h2 className="text-lg font-semibold col-start-1">
                     Question {index + 1}
                   </h2>
-                  <span className="text-sm text-gray-600">
+                  {!question.calculator ? (
+                    <span className="col-start-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      [No calculator]
+                    </span>
+                  ) : null}
+                  <span className="col-start-3 justify-self-end text-sm text-gray-600">
                     [{question.marks} mark{question.marks !== 1 ? "s" : ""}]
                   </span>
-                </div>
-                <div className="text-xs text-gray-500 print:hidden">
-                  Difficulty: {question.difficulty} |{" "}
-                  {question.calculator ? "Calculator" : "No Calculator"}
                 </div>
               </div>
 
