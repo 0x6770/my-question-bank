@@ -733,7 +733,7 @@ export function PaperBuilderClient({
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="container mx-auto p-6 max-w-6xl">
-        <h1 className="text-3xl font-bold mb-6">Paper Builder</h1>
+        <h1 className="text-3xl font-bold mb-6">Worksheet Builder</h1>
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
@@ -748,8 +748,19 @@ export function PaperBuilderClient({
 
         {/* Question Bank Selector */}
         <div className="bg-white shadow rounded-lg p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4">Select Question Bank</h2>
+          <h2 className="text-lg font-semibold mb-4">Select Source</h2>
           <div className="flex gap-4">
+            <button
+              type="button"
+              onClick={() => handleQuestionBankChange(QUESTION_BANK.CHECKPOINT)}
+              className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                selectedQuestionBank === QUESTION_BANK.CHECKPOINT
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Checkpoint
+            </button>
             <button
               type="button"
               onClick={() =>
@@ -762,17 +773,6 @@ export function PaperBuilderClient({
               }`}
             >
               Questionbank
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuestionBankChange(QUESTION_BANK.CHECKPOINT)}
-              className={`px-6 py-3 rounded-lg font-medium transition-colors ${
-                selectedQuestionBank === QUESTION_BANK.CHECKPOINT
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Checkpoint
             </button>
           </div>
         </div>
