@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MultiTreeSelect } from "@/components/ui/multi-tree-select";
 import {
   Select,
   SelectContent,
@@ -34,7 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { type TreeNode, TreeSelect } from "@/components/ui/tree-select";
+import type { TreeNode } from "@/components/ui/tree-select";
 import { QUESTION_BANK, type QuestionBank } from "@/lib/question-bank";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -309,10 +310,12 @@ function buildChapterTree(
 
       if (children.length === 0) {
         // Leaf node - can be selected
+        // Include subjectId for "one chapter per subject" constraint validation
         return {
           id: chapter.id,
           label: chapter.name,
           value: chapter.id,
+          subjectId: subjectId,
         };
       } else {
         // Parent node - has children, not selectable
@@ -390,11 +393,12 @@ export function QuestionManagement({
     setPage(1);
     setEditingQuestionId(null);
     setBusyQuestionId(null);
-    setPastPaperChapterId(null);
-    setTypicalChapterId(null);
+    setPastPaperChapterIds([]);
+    setTypicalChapterIds([]);
     setMarks("");
     setDifficulty("2");
     setCalculatorAllowed(true);
+    setCalculatorBySubject({});
     setImages([]);
     setAnswerImages([]);
     setQuestionTags({});
@@ -500,15 +504,17 @@ export function QuestionManagement({
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
 
-  // Separate state for each question bank's chapter selection
-  const [pastPaperChapterId, setPastPaperChapterId] = useState<number | null>(
-    null,
-  );
-  const [typicalChapterId, setTypicalChapterId] = useState<number | null>(null);
+  // Separate state for each question bank's chapter selection (multi-select)
+  const [pastPaperChapterIds, setPastPaperChapterIds] = useState<number[]>([]);
+  const [typicalChapterIds, setTypicalChapterIds] = useState<number[]>([]);
 
   const [marks, setMarks] = useState<string>("");
   const [difficulty, setDifficulty] = useState<string>("2");
   const [calculatorAllowed, setCalculatorAllowed] = useState(true);
+  // Per-subject calculator settings: { subjectId: calculatorAllowed }
+  const [calculatorBySubject, setCalculatorBySubject] = useState<
+    Record<number, boolean>
+  >({});
   const [images, setImages] = useState<FormImage[]>([]);
   const [answerImages, setAnswerImages] = useState<FormImage[]>([]);
 
@@ -532,17 +538,21 @@ export function QuestionManagement({
     null,
   );
 
-  // Separate state for editing each question bank's chapter selection
-  const [editPastPaperChapterId, setEditPastPaperChapterId] = useState<
-    number | null
-  >(null);
-  const [editTypicalChapterId, setEditTypicalChapterId] = useState<
-    number | null
-  >(null);
+  // Separate state for editing each question bank's chapter selection (multi-select)
+  const [editPastPaperChapterIds, setEditPastPaperChapterIds] = useState<
+    number[]
+  >([]);
+  const [editTypicalChapterIds, setEditTypicalChapterIds] = useState<number[]>(
+    [],
+  );
 
   const [editMarks, setEditMarks] = useState<string>("");
   const [editDifficulty, setEditDifficulty] = useState<string>("2");
   const [editCalculatorAllowed, setEditCalculatorAllowed] = useState(false);
+  // Per-subject calculator settings for editing
+  const [editCalculatorBySubject, setEditCalculatorBySubject] = useState<
+    Record<number, boolean>
+  >({});
   const [editImages, setEditImages] = useState<FormImage[]>([]);
   const [editAnswerImages, setEditAnswerImages] = useState<FormImage[]>([]);
   const [editQuestionTags, setEditQuestionTags] = useState<
@@ -702,27 +712,25 @@ export function QuestionManagement({
     filterSubChapterId != null ||
     filterDifficulties.size > 0;
 
-  // Get subject IDs from selected chapters
+  // Get subject IDs from selected chapters (multi-select)
   const selectedSubjectIds = useMemo(() => {
     const subjectIds = new Set<number>();
-    if (pastPaperChapterId) {
-      const chapter = allChapters.find((ch) => ch.id === pastPaperChapterId);
-      if (chapter?.subject?.id) {
-        subjectIds.add(chapter.subject.id);
-      }
-    }
-    if (typicalChapterId) {
-      const chapter = allChapters.find((ch) => ch.id === typicalChapterId);
+    const allSelectedChapterIds = [
+      ...pastPaperChapterIds,
+      ...typicalChapterIds,
+    ];
+    for (const chapterId of allSelectedChapterIds) {
+      const chapter = allChapters.find((ch) => ch.id === chapterId);
       if (chapter?.subject?.id) {
         subjectIds.add(chapter.subject.id);
       }
     }
     return Array.from(subjectIds);
-  }, [pastPaperChapterId, typicalChapterId, allChapters]);
+  }, [pastPaperChapterIds, typicalChapterIds, allChapters]);
 
-  const selectedCreateBankCount = useMemo(
-    () => [pastPaperChapterId, typicalChapterId].filter(Boolean).length,
-    [pastPaperChapterId, typicalChapterId],
+  const selectedCreateChapterCount = useMemo(
+    () => pastPaperChapterIds.length + typicalChapterIds.length,
+    [pastPaperChapterIds, typicalChapterIds],
   );
 
   // Get tags for the selected subjects
@@ -732,29 +740,25 @@ export function QuestionManagement({
     );
   }, [availableTags, selectedSubjectIds]);
 
-  // Get subject IDs from edit chapter selections
+  // Get subject IDs from edit chapter selections (multi-select)
   const editSelectedSubjectIds = useMemo(() => {
     const subjectIds = new Set<number>();
-    if (editPastPaperChapterId) {
-      const chapter = allChapters.find(
-        (ch) => ch.id === editPastPaperChapterId,
-      );
-      if (chapter?.subject?.id) {
-        subjectIds.add(chapter.subject.id);
-      }
-    }
-    if (editTypicalChapterId) {
-      const chapter = allChapters.find((ch) => ch.id === editTypicalChapterId);
+    const allEditChapterIds = [
+      ...editPastPaperChapterIds,
+      ...editTypicalChapterIds,
+    ];
+    for (const chapterId of allEditChapterIds) {
+      const chapter = allChapters.find((ch) => ch.id === chapterId);
       if (chapter?.subject?.id) {
         subjectIds.add(chapter.subject.id);
       }
     }
     return Array.from(subjectIds);
-  }, [editPastPaperChapterId, editTypicalChapterId, allChapters]);
+  }, [editPastPaperChapterIds, editTypicalChapterIds, allChapters]);
 
-  const selectedEditBankCount = useMemo(
-    () => [editPastPaperChapterId, editTypicalChapterId].filter(Boolean).length,
-    [editPastPaperChapterId, editTypicalChapterId],
+  const selectedEditChapterCount = useMemo(
+    () => editPastPaperChapterIds.length + editTypicalChapterIds.length,
+    [editPastPaperChapterIds, editTypicalChapterIds],
   );
 
   // Get tags for the edit selected subjects
@@ -1011,13 +1015,15 @@ export function QuestionManagement({
   };
 
   const resetForm = () => {
-    setPastPaperChapterId(null);
-    setTypicalChapterId(null);
+    setPastPaperChapterIds([]);
+    setTypicalChapterIds([]);
     setMarks("");
     setDifficulty("2");
     setCalculatorAllowed(true);
+    setCalculatorBySubject({});
     setImages([]);
     setAnswerImages([]);
+    setQuestionTags({});
   };
 
   const handleAddImageFiles = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1109,10 +1115,8 @@ export function QuestionManagement({
     const parsedDifficulty =
       difficulty === "" ? Number.NaN : Number.parseInt(difficulty, 10);
 
-    // Merge chapter selections from both question banks
-    const chapterIds = [pastPaperChapterId, typicalChapterId].filter(
-      (id): id is number => id !== null,
-    );
+    // Merge chapter selections from both question banks (multi-select)
+    const chapterIds = [...pastPaperChapterIds, ...typicalChapterIds];
 
     if (chapterIds.length === 0) {
       setFeedback({
@@ -1198,15 +1202,23 @@ export function QuestionManagement({
         .filter((id): id is number => id !== null),
     }));
 
+    // Build per-subject calculator properties
+    const subjectPropertiesArray = selectedSubjectIds.map((subjectId) => ({
+      subject_id: subjectId,
+      calculator: calculatorBySubject[subjectId] ?? true,
+    }));
+
     // Use database function to create question with multiple chapters and tags
     const { data: createdQuestionId, error: insertError } = await supabase.rpc(
       "create_question_with_chapters_and_tags",
       {
         p_marks: parsedMarks,
         p_difficulty: parsedDifficulty,
-        p_calculator: calculatorAllowed,
+        p_calculator:
+          calculatorBySubject[selectedSubjectIds[0]] ?? calculatorAllowed,
         p_chapter_ids: chapterIds,
         p_tags: tagsArray,
+        p_subject_properties: subjectPropertiesArray,
       },
     );
 
@@ -1333,15 +1345,15 @@ export function QuestionManagement({
     setFeedback(null);
     setEditingQuestionId(question.id);
 
-    // Separate chapterIds into two question banks
-    const pastPaperId = question.chapterIds.find((id) => {
+    // Separate chapterIds into two question banks (multi-select)
+    const pastPaperIds = question.chapterIds.filter((id) => {
       const chapter = allChapters.find((ch) => ch.id === id);
       return (
         chapter?.exam_board_id &&
         pastPaperExamBoardIds.includes(chapter.exam_board_id)
       );
     });
-    const typicalId = question.chapterIds.find((id) => {
+    const typicalIds = question.chapterIds.filter((id) => {
       const chapter = allChapters.find((ch) => ch.id === id);
       return (
         chapter?.exam_board_id &&
@@ -1349,8 +1361,8 @@ export function QuestionManagement({
       );
     });
 
-    setEditPastPaperChapterId(pastPaperId ?? null);
-    setEditTypicalChapterId(typicalId ?? null);
+    setEditPastPaperChapterIds(pastPaperIds);
+    setEditTypicalChapterIds(typicalIds);
 
     // Load existing tags for this question
     const { data: existingTags } = await supabase
@@ -1378,6 +1390,18 @@ export function QuestionManagement({
       loadedTags[tagRow.subject_id][tagId] = tagRow.tag_value_id;
     }
     setEditQuestionTags(loadedTags);
+
+    // Load existing per-subject calculator values
+    const { data: existingSubjectProps } = await supabase
+      .from("question_subjects")
+      .select("subject_id, calculator")
+      .eq("question_id", question.id);
+
+    const loadedCalcBySubject: Record<number, boolean> = {};
+    for (const row of existingSubjectProps || []) {
+      loadedCalcBySubject[row.subject_id] = row.calculator;
+    }
+    setEditCalculatorBySubject(loadedCalcBySubject);
 
     setEditMarks(String(question.marks));
     setEditDifficulty(String(question.difficulty));
@@ -1562,11 +1586,11 @@ export function QuestionManagement({
     const parsedDifficulty =
       editDifficulty === "" ? Number.NaN : Number.parseInt(editDifficulty, 10);
 
-    // Merge chapter selections from both question banks
+    // Merge chapter selections from both question banks (multi-select)
     const editChapterIds = [
-      editPastPaperChapterId,
-      editTypicalChapterId,
-    ].filter((id): id is number => id !== null);
+      ...editPastPaperChapterIds,
+      ...editTypicalChapterIds,
+    ];
 
     if (editChapterIds.length === 0) {
       setFeedback({
@@ -1651,7 +1675,9 @@ export function QuestionManagement({
         p_question_id: editingQuestionId,
         p_marks: parsedMarks,
         p_difficulty: parsedDifficulty,
-        p_calculator: editCalculatorAllowed,
+        p_calculator:
+          editCalculatorBySubject[editSelectedSubjectIds[0]] ??
+          editCalculatorAllowed,
         p_chapter_ids: editChapterIds,
       },
     );
@@ -1685,6 +1711,33 @@ export function QuestionManagement({
         type: "error",
         message:
           tagsError?.message ?? "There was an issue updating question tags.",
+      });
+      return;
+    }
+
+    // Update per-subject calculator properties
+    const editSubjectPropertiesArray = editSelectedSubjectIds.map(
+      (subjectId) => ({
+        subject_id: subjectId,
+        calculator: editCalculatorBySubject[subjectId] ?? editCalculatorAllowed,
+      }),
+    );
+
+    const { error: subjectPropsError } = await supabase.rpc(
+      "update_question_subject_properties",
+      {
+        p_question_id: editingQuestionId,
+        p_subject_properties: editSubjectPropertiesArray,
+      },
+    );
+
+    if (subjectPropsError) {
+      setIsUpdating(false);
+      setFeedback({
+        type: "error",
+        message:
+          subjectPropsError?.message ??
+          "There was an issue updating calculator settings.",
       });
       return;
     }
@@ -1870,39 +1923,47 @@ export function QuestionManagement({
         ) : null}
         {editingQuestionId === question.id ? (
           <form onSubmit={handleUpdate} className="space-y-4 p-4">
-            {/* Questionbank Chapter Selection */}
+            {/* Questionbank Chapter Selection (multi-select) */}
             <div className="space-y-2">
               <Label htmlFor="edit-questionbank-chapter">
                 Questionbank
-                <span className="ml-2 text-xs text-slate-500">(optional)</span>
+                <span className="ml-2 text-xs text-slate-500">
+                  (select multiple subjects)
+                </span>
               </Label>
-              <TreeSelect
+              <MultiTreeSelect
                 data={pastPaperTree}
-                value={editPastPaperChapterId}
-                onValueChange={setEditPastPaperChapterId}
-                placeholder="Select chapter..."
+                value={editPastPaperChapterIds}
+                onValueChange={setEditPastPaperChapterIds}
+                placeholder="Select chapters..."
+                onePerSubject={true}
               />
             </div>
 
-            {/* Checkpoint Chapter Selection */}
+            {/* Checkpoint Chapter Selection (multi-select) */}
             <div className="space-y-2">
               <Label htmlFor="edit-typical-chapter">
                 Checkpoint
-                <span className="ml-2 text-xs text-slate-500">(optional)</span>
+                <span className="ml-2 text-xs text-slate-500">
+                  (select multiple subjects)
+                </span>
               </Label>
-              <TreeSelect
+              <MultiTreeSelect
                 data={typicalTree}
-                value={editTypicalChapterId}
-                onValueChange={setEditTypicalChapterId}
-                placeholder="Select chapter..."
+                value={editTypicalChapterIds}
+                onValueChange={setEditTypicalChapterIds}
+                placeholder="Select chapters..."
+                onePerSubject={true}
               />
             </div>
 
             {/* Selection summary */}
-            {(editPastPaperChapterId || editTypicalChapterId) && (
+            {selectedEditChapterCount > 0 && (
               <p className="text-xs text-slate-600">
-                Selected {selectedEditBankCount} bank
-                {selectedEditBankCount === 1 ? "" : "s"}.
+                Selected {selectedEditChapterCount} chapter
+                {selectedEditChapterCount === 1 ? "" : "s"} across{" "}
+                {editSelectedSubjectIds.length} subject
+                {editSelectedSubjectIds.length === 1 ? "" : "s"}.
               </p>
             )}
 
@@ -2024,24 +2085,75 @@ export function QuestionManagement({
                   </SelectContent>
                 </Select>
               </div>
-              <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
-                <input
-                  type="checkbox"
-                  checked={!editCalculatorAllowed}
-                  onChange={(event) =>
-                    setEditCalculatorAllowed(!event.target.checked)
-                  }
-                  className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
-                />
-                <div className="flex flex-col">
-                  <span className="font-medium text-slate-800">
-                    Calculator not allowed
-                  </span>
-                  <span className="text-xs text-slate-500">
-                    Click if a calculator is not allowed for this question.
-                  </span>
-                </div>
-              </label>
+              {/* Per-subject calculator settings for edit */}
+              <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <h3 className="text-sm font-semibold text-slate-900">
+                  Calculator Settings
+                </h3>
+                {editSelectedSubjectIds.length === 0 ? (
+                  <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
+                    <input
+                      type="checkbox"
+                      checked={!editCalculatorAllowed}
+                      onChange={(event) =>
+                        setEditCalculatorAllowed(!event.target.checked)
+                      }
+                      className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                    />
+                    <div className="flex flex-col">
+                      <span className="font-medium text-slate-800">
+                        Calculator not allowed
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        Select a chapter first to configure per-subject
+                        calculator settings.
+                      </span>
+                    </div>
+                  </label>
+                ) : (
+                  <div className="space-y-2">
+                    {editSelectedSubjectIds.map((subjectId) => {
+                      const subjectChapter = allChapters.find(
+                        (ch) => ch.subject?.id === subjectId,
+                      );
+                      const subjectName =
+                        subjectChapter?.subject?.name || `Subject ${subjectId}`;
+                      const isCalcAllowed =
+                        editCalculatorBySubject[subjectId] ??
+                        editCalculatorAllowed;
+
+                      return (
+                        <label
+                          key={subjectId}
+                          className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!isCalcAllowed}
+                            onChange={(event) =>
+                              setEditCalculatorBySubject((prev) => ({
+                                ...prev,
+                                [subjectId]: !event.target.checked,
+                              }))
+                            }
+                            className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                          />
+                          <div className="flex flex-col">
+                            <span className="font-medium text-slate-800">
+                              No calculator for {subjectName}
+                            </span>
+                            <span className="text-xs text-slate-500">
+                              {isCalcAllowed
+                                ? "Calculator allowed"
+                                : "Calculator not allowed"}
+                            </span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="space-y-3">
@@ -2299,43 +2411,47 @@ export function QuestionManagement({
 
             <form onSubmit={handleCreate} className="space-y-6">
               <CardContent className="space-y-6">
-                {/* Questionbank Chapter Selection */}
+                {/* Questionbank Chapter Selection (multi-select) */}
                 <div className="space-y-2">
                   <Label htmlFor="questionbank-chapter">
                     Questionbank
                     <span className="ml-2 text-xs text-slate-500">
-                      (optional)
+                      (select multiple subjects)
                     </span>
                   </Label>
-                  <TreeSelect
+                  <MultiTreeSelect
                     data={pastPaperTree}
-                    value={pastPaperChapterId}
-                    onValueChange={setPastPaperChapterId}
-                    placeholder="Select chapter..."
+                    value={pastPaperChapterIds}
+                    onValueChange={setPastPaperChapterIds}
+                    placeholder="Select chapters..."
+                    onePerSubject={true}
                   />
                 </div>
 
-                {/* Checkpoint Chapter Selection */}
+                {/* Checkpoint Chapter Selection (multi-select) */}
                 <div className="space-y-2">
                   <Label htmlFor="typical-chapter">
                     Checkpoint
                     <span className="ml-2 text-xs text-slate-500">
-                      (optional)
+                      (select multiple subjects)
                     </span>
                   </Label>
-                  <TreeSelect
+                  <MultiTreeSelect
                     data={typicalTree}
-                    value={typicalChapterId}
-                    onValueChange={setTypicalChapterId}
-                    placeholder="Select chapter..."
+                    value={typicalChapterIds}
+                    onValueChange={setTypicalChapterIds}
+                    placeholder="Select chapters..."
+                    onePerSubject={true}
                   />
                 </div>
 
                 {/* Selection summary */}
-                {(pastPaperChapterId || typicalChapterId) && (
+                {selectedCreateChapterCount > 0 && (
                   <p className="text-xs text-slate-600">
-                    Selected {selectedCreateBankCount} bank
-                    {selectedCreateBankCount === 1 ? "" : "s"}.
+                    Selected {selectedCreateChapterCount} chapter
+                    {selectedCreateChapterCount === 1 ? "" : "s"} across{" "}
+                    {selectedSubjectIds.length} subject
+                    {selectedSubjectIds.length === 1 ? "" : "s"}.
                   </p>
                 )}
 
@@ -2456,25 +2572,76 @@ export function QuestionManagement({
                     </Select>
                   </div>
                 </div>
+                {/* Per-subject calculator settings */}
                 <div className="space-y-4">
-                  <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
-                    <input
-                      type="checkbox"
-                      checked={!calculatorAllowed}
-                      onChange={(event) =>
-                        setCalculatorAllowed(!event.target.checked)
-                      }
-                      className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
-                    />
-                    <div className="flex flex-col">
-                      <span className="font-medium text-slate-800">
-                        Calculator not allowed
-                      </span>
-                      <span className="text-xs text-slate-500">
-                        Click if a calculator is not allowed for this question.
-                      </span>
-                    </div>
-                  </label>
+                  <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <h3 className="text-sm font-semibold text-slate-900">
+                      Calculator Settings
+                    </h3>
+                    {selectedSubjectIds.length === 0 ? (
+                      <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
+                        <input
+                          type="checkbox"
+                          checked={!calculatorAllowed}
+                          onChange={(event) =>
+                            setCalculatorAllowed(!event.target.checked)
+                          }
+                          className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                        />
+                        <div className="flex flex-col">
+                          <span className="font-medium text-slate-800">
+                            Calculator not allowed
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            Select a chapter first to configure per-subject
+                            calculator settings.
+                          </span>
+                        </div>
+                      </label>
+                    ) : (
+                      <div className="space-y-2">
+                        {selectedSubjectIds.map((subjectId) => {
+                          const subjectChapter = allChapters.find(
+                            (ch) => ch.subject?.id === subjectId,
+                          );
+                          const subjectName =
+                            subjectChapter?.subject?.name ||
+                            `Subject ${subjectId}`;
+                          const isCalcAllowed =
+                            calculatorBySubject[subjectId] ?? true;
+
+                          return (
+                            <label
+                              key={subjectId}
+                              className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={!isCalcAllowed}
+                                onChange={(event) =>
+                                  setCalculatorBySubject((prev) => ({
+                                    ...prev,
+                                    [subjectId]: !event.target.checked,
+                                  }))
+                                }
+                                className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                              />
+                              <div className="flex flex-col">
+                                <span className="font-medium text-slate-800">
+                                  No calculator for {subjectName}
+                                </span>
+                                <span className="text-xs text-slate-500">
+                                  {isCalcAllowed
+                                    ? "Calculator allowed"
+                                    : "Calculator not allowed"}
+                                </span>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-3">

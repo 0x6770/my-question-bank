@@ -349,6 +349,21 @@ export async function GET(request: Request) {
   const hasDifficultyFilter = Boolean(difficultySet && difficultySet.size > 0);
   const hasCalculatorFilter = calculatorFilter !== null;
 
+  // Pre-fetch question_subjects for calculator filtering when subject is specified
+  let questionSubjectsForFilter: Map<number, boolean> | null = null;
+  if (hasCalculatorFilter && subjectId) {
+    const { data: qsRows } = await supabase
+      .from("question_subjects")
+      .select("question_id, calculator")
+      .eq("subject_id", subjectId)
+      .eq("calculator", calculatorFilter)
+      .in("question_id", matchingQuestionIds);
+
+    questionSubjectsForFilter = new Map(
+      (qsRows ?? []).map((row) => [row.question_id, row.calculator]),
+    );
+  }
+
   if (orderedQuestionIds && (hasDifficultyFilter || hasCalculatorFilter)) {
     let filterQuery = supabase
       .from("questions")
@@ -359,7 +374,9 @@ export async function GET(request: Request) {
       filterQuery = filterQuery.in("difficulty", Array.from(difficultySet));
     }
 
-    if (hasCalculatorFilter) {
+    // If filtering by calculator with subject, use pre-fetched question_subjects
+    // Otherwise fall back to questions.calculator
+    if (hasCalculatorFilter && !questionSubjectsForFilter) {
       filterQuery = filterQuery.eq("calculator", calculatorFilter);
     }
 
@@ -369,7 +386,17 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: filterError.message }, { status: 500 });
     }
 
-    const allowedIds = new Set((filteredRows ?? []).map((row) => row.id));
+    let allowedIds = new Set((filteredRows ?? []).map((row) => row.id));
+
+    // Apply question_subjects filter if we have it
+    if (questionSubjectsForFilter) {
+      allowedIds = new Set(
+        Array.from(allowedIds).filter((id) =>
+          questionSubjectsForFilter.has(id),
+        ),
+      );
+    }
+
     matchingQuestionIds = matchingQuestionIds.filter((id) =>
       allowedIds.has(id),
     );
@@ -487,7 +514,9 @@ export async function GET(request: Request) {
       query = query.in("difficulty", Array.from(difficultySet));
     }
 
-    if (hasCalculatorFilter) {
+    // If filtering by calculator with subject, we'll filter after fetching via question_subjects
+    // Otherwise fall back to questions.calculator
+    if (hasCalculatorFilter && !subjectId) {
       query = query.eq("calculator", calculatorFilter);
     }
 
@@ -524,6 +553,22 @@ export async function GET(request: Request) {
     const existing = questionToChaptersMap.get(qc.question_id) ?? [];
     existing.push(qc.chapter_id);
     questionToChaptersMap.set(qc.question_id, existing);
+  }
+
+  // 获取 question_subjects 以获取每个题目的 per-subject calculator 值
+  const { data: allQuestionSubjects } = await supabase
+    .from("question_subjects")
+    .select("question_id, subject_id, calculator")
+    .in("question_id", questionIds);
+
+  // 构建 questionId -> { subjectId -> calculator } 映射
+  const questionToSubjectCalcMap = new Map<number, Map<number, boolean>>();
+  for (const qs of allQuestionSubjects ?? []) {
+    const existing =
+      questionToSubjectCalcMap.get(qs.question_id) ??
+      new Map<number, boolean>();
+    existing.set(qs.subject_id, qs.calculator);
+    questionToSubjectCalcMap.set(qs.question_id, existing);
   }
 
   // 第四步：获取每个题目的标签
@@ -573,15 +618,7 @@ export async function GET(request: Request) {
     questionToTagsMap.set(qt.question_id, existing);
   }
 
-  const questionImagePaths = new Set<string>();
-  const answerImagePaths = new Set<string>();
-
-  const hasMore = (questions?.length ?? 0) > pageSize;
-  const limitedQuestions = hasMore
-    ? (questions ?? []).slice(0, pageSize)
-    : (questions ?? []);
-
-  const normalized = limitedQuestions.map((question) => {
+  const normalized = (questions ?? []).map((question) => {
     const row = question as unknown as QuestionRow;
     const sortedImages = (row.question_images ?? [])
       .slice()
@@ -589,13 +626,6 @@ export async function GET(request: Request) {
     const sortedAnswerImages = (row.answer_images ?? [])
       .slice()
       .sort((a, b) => a.position - b.position);
-
-    for (const image of sortedImages) {
-      questionImagePaths.add(image.storage_path);
-    }
-    for (const image of sortedAnswerImages) {
-      answerImagePaths.add(image.storage_path);
-    }
 
     // 获取这个题目的所有 chapters
     const questionChapterIds = questionToChaptersMap.get(row.id) ?? [];
@@ -625,11 +655,19 @@ export async function GET(request: Request) {
       ? questionTags.filter((tag) => tag.subjectId === subjectIdFromChapter)
       : [];
 
+    // 获取这个题目的 per-subject calculator 值
+    const subjectCalcMap = questionToSubjectCalcMap.get(row.id);
+    const subjectSpecificCalc =
+      subjectIdFromChapter && subjectCalcMap
+        ? subjectCalcMap.get(subjectIdFromChapter)
+        : undefined;
+
     return {
       id: row.id,
       marks: row.marks,
       difficulty: row.difficulty,
-      calculator: row.calculator,
+      // Use subject-specific calculator if available, otherwise fall back to question.calculator
+      calculator: subjectSpecificCalc ?? row.calculator,
       createdAt: row.created_at,
       chapterIds: questionChapterIds, // Array of all chapter IDs
       chapterId: primaryChapterId, // Keep for backward compatibility
@@ -648,8 +686,34 @@ export async function GET(request: Request) {
     };
   });
 
-  const questionPaths = Array.from(questionImagePaths);
-  const answerPaths = Array.from(answerImagePaths);
+  // Apply post-fetch calculator filter if filtering by subject
+  let finalNormalized = normalized;
+  if (hasCalculatorFilter && subjectId && !orderedQuestionIds) {
+    finalNormalized = normalized.filter(
+      (q) => q.calculator === calculatorFilter,
+    );
+  }
+
+  // Recalculate hasMore after post-fetch filtering
+  const finalHasMore = finalNormalized.length > pageSize;
+  const limitedFinal = finalHasMore
+    ? finalNormalized.slice(0, pageSize)
+    : finalNormalized;
+
+  // Collect image paths from the final limited set
+  const finalQuestionImagePaths = new Set<string>();
+  const finalAnswerImagePaths = new Set<string>();
+  for (const q of limitedFinal) {
+    for (const image of q.images) {
+      finalQuestionImagePaths.add(image.storage_path);
+    }
+    for (const image of q.answerImages) {
+      finalAnswerImagePaths.add(image.storage_path);
+    }
+  }
+
+  const questionPaths = Array.from(finalQuestionImagePaths);
+  const answerPaths = Array.from(finalAnswerImagePaths);
   const questionSignedUrlMap: Record<string, string> = {};
   const answerSignedUrlMap: Record<string, string> = {};
 
@@ -675,7 +739,7 @@ export async function GET(request: Request) {
     }
   }
 
-  const withSigned = normalized.map((question) => ({
+  const withSigned = limitedFinal.map((question) => ({
     ...question,
     images: question.images.map((image) => ({
       ...image,
@@ -721,7 +785,7 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     questions: withBookmarks,
-    hasMore,
+    hasMore: finalHasMore,
     page: safePage,
   });
 }

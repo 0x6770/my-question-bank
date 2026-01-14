@@ -11,6 +11,9 @@ export type TreeNode = {
   value?: number; // Actual value for leaf nodes
   children?: TreeNode[];
   level?: number;
+  // For multi-select constraint validation
+  subjectId?: number;
+  subjectName?: string;
 };
 
 type TreeSelectProps = {

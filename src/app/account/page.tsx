@@ -109,6 +109,22 @@ export default async function AccountPage() {
         questionError = chapterError.message ?? "Failed to load chapters.";
       }
 
+      // Fetch per-subject calculator values from question_subjects
+      const { data: questionSubjects } = await supabase
+        .from("question_subjects")
+        .select("question_id, subject_id, calculator")
+        .in("question_id", questionIds);
+
+      // Build a map: question_id -> subject_id -> calculator
+      const questionSubjectCalcMap = new Map<number, Map<number, boolean>>();
+      for (const qs of questionSubjects ?? []) {
+        const existing =
+          questionSubjectCalcMap.get(qs.question_id) ??
+          new Map<number, boolean>();
+        existing.set(qs.subject_id, qs.calculator);
+        questionSubjectCalcMap.set(qs.question_id, existing);
+      }
+
       const questionImagePaths = new Set<string>();
       const answerImagePaths = new Set<string>();
 
@@ -175,11 +191,17 @@ export default async function AccountPage() {
 
       questions = data.map((row) => {
         const chapter = questionChapterMap.get(row.id) ?? null;
+        // Get subject-specific calculator, fall back to question's global value
+        const subjectCalcMap = questionSubjectCalcMap.get(row.id);
+        const subjectSpecificCalc =
+          chapter?.subjectId && subjectCalcMap
+            ? subjectCalcMap.get(chapter.subjectId)
+            : undefined;
         return {
           id: row.id,
           marks: row.marks ?? 0,
           difficulty: row.difficulty ?? 1,
-          calculator: row.calculator ?? false,
+          calculator: subjectSpecificCalc ?? row.calculator ?? false,
           createdAt: row.created_at,
           bookmarkedAt: bookmarkedAtMap.get(row.id) ?? null,
           chapterId: chapter?.id ?? null,
