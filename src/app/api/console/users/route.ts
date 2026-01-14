@@ -89,3 +89,35 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ user });
 }
+
+export async function GET(request: Request) {
+  const requester = await getRequesterRole();
+  if ("error" in requester) {
+    return NextResponse.json(
+      { error: requester.error },
+      { status: requester.status },
+    );
+  }
+
+  const { searchParams } = new URL(request.url);
+  const query = searchParams.get("q")?.trim() ?? "";
+
+  const adminClient = createAdminClient();
+  let profileQuery = adminClient
+    .from("profiles")
+    .select(
+      "id, email, role, created_at, membership_tier, membership_expires_at, is_whitelisted",
+    )
+    .order("created_at", { ascending: false });
+
+  if (query) {
+    profileQuery = profileQuery.ilike("email", `%${query}%`);
+  }
+
+  const { data, error } = await profileQuery;
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ users: data ?? [] });
+}

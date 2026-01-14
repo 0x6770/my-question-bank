@@ -44,6 +44,9 @@ export function UserListManager({ users }: Props) {
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [createBusy, setCreateBusy] = useState(false);
   const [createEmail, setCreateEmail] = useState("");
   const [createPassword, setCreatePassword] = useState("");
@@ -55,6 +58,48 @@ export function UserListManager({ users }: Props) {
   const [expiresAt, setExpiresAt] = useState<string>("");
   const [isWhitelisted, setIsWhitelisted] = useState(false);
   const [membershipBusy, setMembershipBusy] = useState(false);
+
+  const fetchUsers = async (query: string) => {
+    setSearchBusy(true);
+    setSearchError(null);
+    try {
+      const params = new URLSearchParams();
+      const trimmed = query.trim();
+      if (trimmed) {
+        params.set("q", trimmed);
+      }
+      const response = await fetch(
+        `/api/console/users${params.toString() ? `?${params}` : ""}`,
+      );
+      const data = (await response.json()) as {
+        error?: string;
+        users?: UserRow[];
+      };
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Failed to load users.");
+      }
+
+      setUserList(data.users ?? []);
+    } catch (error) {
+      setSearchError(
+        error instanceof Error ? error.message : "Failed to load users.",
+      );
+    } finally {
+      setSearchBusy(false);
+    }
+  };
+
+  const handleSearch = async (event: FormEvent) => {
+    event.preventDefault();
+    await fetchUsers(searchQuery);
+  };
+
+  const handleClearSearch = async () => {
+    if (!searchQuery.trim()) return;
+    setSearchQuery("");
+    await fetchUsers("");
+  };
 
   const handleCreateUser = async (event: FormEvent) => {
     event.preventDefault();
@@ -97,7 +142,11 @@ export function UserListManager({ users }: Props) {
       }
 
       const createdUser = data.user;
-      setUserList((prev) => [createdUser, ...prev]);
+      if (searchQuery.trim()) {
+        await fetchUsers(searchQuery);
+      } else {
+        setUserList((prev) => [createdUser, ...prev]);
+      }
       setCreateEmail("");
       setCreatePassword("");
       setMessage({ type: "success", text: "User created successfully." });
@@ -252,6 +301,38 @@ export function UserListManager({ users }: Props) {
         </form>
       </div>
 
+      <div className="border-t border-slate-100 px-6 py-4">
+        <form className="space-y-2" onSubmit={handleSearch}>
+          <Label htmlFor="user-search">Search users</Label>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <Input
+              id="user-search"
+              type="search"
+              placeholder="Search by email"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              className="sm:flex-1"
+            />
+            <div className="flex gap-2">
+              <Button type="submit" disabled={searchBusy}>
+                {searchBusy ? "Searching..." : "Search"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleClearSearch}
+                disabled={searchBusy || !searchQuery.trim()}
+              >
+                Clear
+              </Button>
+            </div>
+          </div>
+        </form>
+        {searchError ? (
+          <p className="mt-2 text-xs text-red-600">{searchError}</p>
+        ) : null}
+      </div>
+
       {message ? (
         <div
           className={`px-6 py-3 text-sm ${message.type === "success" ? "text-emerald-600" : "text-red-600"}`}
@@ -262,7 +343,11 @@ export function UserListManager({ users }: Props) {
 
       {userList.length === 0 ? (
         <div className="space-y-4 px-6 py-10 text-center text-sm text-slate-500">
-          <p>No user data.</p>
+          <p>
+            {searchQuery.trim()
+              ? "No users match your search."
+              : "No user data."}
+          </p>
           <p className="text-xs text-slate-400">
             Invite a user to get started.
           </p>
