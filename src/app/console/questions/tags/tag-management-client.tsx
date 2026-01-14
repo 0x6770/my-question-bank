@@ -58,7 +58,6 @@ type TagDefinition = {
   name: string;
   required: boolean;
   position: number | null;
-  is_system: boolean;
   created_at?: string | null;
   values?: TagValue[] | null;
 };
@@ -319,16 +318,13 @@ export function QuestionTagManagementClient({
         required: creatingRequired,
         position,
       })
-      .select("id, subject_id, name, required, position, created_at, is_system")
+      .select("id, subject_id, name, required, position, created_at")
       .single();
 
     if (error || !data) {
       setMessage({ type: "error", text: error?.message ?? "Creation failed." });
     } else {
-      setTags((prev) => [
-        ...prev,
-        { ...data, is_system: data.is_system ?? false, values: [] },
-      ]);
+      setTags((prev) => [...prev, { ...data, values: [] }]);
       setCreatingTagName("");
       setCreatingRequired(false);
       setMessage({ type: "success", text: "Created successfully." });
@@ -372,16 +368,6 @@ export function QuestionTagManagementClient({
 
   const handleRenameTag = async (tagId: number, name: string) => {
     resetMessage();
-    const tag = tags.find((t) => t.id === tagId);
-    if (tag?.is_system) {
-      setMessage({
-        type: "error",
-        text: `Cannot rename system tag "${tag.name}". System tags are protected.`,
-      });
-      setEditingTagId(null);
-      setEditingTagName("");
-      return;
-    }
     const trimmed = name.trim();
     if (!trimmed) {
       setMessage({ type: "error", text: "Tag name cannot be empty." });
@@ -474,14 +460,6 @@ export function QuestionTagManagementClient({
 
   const handleDeleteTag = async (tagId: number) => {
     resetMessage();
-    const tag = tags.find((t) => t.id === tagId);
-    if (tag?.is_system) {
-      setMessage({
-        type: "error",
-        text: `Cannot delete system tag "${tag.name}". This tag is required for all questions.`,
-      });
-      return;
-    }
     if (
       !window.confirm(
         "Delete this tag? This will remove all options and related question selections.",
@@ -729,27 +707,20 @@ export function QuestionTagManagementClient({
                           <h3 className="text-base font-semibold text-slate-900">
                             {tag.name}
                           </h3>
-                          {!tag.is_system && (
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              onClick={() => {
-                                setEditingTagId(tag.id);
-                                setEditingTagName(tag.name);
-                                setEditingValueId(null);
-                              }}
-                              aria-label="Rename Tag"
-                            >
-                              <Pencil className="size-4" />
-                            </Button>
-                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => {
+                              setEditingTagId(tag.id);
+                              setEditingTagName(tag.name);
+                              setEditingValueId(null);
+                            }}
+                            aria-label="Rename Tag"
+                          >
+                            <Pencil className="size-4" />
+                          </Button>
                         </>
                       )}
-                      {tag.is_system ? (
-                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
-                          System Tag
-                        </span>
-                      ) : null}
                       {tag.required ? (
                         <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
                           Required
@@ -765,13 +736,9 @@ export function QuestionTagManagementClient({
                     size="icon-sm"
                     className="text-red-600"
                     onClick={() => handleDeleteTag(tag.id)}
-                    disabled={busyId === tag.id || tag.is_system}
+                    disabled={busyId === tag.id}
                     aria-label="DeleteTag"
-                    title={
-                      tag.is_system
-                        ? "System tags cannot be deleted"
-                        : "Delete tag"
-                    }
+                    title="Delete tag"
                   >
                     {busyId === tag.id ? (
                       <Loader2 className="size-4 animate-spin" />

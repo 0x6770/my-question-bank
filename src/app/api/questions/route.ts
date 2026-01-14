@@ -16,6 +16,7 @@ export async function GET(request: Request) {
   const bookmarkParam = searchParams.get("bookmark"); // "all" | "bookmarked"
   const bankParam = searchParams.get("bank"); // "checkpoint" | "questionbank" | "exam-paper"
   const tagFiltersParam = searchParams.get("tagFilters"); // "tagName1:valueId1,tagName2:valueId2"
+  const calculatorParam = searchParams.get("calculator"); // "true" | "false"
 
   const subjectId = subjectIdParam ? Number.parseInt(subjectIdParam, 10) : null;
   const chapterId = chapterIdParam ? Number.parseInt(chapterIdParam, 10) : null;
@@ -49,6 +50,12 @@ export async function GET(request: Request) {
             .filter((value) => Number.isFinite(value)),
         )
       : null;
+  const calculatorFilter =
+    calculatorParam === "true"
+      ? true
+      : calculatorParam === "false"
+        ? false
+        : null;
   const page = pageParam ? Number.parseInt(pageParam, 10) : 1;
   const safePage = Number.isFinite(page) && page > 0 ? page : 1;
   const pageSize = 20;
@@ -339,21 +346,30 @@ export async function GET(request: Request) {
     }
   }
 
-  if (orderedQuestionIds && difficultySet && difficultySet.size > 0) {
-    const { data: difficultyRows, error: difficultyError } = await supabase
+  const hasDifficultyFilter = Boolean(difficultySet && difficultySet.size > 0);
+  const hasCalculatorFilter = calculatorFilter !== null;
+
+  if (orderedQuestionIds && (hasDifficultyFilter || hasCalculatorFilter)) {
+    let filterQuery = supabase
       .from("questions")
       .select("id")
-      .in("id", matchingQuestionIds)
-      .in("difficulty", Array.from(difficultySet));
+      .in("id", matchingQuestionIds);
 
-    if (difficultyError) {
-      return NextResponse.json(
-        { error: difficultyError.message },
-        { status: 500 },
-      );
+    if (hasDifficultyFilter && difficultySet) {
+      filterQuery = filterQuery.in("difficulty", Array.from(difficultySet));
     }
 
-    const allowedIds = new Set((difficultyRows ?? []).map((row) => row.id));
+    if (hasCalculatorFilter) {
+      filterQuery = filterQuery.eq("calculator", calculatorFilter);
+    }
+
+    const { data: filteredRows, error: filterError } = await filterQuery;
+
+    if (filterError) {
+      return NextResponse.json({ error: filterError.message }, { status: 500 });
+    }
+
+    const allowedIds = new Set((filteredRows ?? []).map((row) => row.id));
     matchingQuestionIds = matchingQuestionIds.filter((id) =>
       allowedIds.has(id),
     );
@@ -467,8 +483,12 @@ export async function GET(request: Request) {
       query = query.in("id", bookmarkedQuestionIds);
     }
 
-    if (difficultySet && difficultySet.size > 0) {
+    if (hasDifficultyFilter && difficultySet) {
       query = query.in("difficulty", Array.from(difficultySet));
+    }
+
+    if (hasCalculatorFilter) {
+      query = query.eq("calculator", calculatorFilter);
     }
 
     const { data, error } = await query.order("created_at", {

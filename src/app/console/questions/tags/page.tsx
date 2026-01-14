@@ -39,7 +39,6 @@ export default async function QuestionTagsPage(props: PageProps) {
       name,
       required,
       position,
-      is_system,
       created_at,
       values:subject_question_tag_values(id, value, position, created_at)
     `)

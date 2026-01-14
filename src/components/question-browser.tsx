@@ -103,6 +103,9 @@ export function QuestionBrowser({
   const [difficultySelections, setDifficultySelections] = useState<Set<number>>(
     new Set(),
   );
+  const [calculatorFilter, setCalculatorFilter] = useState<
+    "all" | "calculator" | "no-calculator"
+  >("all");
   const [tagFilters, setTagFilters] = useState<Record<string, number | null>>(
     {},
   ); // { tagName: valueId }
@@ -174,6 +177,7 @@ export function QuestionBrowser({
 
   const clearFilters = () => {
     setDifficultySelections(new Set());
+    setCalculatorFilter("all");
     setSelectedSubjectId(null);
     setSelectedChapterId(null);
     setSelectedSubChapterId(null);
@@ -237,6 +241,11 @@ export function QuestionBrowser({
         if (statusFilter === "bookmarked") {
           params.set("bookmark", "bookmarked");
         }
+        if (calculatorFilter === "calculator") {
+          params.set("calculator", "true");
+        } else if (calculatorFilter === "no-calculator") {
+          params.set("calculator", "false");
+        }
         // Add tag filters
         const activeTagFilters = Object.entries(tagFilters)
           .filter(([_, valueId]) => valueId !== null)
@@ -272,6 +281,7 @@ export function QuestionBrowser({
     return () => controller.abort();
   }, [
     difficultySelections,
+    calculatorFilter,
     page,
     questionBank,
     selectedChapterId,
@@ -287,14 +297,9 @@ export function QuestionBrowser({
     return tags.filter((tag) => tag.subject_id === selectedSubjectId);
   }, [selectedSubjectId, tags]);
 
-  // Split tags into paper tag and custom tags
-  const paperTag = useMemo(
-    () => availableSubjectTags.find((tag) => tag.name === "paper"),
-    [availableSubjectTags],
-  );
-  const paperLabel = "Paper";
   const customTags = useMemo(
-    () => availableSubjectTags.filter((tag) => tag.name !== "paper"),
+    () =>
+      availableSubjectTags.filter((tag) => tag.name.toLowerCase() !== "paper"),
     [availableSubjectTags],
   );
 
@@ -385,13 +390,13 @@ export function QuestionBrowser({
     selectedSubjectId != null ||
     selectedChapterId != null ||
     selectedSubChapterId != null ||
+    calculatorFilter !== "all" ||
     difficultySelections.size > 0 ||
     statusFilter !== "all" ||
     Object.values(tagFilters).some((v) => v !== null);
 
-  const row2GridClass = paperTag
-    ? "grid grid-cols-1 gap-3 lg:grid-cols-[minmax(80px,100px)_minmax(300px,0.9fr)_minmax(300px,1.1fr)_auto] lg:items-end"
-    : "grid grid-cols-1 gap-3 lg:grid-cols-[minmax(300px,0.9fr)_minmax(300px,1.1fr)_auto] lg:items-end";
+  const row2GridClass =
+    "grid grid-cols-1 gap-3 lg:grid-cols-[minmax(160px,220px)_minmax(300px,0.9fr)_minmax(300px,1.1fr)_auto] lg:items-end";
 
   const visibleSubjects = useMemo(() => {
     if (activeExamBoardId == null) return subjects;
@@ -538,48 +543,33 @@ export function QuestionBrowser({
             </div>
           </div>
 
-          {/* Row 2: Paper + Difficulty + Status */}
+          {/* Row 2: Calculator + Difficulty + Status */}
           <div className={row2GridClass}>
-            {paperTag && (
-              <div className="min-w-0 space-y-2">
-                <p className="text-sm font-semibold text-slate-700">
-                  {paperLabel}
-                  {paperTag.required && (
-                    <span className="ml-1 text-red-500">*</span>
-                  )}
-                </p>
-                <Select
-                  value={
-                    tagFilters[paperTag.name]
-                      ? String(tagFilters[paperTag.name])
-                      : "all"
-                  }
-                  onValueChange={(value) => {
-                    const valueId =
-                      value === "all" ? null : parseInt(value, 10);
-                    setTagFilters((prev) => ({
-                      ...prev,
-                      [paperTag.name]: valueId,
-                    }));
+            <div className="min-w-0 space-y-2">
+              <p className="text-sm font-semibold text-slate-700">Calculator</p>
+              <Select
+                value={calculatorFilter}
+                onValueChange={(value) => {
+                  if (
+                    value === "all" ||
+                    value === "calculator" ||
+                    value === "no-calculator"
+                  ) {
+                    setCalculatorFilter(value);
                     setPage(1);
-                  }}
-                >
-                  <SelectTrigger className="h-11 rounded-xl border-slate-200 shadow-sm">
-                    <SelectValue placeholder={`All ${paperLabel}`} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All {paperLabel}</SelectItem>
-                    {paperTag.values
-                      ?.sort((a, b) => (a.position || 0) - (b.position || 0))
-                      .map((val) => (
-                        <SelectItem key={val.id} value={String(val.id)}>
-                          {val.value}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+                  }
+                }}
+              >
+                <SelectTrigger className="h-11 rounded-xl border-slate-200 shadow-sm">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="calculator">Calculator</SelectItem>
+                  <SelectItem value="no-calculator">No Calculator</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="min-w-0 space-y-2">
               <p className="text-sm font-semibold text-slate-700">Difficulty</p>
               <div className="flex min-h-11 w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
@@ -655,7 +645,7 @@ export function QuestionBrowser({
             </div>
           </div>
 
-          {/* Row 3: Custom Tags */}
+          {/* Row 3: Tags */}
           {customTags.length > 0 && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {customTags.map((tag) => {

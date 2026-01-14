@@ -12,7 +12,6 @@ CREATE TABLE IF NOT EXISTS public.subject_question_tags (
   name        text NOT NULL,
   required    boolean NOT NULL DEFAULT false,
   position    smallint NOT NULL DEFAULT 0,
-  is_system   boolean NOT NULL DEFAULT false,  -- System tags (like "paper") cannot be deleted
   created_at  timestamptz NOT NULL DEFAULT now(),
   updated_at  timestamptz NOT NULL DEFAULT now(),
 
@@ -24,9 +23,7 @@ CREATE INDEX IF NOT EXISTS subject_question_tags_subject_idx
   ON public.subject_question_tags(subject_id, position, name);
 
 COMMENT ON TABLE public.subject_question_tags IS
-  'Tag definitions for questions, specific to each subject. System tags like "paper" are auto-created and protected.';
-COMMENT ON COLUMN public.subject_question_tags.is_system IS
-  'System tags (e.g., "paper") cannot be deleted or renamed. They are auto-created for all subjects.';
+  'Tag definitions for questions, specific to each subject.';
 
 
 -- 1.2) Allowed values per question tag
@@ -77,68 +74,7 @@ COMMENT ON COLUMN public.question_tag_values.subject_id IS
 -- 2) TRIGGERS
 -- ============================================================================
 
--- 2.1) Auto-create "paper" tag for new subjects
-CREATE OR REPLACE FUNCTION public.ensure_paper_tag_for_subject()
-RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  INSERT INTO public.subject_question_tags (subject_id, name, required, position, is_system)
-  VALUES (NEW.id, 'paper', true, 0, true)
-  ON CONFLICT (subject_id, name) DO NOTHING;
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS ensure_paper_tag_for_subject ON public.subjects;
-CREATE TRIGGER ensure_paper_tag_for_subject
-AFTER INSERT ON public.subjects
-FOR EACH ROW EXECUTE FUNCTION public.ensure_paper_tag_for_subject();
-
-COMMENT ON FUNCTION public.ensure_paper_tag_for_subject IS
-  'Automatically creates the required "paper" system tag when a new subject is created.';
-
-
--- 2.2) Backfill "paper" tag for existing subjects
-INSERT INTO public.subject_question_tags (subject_id, name, required, position, is_system)
-SELECT s.id, 'paper', true, 0, true
-FROM public.subjects s
-ON CONFLICT (subject_id, name) DO NOTHING;
-
-
--- 2.3) Prevent deletion of system tags
-CREATE OR REPLACE FUNCTION public.prevent_system_tag_deletion()
-RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF OLD.is_system THEN
-    RAISE EXCEPTION 'Cannot delete system tag "%". This tag is required for all questions.', OLD.name;
-  END IF;
-  RETURN OLD;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS prevent_system_tag_deletion ON public.subject_question_tags;
-CREATE TRIGGER prevent_system_tag_deletion
-BEFORE DELETE ON public.subject_question_tags
-FOR EACH ROW EXECUTE FUNCTION public.prevent_system_tag_deletion();
-
-
--- 2.4) Prevent renaming of system tags
-CREATE OR REPLACE FUNCTION public.prevent_system_tag_rename()
-RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF OLD.is_system AND OLD.name <> NEW.name THEN
-    RAISE EXCEPTION 'Cannot rename system tag "%" to "%". System tags are protected.', OLD.name, NEW.name;
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS prevent_system_tag_rename ON public.subject_question_tags;
-CREATE TRIGGER prevent_system_tag_rename
-BEFORE UPDATE ON public.subject_question_tags
-FOR EACH ROW EXECUTE FUNCTION public.prevent_system_tag_rename();
-
-
--- 2.5) Validate that tag_value belongs to the correct subject
+-- 2.1) Validate that tag_value belongs to the correct subject
 CREATE OR REPLACE FUNCTION public.check_question_tag_value_subject()
 RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE

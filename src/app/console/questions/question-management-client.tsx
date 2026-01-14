@@ -128,7 +128,6 @@ type SubjectQuestionTag = {
   name: string;
   required: boolean;
   position: number;
-  is_system: boolean;
   values?: TagValueRow[] | null;
 };
 
@@ -407,7 +406,7 @@ export function QuestionManagement({
       const { data, error } = await supabase
         .from("subject_question_tags")
         .select(`
-          id, subject_id, name, required, position, is_system,
+          id, subject_id, name, required, position,
           values:subject_question_tag_values(id, value, position, created_at)
         `)
         .order("subject_id", { ascending: true })
