@@ -223,7 +223,8 @@ export function QuestionBrowser({
         const params = new URLSearchParams();
         if (isChapterSelected) {
           params.set("chapterId", String(resolvedChapterId));
-        } else if (isSubjectSelected) {
+        }
+        if (isSubjectSelected || selectedSubjectId != null) {
           params.set("subjectId", String(selectedSubjectId));
         }
         params.set("page", String(page));

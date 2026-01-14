@@ -26,7 +26,6 @@ type QuestionRow = {
   id: number;
   marks: number;
   difficulty: number;
-  calculator: boolean;
   created_at: string;
   question_images: QuestionImageRow[] | null;
   answer_images: QuestionImageRow[] | null;
@@ -117,7 +116,6 @@ export async function GET(request: Request) {
         id,
         marks,
         difficulty,
-        calculator,
         created_at,
         question_images (
           id,
@@ -151,6 +149,21 @@ export async function GET(request: Request) {
       { error: questionChaptersError.message },
       { status: 500 },
     );
+  }
+
+  // Fetch question_subjects for calculator values per subject
+  const { data: questionSubjectsData } = await adminClient
+    .from("question_subjects")
+    .select("question_id, subject_id, calculator")
+    .in("question_id", orderedQuestionIds);
+
+  // Build questionId -> Map<subjectId, calculator> for lookup
+  const questionSubjectCalcMap = new Map<number, Map<number, boolean>>();
+  for (const qs of questionSubjectsData ?? []) {
+    const existing =
+      questionSubjectCalcMap.get(qs.question_id) ?? new Map<number, boolean>();
+    existing.set(qs.subject_id, qs.calculator);
+    questionSubjectCalcMap.set(qs.question_id, existing);
   }
 
   const chapterIds = Array.from(
@@ -211,11 +224,18 @@ export async function GET(request: Request) {
       const subject = chapter ? toSingle(chapter.subject) : null;
       const position = positionById.get(question.id) ?? null;
 
+      // Get calculator value for the question's subject
+      const subjectCalcMap = questionSubjectCalcMap.get(question.id);
+      const calculator =
+        subject?.id && subjectCalcMap
+          ? (subjectCalcMap.get(subject.id) ?? true)
+          : true;
+
       return {
         id: question.id,
         marks: question.marks,
         difficulty: question.difficulty,
-        calculator: question.calculator,
+        calculator,
         createdAt: question.created_at,
         chapterId: chapterIdForQuestion,
         chapterName: chapter?.name ?? null,

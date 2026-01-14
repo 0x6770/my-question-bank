@@ -349,19 +349,40 @@ export async function GET(request: Request) {
   const hasDifficultyFilter = Boolean(difficultySet && difficultySet.size > 0);
   const hasCalculatorFilter = calculatorFilter !== null;
 
-  // Pre-fetch question_subjects for calculator filtering when subject is specified
+  // Pre-fetch question_subjects for calculator filtering
+  // When subject is specified, filter by that subject's calculator value
+  // When no subject is specified, filter by any subject's calculator value
   let questionSubjectsForFilter: Map<number, boolean> | null = null;
-  if (hasCalculatorFilter && subjectId) {
-    const { data: qsRows } = await supabase
+  if (hasCalculatorFilter) {
+    let qsQuery = supabase
       .from("question_subjects")
       .select("question_id, calculator")
-      .eq("subject_id", subjectId)
       .eq("calculator", calculatorFilter)
       .in("question_id", matchingQuestionIds);
+
+    if (subjectId) {
+      qsQuery = qsQuery.eq("subject_id", subjectId);
+    }
+
+    const { data: qsRows } = await qsQuery;
 
     questionSubjectsForFilter = new Map(
       (qsRows ?? []).map((row) => [row.question_id, row.calculator]),
     );
+  }
+
+  if (hasCalculatorFilter && questionSubjectsForFilter && !orderedQuestionIds) {
+    matchingQuestionIds = matchingQuestionIds.filter((id) =>
+      questionSubjectsForFilter.has(id),
+    );
+
+    if (matchingQuestionIds.length === 0) {
+      return NextResponse.json({
+        questions: [],
+        hasMore: false,
+        page: safePage,
+      });
+    }
   }
 
   if (orderedQuestionIds && (hasDifficultyFilter || hasCalculatorFilter)) {
@@ -372,12 +393,6 @@ export async function GET(request: Request) {
 
     if (hasDifficultyFilter && difficultySet) {
       filterQuery = filterQuery.in("difficulty", Array.from(difficultySet));
-    }
-
-    // If filtering by calculator with subject, use pre-fetched question_subjects
-    // Otherwise fall back to questions.calculator
-    if (hasCalculatorFilter && !questionSubjectsForFilter) {
-      filterQuery = filterQuery.eq("calculator", calculatorFilter);
     }
 
     const { data: filteredRows, error: filterError } = await filterQuery;
@@ -455,7 +470,6 @@ export async function GET(request: Request) {
           id,
           marks,
           difficulty,
-          calculator,
           created_at,
           question_images (
             id,
@@ -489,7 +503,6 @@ export async function GET(request: Request) {
           id,
           marks,
           difficulty,
-          calculator,
           created_at,
           question_images (
             id,
@@ -512,12 +525,6 @@ export async function GET(request: Request) {
 
     if (hasDifficultyFilter && difficultySet) {
       query = query.in("difficulty", Array.from(difficultySet));
-    }
-
-    // If filtering by calculator with subject, we'll filter after fetching via question_subjects
-    // Otherwise fall back to questions.calculator
-    if (hasCalculatorFilter && !subjectId) {
-      query = query.eq("calculator", calculatorFilter);
     }
 
     const { data, error } = await query.order("created_at", {
@@ -666,8 +673,8 @@ export async function GET(request: Request) {
       id: row.id,
       marks: row.marks,
       difficulty: row.difficulty,
-      // Use subject-specific calculator if available, otherwise fall back to question.calculator
-      calculator: subjectSpecificCalc ?? row.calculator,
+      // Use subject-specific calculator value, default to true if not found
+      calculator: subjectSpecificCalc ?? true,
       createdAt: row.created_at,
       chapterIds: questionChapterIds, // Array of all chapter IDs
       chapterId: primaryChapterId, // Keep for backward compatibility
@@ -686,11 +693,11 @@ export async function GET(request: Request) {
     };
   });
 
-  // Apply post-fetch calculator filter if filtering by subject
+  // Apply post-fetch calculator filter using question_subjects
   let finalNormalized = normalized;
-  if (hasCalculatorFilter && subjectId && !orderedQuestionIds) {
-    finalNormalized = normalized.filter(
-      (q) => q.calculator === calculatorFilter,
+  if (hasCalculatorFilter && questionSubjectsForFilter && !orderedQuestionIds) {
+    finalNormalized = normalized.filter((q) =>
+      questionSubjectsForFilter.has(q.id),
     );
   }
 

@@ -313,13 +313,14 @@ COMMENT ON FUNCTION public.update_question_tags IS
   'Updates tags for a question across multiple subjects. Accepts JSON array with subject_id and tag_value_ids. Atomic operation.';
 
 
--- 5.3) Create question with chapters AND tags
+-- 5.3) Create question with chapters, tags, AND per-subject properties (Issue #43, #50)
 CREATE OR REPLACE FUNCTION public.create_question_with_chapters_and_tags(
   p_marks smallint,
   p_difficulty smallint,
   p_calculator boolean,
   p_chapter_ids bigint[],
-  p_tags jsonb  -- Format same as update_question_tags
+  p_tags jsonb,  -- Format same as update_question_tags
+  p_subject_properties jsonb DEFAULT NULL  -- Format: [{"subject_id": 1, "calculator": true}, ...]
 ) RETURNS bigint
 LANGUAGE plpgsql SECURITY DEFINER
 SET search_path TO 'public'
@@ -340,9 +341,14 @@ BEGIN
     PERFORM update_question_tags(v_question_id, p_tags);
   END IF;
 
+  -- Set per-subject properties if provided (Issue #50)
+  IF p_subject_properties IS NOT NULL AND jsonb_array_length(p_subject_properties) > 0 THEN
+    PERFORM update_question_subject_properties(v_question_id, p_subject_properties);
+  END IF;
+
   RETURN v_question_id;
 END;
 $$;
 
-COMMENT ON FUNCTION public.create_question_with_chapters_and_tags IS
-  'Creates a question with chapters and tags in a single transaction. Extends create_question_with_chapters to support tags.';
+COMMENT ON FUNCTION public.create_question_with_chapters_and_tags(smallint, smallint, boolean, bigint[], jsonb, jsonb) IS
+  'Creates a question with chapters, tags, and per-subject properties in a single transaction.';

@@ -34,6 +34,13 @@ type QuestionSummary = {
   }[];
 };
 
+type SupabaseErrorLike = {
+  message?: string;
+  details?: string;
+  hint?: string;
+  code?: string;
+};
+
 type PageProps = {
   searchParams: Promise<{
     bank?: string;
@@ -128,7 +135,6 @@ export default async function ConsoleQuestionsPage(props: PageProps) {
         questions!inner (
           id,
           difficulty,
-          calculator,
           marks,
           created_at,
           question_images (
@@ -152,7 +158,6 @@ export default async function ConsoleQuestionsPage(props: PageProps) {
   type QuestionRow = {
     id: number;
     difficulty: number;
-    calculator: boolean;
     marks: number;
     created_at: string;
     question_images:
@@ -181,6 +186,19 @@ export default async function ConsoleQuestionsPage(props: PageProps) {
     .from("question_chapters")
     .select("question_id, chapter_id")
     .in("question_id", questionIds.length > 0 ? questionIds : [-1]);
+
+  const { data: questionSubjects, error: qsError } = await supabase
+    .from("question_subjects")
+    .select("question_id, subject_id, calculator")
+    .in("question_id", questionIds.length > 0 ? questionIds : [-1]);
+
+  const calculatorByQuestionSubject = new Map<string, boolean>();
+  for (const row of questionSubjects ?? []) {
+    calculatorByQuestionSubject.set(
+      `${row.question_id}:${row.subject_id}`,
+      row.calculator,
+    );
+  }
 
   // Build ALL question_id -> chapter_ids mapping (for editing - includes all question banks)
   const allQuestionToChaptersMap = new Map<number, number[]>();
@@ -214,7 +232,6 @@ export default async function ConsoleQuestionsPage(props: PageProps) {
         id: number;
         created_at: string;
         difficulty: number;
-        calculator: boolean;
         marks: number;
         question_images: QuestionSummary["images"] | null;
         answer_images: QuestionSummary["answerImages"] | null;
@@ -260,6 +277,14 @@ export default async function ConsoleQuestionsPage(props: PageProps) {
           : rawSubject
         : null;
 
+      const subjectId = subject?.id ?? null;
+      const calculator =
+        subjectId != null
+          ? (calculatorByQuestionSubject.get(
+              `${rawQuestion.id}:${subjectId}`,
+            ) ?? true)
+          : true;
+
       return {
         id: rawQuestion.id,
         chapterIds, // Array of all chapter IDs
@@ -267,7 +292,7 @@ export default async function ConsoleQuestionsPage(props: PageProps) {
         subjectName: subject?.name ?? null,
         createdAt: rawQuestion.created_at,
         difficulty: rawQuestion.difficulty,
-        calculator: rawQuestion.calculator,
+        calculator,
         marks: rawQuestion.marks,
         images,
         answerImages,
@@ -360,6 +385,32 @@ export default async function ConsoleQuestionsPage(props: PageProps) {
     })
     .filter((ch): ch is AllChapterRow => ch !== null);
 
+  const loadErrorDetail = [chaptersError, questionsError, qcError, qsError]
+    .filter((error): error is SupabaseErrorLike => Boolean(error))
+    .map((error) => {
+      const parts = [
+        error.code ? `code=${error.code}` : null,
+        error.message ?? null,
+        error.details ?? null,
+        error.hint ?? null,
+      ].filter(Boolean);
+      return parts.join(" | ");
+    })
+    .filter((value) => value.length > 0)
+    .join(" || ");
+
+  if (loadErrorDetail) {
+    console.error(
+      "[console/questions] Failed to load question data:",
+      loadErrorDetail,
+    );
+  }
+
+  const loadError =
+    chaptersError || questionsError || qcError || qsError
+      ? "Failed to load question data. Please try again later."
+      : null;
+
   return (
     <QuestionManagement
       initialChapters={chapterSummaries}
@@ -369,11 +420,8 @@ export default async function ConsoleQuestionsPage(props: PageProps) {
       initialQuestions={questionSummaries}
       initialHasMore={hasMoreInitial}
       questionBank={selectedBank}
-      loadError={
-        chaptersError || questionsError || qcError
-          ? "Failed to load question data. Please try again later."
-          : null
-      }
+      loadError={loadError}
+      loadErrorDetail={loadErrorDetail || null}
     />
   );
 }

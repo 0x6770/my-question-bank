@@ -82,3 +82,19 @@ create policy "questions.select by access" on public.questions
         and usa.user_id = auth.uid()
     )
   );
+
+-- Question_subjects: require admin/super_admin or access to the subject
+drop policy if exists "question_subjects.select" on public.question_subjects;
+
+create policy "question_subjects.select by access" on public.question_subjects
+  for select
+  to authenticated
+  using (
+    public.in_roles(VARIADIC ARRAY['admin'::public.user_role, 'super_admin'::public.user_role])
+    or exists (
+      select 1
+      from public.user_subject_access usa
+      where usa.user_id = auth.uid()
+        and usa.subject_id = public.question_subjects.subject_id
+    )
+  );

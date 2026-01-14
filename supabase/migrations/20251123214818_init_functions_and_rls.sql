@@ -42,6 +42,7 @@ CREATE OR REPLACE FUNCTION "public"."in_roles"(VARIADIC "roles" "public"."user_r
 $$;
 
 -- 原子性更新题目和章节关联
+-- p_calculator: default value for new question_subjects entries
 CREATE OR REPLACE FUNCTION "public"."update_question_with_chapters"(
   "p_question_id" bigint,
   "p_marks" smallint,
@@ -53,8 +54,11 @@ CREATE OR REPLACE FUNCTION "public"."update_question_with_chapters"(
     SET "search_path" TO 'public'
     AS $$
 DECLARE
-  v_question_banks text[];
+  v_subject_ids bigint[];
   v_chapter_count integer;
+  v_subject_count integer;
+  v_old_subject_ids bigint[];
+  v_new_subject_ids bigint[];
 BEGIN
   -- 验证参数
   IF p_marks <= 0 THEN
@@ -65,31 +69,34 @@ BEGIN
     RAISE EXCEPTION 'difficulty must be between 1 and 4';
   END IF;
 
-  -- 如果提供了 chapter_ids，检查约束：所有 chapter 必须属于不同的 question_bank
   v_chapter_count := coalesce(array_length(p_chapter_ids, 1), 0);
 
   IF v_chapter_count > 0 THEN
-    SELECT array_agg(DISTINCT eb.question_bank)
-    INTO v_question_banks
+    -- 约束: 每个 subject 最多一个 chapter (Issue #43)
+    SELECT array_agg(DISTINCT c.subject_id)
+    INTO v_subject_ids
     FROM unnest(p_chapter_ids) AS chapter_id
-    JOIN chapters c ON c.id = chapter_id
-    JOIN subjects s ON s.id = c.subject_id
-    JOIN exam_boards eb ON eb.id = s.exam_board_id;
+    JOIN chapters c ON c.id = chapter_id;
 
-    -- 如果有重复的 question_bank，抛出错误
-    IF array_length(v_question_banks, 1) != v_chapter_count THEN
-      RAISE EXCEPTION 'A question cannot belong to multiple chapters in the same question bank';
+    v_subject_count := coalesce(array_length(v_subject_ids, 1), 0);
+
+    IF v_subject_count != v_chapter_count THEN
+      RAISE EXCEPTION 'A question cannot belong to multiple chapters in the same subject';
     END IF;
   END IF;
 
-  -- 在事务中执行所有操作（函数本身就在事务中）
+  -- Get old subject IDs before deleting chapters
+  SELECT array_agg(DISTINCT c.subject_id)
+  INTO v_old_subject_ids
+  FROM question_chapters qc
+  JOIN chapters c ON c.id = qc.chapter_id
+  WHERE qc.question_id = p_question_id;
 
-  -- 1. 更新 questions 表
+  -- 1. 更新 questions 表 (no calculator column)
   UPDATE questions
   SET
     marks = p_marks,
-    difficulty = p_difficulty,
-    calculator = p_calculator
+    difficulty = p_difficulty
   WHERE id = p_question_id;
 
   -- 2. 删除旧的 chapter 关联
@@ -100,11 +107,29 @@ BEGIN
   IF v_chapter_count > 0 THEN
     INSERT INTO question_chapters (question_id, chapter_id)
     SELECT p_question_id, unnest(p_chapter_ids);
+
+    v_new_subject_ids := v_subject_ids;
+
+    -- 4. Insert question_subjects for new subjects (preserve existing calculator values)
+    INSERT INTO question_subjects (question_id, subject_id, calculator)
+    SELECT p_question_id, unnest(v_new_subject_ids), p_calculator
+    ON CONFLICT (question_id, subject_id) DO NOTHING;
+  ELSE
+    v_new_subject_ids := ARRAY[]::bigint[];
+  END IF;
+
+  -- 5. Clean up question_subjects for removed subjects
+  IF v_old_subject_ids IS NOT NULL THEN
+    DELETE FROM question_subjects
+    WHERE question_id = p_question_id
+      AND subject_id = ANY(v_old_subject_ids)
+      AND NOT (subject_id = ANY(COALESCE(v_new_subject_ids, ARRAY[]::bigint[])));
   END IF;
 END;
 $$;
 
 -- 创建新题目并关联章节（用于批量导入）
+-- p_calculator: default value for question_subjects.calculator
 CREATE OR REPLACE FUNCTION "public"."create_question_with_chapters"(
   "p_marks" smallint,
   "p_difficulty" smallint,
@@ -116,8 +141,9 @@ CREATE OR REPLACE FUNCTION "public"."create_question_with_chapters"(
     AS $$
 DECLARE
   v_question_id bigint;
-  v_question_banks text[];
+  v_subject_ids bigint[];
   v_chapter_count integer;
+  v_subject_count integer;
 BEGIN
   -- 验证参数
   IF p_marks <= 0 THEN
@@ -128,32 +154,35 @@ BEGIN
     RAISE EXCEPTION 'difficulty must be between 1 and 4';
   END IF;
 
-  -- 如果提供了 chapter_ids，检查约束：所有 chapter 必须属于不同的 question_bank
   v_chapter_count := coalesce(array_length(p_chapter_ids, 1), 0);
 
   IF v_chapter_count > 0 THEN
-    SELECT array_agg(DISTINCT eb.question_bank)
-    INTO v_question_banks
+    -- 约束: 每个 subject 最多一个 chapter (Issue #43)
+    SELECT array_agg(DISTINCT c.subject_id)
+    INTO v_subject_ids
     FROM unnest(p_chapter_ids) AS chapter_id
-    JOIN chapters c ON c.id = chapter_id
-    JOIN subjects s ON s.id = c.subject_id
-    JOIN exam_boards eb ON eb.id = s.exam_board_id;
+    JOIN chapters c ON c.id = chapter_id;
 
-    -- 如果有重复的 question_bank，抛出错误
-    IF array_length(v_question_banks, 1) != v_chapter_count THEN
-      RAISE EXCEPTION 'A question cannot belong to multiple chapters in the same question bank';
+    v_subject_count := coalesce(array_length(v_subject_ids, 1), 0);
+
+    IF v_subject_count != v_chapter_count THEN
+      RAISE EXCEPTION 'A question cannot belong to multiple chapters in the same subject';
     END IF;
   END IF;
 
-  -- 1. 创建题目
-  INSERT INTO questions (marks, difficulty, calculator)
-  VALUES (p_marks, p_difficulty, p_calculator)
+  -- 1. 创建题目 (no calculator column)
+  INSERT INTO questions (marks, difficulty)
+  VALUES (p_marks, p_difficulty)
   RETURNING id INTO v_question_id;
 
   -- 2. 插入 chapter 关联
   IF v_chapter_count > 0 THEN
     INSERT INTO question_chapters (question_id, chapter_id)
     SELECT v_question_id, unnest(p_chapter_ids);
+
+    -- 3. 插入 question_subjects (per-subject calculator)
+    INSERT INTO question_subjects (question_id, subject_id, calculator)
+    SELECT v_question_id, unnest(v_subject_ids), p_calculator;
   END IF;
 
   RETURN v_question_id;
@@ -385,6 +414,94 @@ CREATE POLICY "question_chapters.update" ON "public"."question_chapters"
     ]));
 
 CREATE POLICY "question_chapters.delete" ON "public"."question_chapters"
+    FOR DELETE
+    USING ("public"."in_roles"(VARIADIC ARRAY[
+        'admin'::"public"."user_role",
+        'super_admin'::"public"."user_role"
+    ]));
+
+-- ========== question_subjects: Functions, Triggers, RLS ==========
+
+-- Trigger: Auto-update updated_at
+CREATE OR REPLACE FUNCTION "public"."set_question_subjects_updated_at"()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER set_question_subjects_updated_at
+BEFORE UPDATE ON "public"."question_subjects"
+FOR EACH ROW EXECUTE FUNCTION "public"."set_question_subjects_updated_at"();
+
+-- Function: Update per-subject properties (Issue #50)
+CREATE OR REPLACE FUNCTION "public"."update_question_subject_properties"(
+  "p_question_id" bigint,
+  "p_subject_properties" jsonb  -- Format: [{"subject_id": 1, "calculator": true}, ...]
+) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_prop jsonb;
+  v_subject_id bigint;
+  v_calculator boolean;
+BEGIN
+  -- Validate question exists
+  IF NOT EXISTS (SELECT 1 FROM questions WHERE id = p_question_id) THEN
+    RAISE EXCEPTION 'Question % does not exist', p_question_id;
+  END IF;
+
+  -- Update each subject's properties
+  FOR v_prop IN SELECT * FROM jsonb_array_elements(p_subject_properties)
+  LOOP
+    v_subject_id := (v_prop->>'subject_id')::bigint;
+    v_calculator := COALESCE((v_prop->>'calculator')::boolean, true);
+
+    -- Validate subject exists in question_subjects
+    IF NOT EXISTS (
+      SELECT 1 FROM question_subjects
+      WHERE question_id = p_question_id AND subject_id = v_subject_id
+    ) THEN
+      RAISE EXCEPTION 'Question % is not associated with subject %', p_question_id, v_subject_id;
+    END IF;
+
+    -- Update the calculator value
+    UPDATE question_subjects
+    SET calculator = v_calculator
+    WHERE question_id = p_question_id
+      AND subject_id = v_subject_id;
+  END LOOP;
+END;
+$$;
+
+-- question_subjects RLS (initial: select open, will be restricted in user_subject_access migration)
+ALTER TABLE "public"."question_subjects" ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "question_subjects.select" ON "public"."question_subjects"
+    FOR SELECT
+    USING (true);
+
+CREATE POLICY "question_subjects.insert" ON "public"."question_subjects"
+    FOR INSERT
+    WITH CHECK ("public"."in_roles"(VARIADIC ARRAY[
+        'admin'::"public"."user_role",
+        'super_admin'::"public"."user_role"
+    ]));
+
+CREATE POLICY "question_subjects.update" ON "public"."question_subjects"
+    FOR UPDATE
+    USING ("public"."in_roles"(VARIADIC ARRAY[
+        'admin'::"public"."user_role",
+        'super_admin'::"public"."user_role"
+    ]))
+    WITH CHECK ("public"."in_roles"(VARIADIC ARRAY[
+        'admin'::"public"."user_role",
+        'super_admin'::"public"."user_role"
+    ]));
+
+CREATE POLICY "question_subjects.delete" ON "public"."question_subjects"
     FOR DELETE
     USING ("public"."in_roles"(VARIADIC ARRAY[
         'admin'::"public"."user_role",

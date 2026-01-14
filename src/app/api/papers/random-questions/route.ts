@@ -215,7 +215,6 @@ export async function GET(request: Request) {
         id,
         marks,
         difficulty,
-        calculator,
         created_at,
         question_images (
           id,
@@ -264,6 +263,20 @@ export async function GET(request: Request) {
       { status: 500 },
     );
   }
+
+  // Fetch question_subjects for calculator values for this subject
+  const { data: questionSubjectsData } = await supabase
+    .from("question_subjects")
+    .select("question_id, calculator")
+    .eq("subject_id", subjectId)
+    .in("question_id", matchingQuestionIds);
+
+  const questionCalculatorMap = new Map<number, boolean>(
+    (questionSubjectsData ?? []).map((row) => [
+      row.question_id,
+      row.calculator,
+    ]),
+  );
 
   let statusFilteredQuestions = (allQuestions ?? []) as QuestionRow[];
   if (statusFilter !== "all") {
@@ -385,7 +398,7 @@ export async function GET(request: Request) {
       id: row.id,
       marks: row.marks,
       difficulty: row.difficulty,
-      calculator: row.calculator,
+      calculator: questionCalculatorMap.get(row.id) ?? true,
       createdAt: row.created_at,
       chapterIds: questionChapterIds,
       images: sortedImages,

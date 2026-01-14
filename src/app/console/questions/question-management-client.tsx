@@ -107,6 +107,7 @@ type QuestionManagementProps = {
   initialHasMore: boolean;
   questionBank: QuestionBank;
   loadError: string | null;
+  loadErrorDetail: string | null;
 };
 
 type FormImage = {
@@ -372,6 +373,7 @@ export function QuestionManagement({
   initialHasMore,
   questionBank,
   loadError,
+  loadErrorDetail,
 }: QuestionManagementProps) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -533,6 +535,19 @@ export function QuestionManagement({
         }
       : null,
   );
+
+  useEffect(() => {
+    if (!loadError) return;
+    if (loadErrorDetail) {
+      console.error(
+        "[console/questions] Failed to load question data:",
+        loadErrorDetail,
+      );
+    } else {
+      console.error("[console/questions] Failed to load question data.");
+    }
+  }, [loadError, loadErrorDetail]);
+
   const [busyQuestionId, setBusyQuestionId] = useState<number | null>(null);
   const [editingQuestionId, setEditingQuestionId] = useState<number | null>(
     null,

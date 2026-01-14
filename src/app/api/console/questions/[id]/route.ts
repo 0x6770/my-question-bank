@@ -64,7 +64,7 @@ export async function GET(
 
   const { data: questionData, error: questionError } = await adminClient
     .from("questions")
-    .select("id, marks, difficulty, calculator, created_at")
+    .select("id, marks, difficulty, created_at")
     .eq("id", questionId)
     .single();
 
@@ -78,24 +78,32 @@ export async function GET(
     );
   }
 
-  const [questionImagesResult, answerImagesResult, questionChaptersResult] =
-    await Promise.all([
-      adminClient
-        .from("question_images")
-        .select("id, storage_path, position")
-        .eq("question_id", questionId)
-        .order("position", { ascending: true }),
-      adminClient
-        .from("answer_images")
-        .select("id, storage_path, position")
-        .eq("question_id", questionId)
-        .order("position", { ascending: true }),
-      adminClient
-        .from("question_chapters")
-        .select("chapter_id, created_at")
-        .eq("question_id", questionId)
-        .order("created_at", { ascending: true }),
-    ]);
+  const [
+    questionImagesResult,
+    answerImagesResult,
+    questionChaptersResult,
+    questionSubjectsResult,
+  ] = await Promise.all([
+    adminClient
+      .from("question_images")
+      .select("id, storage_path, position")
+      .eq("question_id", questionId)
+      .order("position", { ascending: true }),
+    adminClient
+      .from("answer_images")
+      .select("id, storage_path, position")
+      .eq("question_id", questionId)
+      .order("position", { ascending: true }),
+    adminClient
+      .from("question_chapters")
+      .select("chapter_id, created_at")
+      .eq("question_id", questionId)
+      .order("created_at", { ascending: true }),
+    adminClient
+      .from("question_subjects")
+      .select("subject_id, calculator")
+      .eq("question_id", questionId),
+  ]);
 
   if (questionImagesResult.error || answerImagesResult.error) {
     return NextResponse.json(
@@ -126,6 +134,14 @@ export async function GET(
   const questionChapterRows = questionChaptersResult.data ?? [];
   const chapterIds = questionChapterRows.map((row) => row.chapter_id);
 
+  // Build subject -> calculator map
+  const subjectCalculatorMap = new Map<number, boolean>(
+    (questionSubjectsResult.data ?? []).map((row) => [
+      row.subject_id,
+      row.calculator,
+    ]),
+  );
+
   let chapterMap = new Map<number, ChapterRow>();
   if (chapterIds.length > 0) {
     const { data: chapterData, error: chapterError } = await adminClient
@@ -154,6 +170,7 @@ export async function GET(
     return {
       chapter_id: chapterId,
       chapter_name: chapter?.name ?? null,
+      subject_id: subject?.id ?? null,
       subject_name: subject?.name ?? null,
     };
   });
@@ -190,11 +207,17 @@ export async function GET(
   // Extract chapter and subject info
   const firstChapter = questionChapters[0];
 
+  // Get calculator value for the first chapter's subject
+  const calculator =
+    firstChapter?.subject_id != null
+      ? (subjectCalculatorMap.get(firstChapter.subject_id) ?? true)
+      : true;
+
   return NextResponse.json({
     id: questionData.id,
     marks: questionData.marks,
     difficulty: questionData.difficulty,
-    calculator: questionData.calculator,
+    calculator,
     createdAt: questionData.created_at,
     images: questionImages.map((img) => ({
       id: img.id,

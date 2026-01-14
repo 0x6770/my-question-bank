@@ -412,6 +412,45 @@ export type Database = {
           },
         ];
       };
+      question_subjects: {
+        Row: {
+          calculator: boolean;
+          created_at: string;
+          question_id: number;
+          subject_id: number;
+          updated_at: string;
+        };
+        Insert: {
+          calculator?: boolean;
+          created_at?: string;
+          question_id: number;
+          subject_id: number;
+          updated_at?: string;
+        };
+        Update: {
+          calculator?: boolean;
+          created_at?: string;
+          question_id?: number;
+          subject_id?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "question_subjects_question_id_fkey";
+            columns: ["question_id"];
+            isOneToOne: false;
+            referencedRelation: "questions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "question_subjects_subject_id_fkey";
+            columns: ["subject_id"];
+            isOneToOne: false;
+            referencedRelation: "subjects";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       question_tag_values: {
         Row: {
           created_at: string;
@@ -457,21 +496,18 @@ export type Database = {
       };
       questions: {
         Row: {
-          calculator: boolean;
           created_at: string;
           difficulty: number;
           id: number;
           marks: number;
         };
         Insert: {
-          calculator?: boolean;
           created_at?: string;
           difficulty?: number;
           id?: number;
           marks: number;
         };
         Update: {
-          calculator?: boolean;
           created_at?: string;
           difficulty?: number;
           id?: number;
@@ -908,6 +944,7 @@ export type Database = {
           p_chapter_ids: number[];
           p_difficulty: number;
           p_marks: number;
+          p_subject_properties?: Json;
           p_tags: Json;
         };
         Returns: number;
@@ -946,6 +983,10 @@ export type Database = {
       };
       is_current_user_admin: { Args: never; Returns: boolean };
       track_answer_view: { Args: { q_id: number }; Returns: undefined };
+      update_question_subject_properties: {
+        Args: { p_question_id: number; p_subject_properties: Json };
+        Returns: undefined;
+      };
       update_question_tags: {
         Args: { p_question_id: number; p_tags: Json };
         Returns: undefined;

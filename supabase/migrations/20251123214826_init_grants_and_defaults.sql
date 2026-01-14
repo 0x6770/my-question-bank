@@ -75,6 +75,18 @@ GRANT ALL ON SEQUENCE "public"."user_questions_id_seq" TO "anon";
 GRANT ALL ON SEQUENCE "public"."user_questions_id_seq" TO "authenticated";
 GRANT ALL ON SEQUENCE "public"."user_questions_id_seq" TO "service_role";
 
+GRANT ALL ON TABLE "public"."question_chapters" TO "anon";
+GRANT ALL ON TABLE "public"."question_chapters" TO "authenticated";
+GRANT ALL ON TABLE "public"."question_chapters" TO "service_role";
+
+GRANT ALL ON TABLE "public"."question_subjects" TO "anon";
+GRANT ALL ON TABLE "public"."question_subjects" TO "authenticated";
+GRANT ALL ON TABLE "public"."question_subjects" TO "service_role";
+
+GRANT ALL ON FUNCTION "public"."update_question_subject_properties"(bigint, jsonb) TO "anon";
+GRANT ALL ON FUNCTION "public"."update_question_subject_properties"(bigint, jsonb) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_question_subject_properties"(bigint, jsonb) TO "service_role";
+
 -- Default privileges
 
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public"

@@ -125,7 +125,6 @@ export default async function PaperViewPage(props: PageProps) {
           id,
           marks,
           difficulty,
-          calculator,
           created_at,
           question_images (
             id,
@@ -143,6 +142,20 @@ export default async function PaperViewPage(props: PageProps) {
 
     if (questionsError) {
       redirect("/my-papers");
+    }
+
+    // Fetch question_subjects for calculator values
+    const { data: questionSubjectsData } = await supabase
+      .from("question_subjects")
+      .select("question_id, calculator")
+      .in("question_id", questionIds);
+
+    // For papers without specific subject context, use first available calculator value or default true
+    const questionCalculatorMap = new Map<number, boolean>();
+    for (const qs of questionSubjectsData ?? []) {
+      if (!questionCalculatorMap.has(qs.question_id)) {
+        questionCalculatorMap.set(qs.question_id, qs.calculator);
+      }
     }
 
     type QuestionRow = Omit<
@@ -200,7 +213,7 @@ export default async function PaperViewPage(props: PageProps) {
         id: question.id,
         marks: question.marks,
         difficulty: question.difficulty,
-        calculator: question.calculator,
+        calculator: questionCalculatorMap.get(question.id) ?? true,
         createdAt: question.created_at,
         images: sortedImages,
         answerImages: sortedAnswerImages,

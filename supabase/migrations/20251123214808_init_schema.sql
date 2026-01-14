@@ -75,7 +75,6 @@ CREATE TABLE IF NOT EXISTS "public"."questions" (
     "id" bigint NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "difficulty" smallint DEFAULT '2'::smallint NOT NULL,
-    "calculator" boolean DEFAULT true NOT NULL,
     "marks" smallint NOT NULL,
     CONSTRAINT "questions_difficulty_check" CHECK (
         ( "difficulty" >= 1 ) AND ( "difficulty" <= 4 )
@@ -153,6 +152,15 @@ CREATE TABLE IF NOT EXISTS "public"."question_chapters" (
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
 );
 
+-- question_subjects (per-subject properties for questions, Issue #43 & #50)
+CREATE TABLE IF NOT EXISTS "public"."question_subjects" (
+    "question_id" bigint NOT NULL,
+    "subject_id" bigint NOT NULL,
+    "calculator" boolean NOT NULL DEFAULT true,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
 -- ========= 主键 & 唯一约束 =========
 
 ALTER TABLE ONLY "public"."exam_boards"
@@ -200,6 +208,9 @@ ALTER TABLE ONLY "public"."user_questions"
 ALTER TABLE ONLY "public"."question_chapters"
     ADD CONSTRAINT "question_chapters_pkey" PRIMARY KEY ("question_id", "chapter_id");
 
+ALTER TABLE ONLY "public"."question_subjects"
+    ADD CONSTRAINT "question_subjects_pkey" PRIMARY KEY ("question_id", "subject_id");
+
 -- ========= 索引 =========
 
 CREATE UNIQUE INDEX "question_images_question_position_key"
@@ -210,6 +221,15 @@ CREATE INDEX "question_chapters_question_id_idx"
 
 CREATE INDEX "question_chapters_chapter_id_idx"
     ON "public"."question_chapters" USING "btree" ("chapter_id");
+
+CREATE INDEX "question_subjects_question_idx"
+    ON "public"."question_subjects" USING "btree" ("question_id");
+
+CREATE INDEX "question_subjects_subject_idx"
+    ON "public"."question_subjects" USING "btree" ("subject_id");
+
+CREATE INDEX "question_subjects_subject_calculator_idx"
+    ON "public"."question_subjects" USING "btree" ("subject_id", "calculator");
 
 -- ========= 外键 =========
 
@@ -266,4 +286,16 @@ ALTER TABLE ONLY "public"."question_chapters"
     ADD CONSTRAINT "question_chapters_chapter_id_fkey"
     FOREIGN KEY ("chapter_id")
     REFERENCES "public"."chapters"("id")
+    ON DELETE CASCADE;
+
+ALTER TABLE ONLY "public"."question_subjects"
+    ADD CONSTRAINT "question_subjects_question_id_fkey"
+    FOREIGN KEY ("question_id")
+    REFERENCES "public"."questions"("id")
+    ON DELETE CASCADE;
+
+ALTER TABLE ONLY "public"."question_subjects"
+    ADD CONSTRAINT "question_subjects_subject_id_fkey"
+    FOREIGN KEY ("subject_id")
+    REFERENCES "public"."subjects"("id")
     ON DELETE CASCADE;
