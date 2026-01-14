@@ -1,3 +1,4 @@
+import type { PostgrestError } from "@supabase/postgrest-js";
 import { QUESTION_BANK, type QuestionBank } from "@/lib/question-bank";
 import { createClient } from "@/lib/supabase/server";
 import type { Tables } from "../../../../database.types";
@@ -32,13 +33,6 @@ type QuestionSummary = {
     storage_path: string;
     position: number;
   }[];
-};
-
-type SupabaseErrorLike = {
-  message?: string;
-  details?: string;
-  hint?: string;
-  code?: string;
 };
 
 type PageProps = {
@@ -386,7 +380,7 @@ export default async function ConsoleQuestionsPage(props: PageProps) {
     .filter((ch): ch is AllChapterRow => ch !== null);
 
   const loadErrorDetail = [chaptersError, questionsError, qcError, qsError]
-    .filter((error): error is SupabaseErrorLike => Boolean(error))
+    .filter((error): error is PostgrestError => Boolean(error))
     .map((error) => {
       const parts = [
         error.code ? `code=${error.code}` : null,
