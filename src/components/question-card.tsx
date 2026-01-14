@@ -250,13 +250,15 @@ export function QuestionCard({
         <div className="flex flex-col md:grid md:grid-cols-[1fr_200px] gap-0 border-b border-slate-100">
           <div className="flex flex-col gap-3 px-4 py-4">
             <div className="flex flex-wrap items-center gap-3 text-sm">
-              <div className="flex flex-1 flex-wrap items-center justify-between gap-3">
-                {!question.calculator && (
-                  <span className="rounded bg-slate-100 px-3 py-1 font-semibold uppercase tracking-wide text-slate-500">
-                    No Calculator
-                  </span>
-                )}
-                <div className="flex flex-wrap items-center gap-3">
+              <div className="grid w-full flex-1 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-3">
+                <div className="flex items-center justify-start">
+                  {!question.calculator && (
+                    <span className="rounded bg-slate-100 px-3 py-1 font-semibold uppercase tracking-wide text-slate-500">
+                      No Calculator
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center justify-center gap-3">
                   <span className={`font-semibold ${meta.accentClass}`}>
                     {meta.label}
                   </span>
@@ -269,9 +271,11 @@ export function QuestionCard({
                     ))}
                   </div>
                 </div>
-                <span className="font-semibold text-slate-500">
-                  Marks: {question.marks}
-                </span>
+                <div className="flex items-center justify-end">
+                  <span className="font-semibold text-slate-500">
+                    Marks: {question.marks}
+                  </span>
+                </div>
               </div>
               {hasImages ? (
                 <Button
