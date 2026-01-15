@@ -250,10 +250,12 @@ function PaperPdfDocument({
   paper,
   imageData,
   watermarkSrc,
+  oneQuestionPerPage = false,
 }: {
   paper: Paper;
   imageData: Record<string, string>;
   watermarkSrc: string | null;
+  oneQuestionPerPage?: boolean;
 }) {
   const totalMarks = paper.questions.reduce((sum, q) => sum + q.marks, 0);
   const formattedDate = new Date(paper.created_at).toLocaleDateString("en-US", {
@@ -261,6 +263,51 @@ function PaperPdfDocument({
     month: "long",
     day: "numeric",
   });
+
+  const renderQuestionContent = (question: Question, index: number) => (
+    <View key={question.id} style={pdfStyles.questionBlock}>
+      <View style={pdfStyles.questionHeader}>
+        <Text style={pdfStyles.questionTitle}>
+          {index + 1}.{" "}
+          <Text style={pdfStyles.questionMeta}>
+            [Maximum mark: {question.marks}]
+          </Text>
+        </Text>
+        {!question.calculator ? (
+          <Text style={pdfStyles.calculatorTag}>[No calculator]</Text>
+        ) : null}
+      </View>
+      {question.images.map((image) => (
+        <View key={image.id} style={pdfStyles.imageWrapper}>
+          <PdfImage
+            style={pdfStyles.image}
+            src={
+              imageData[image.storage_path] ??
+              image.signedUrl ??
+              image.storage_path
+            }
+          />
+        </View>
+      ))}
+      {paper.show_answers && question.answerImages.length > 0 ? (
+        <View style={pdfStyles.answerSection}>
+          <Text style={pdfStyles.answerTitle}>Answer:</Text>
+          {question.answerImages.map((image) => (
+            <View key={image.id} style={pdfStyles.imageWrapper}>
+              <PdfImage
+                style={pdfStyles.image}
+                src={
+                  imageData[image.storage_path] ??
+                  image.signedUrl ??
+                  image.storage_path
+                }
+              />
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
 
   return (
     <Document>
@@ -278,56 +325,34 @@ function PaperPdfDocument({
         </View>
         <PdfPageWatermark watermarkSrc={watermarkSrc} />
       </Page>
-      <Page size="A4" style={pdfStyles.page} wrap>
-        <PdfHeader />
-        <PdfFooter />
-        {paper.questions.map((question, index) => (
-          <View key={question.id} style={pdfStyles.questionBlock}>
-            <View style={pdfStyles.questionHeader}>
-              <Text style={pdfStyles.questionTitle}>
-                {index + 1}.{" "}
-                <Text style={pdfStyles.questionMeta}>
-                  [Maximum mark: {question.marks}]
-                </Text>
-              </Text>
-              {!question.calculator ? (
-                <Text style={pdfStyles.calculatorTag}>[No calculator]</Text>
-              ) : null}
-            </View>
-            {question.images.map((image) => (
-              <View key={image.id} style={pdfStyles.imageWrapper}>
-                <PdfImage
-                  style={pdfStyles.image}
-                  src={
-                    imageData[image.storage_path] ??
-                    image.signedUrl ??
-                    image.storage_path
-                  }
-                />
-              </View>
-            ))}
-            {paper.show_answers && question.answerImages.length > 0 ? (
-              <View style={pdfStyles.answerSection}>
-                <Text style={pdfStyles.answerTitle}>Answer:</Text>
-                {question.answerImages.map((image) => (
-                  <View key={image.id} style={pdfStyles.imageWrapper}>
-                    <PdfImage
-                      style={pdfStyles.image}
-                      src={
-                        imageData[image.storage_path] ??
-                        image.signedUrl ??
-                        image.storage_path
-                      }
-                    />
-                  </View>
-                ))}
-              </View>
-            ) : null}
-          </View>
-        ))}
-        <Text style={pdfStyles.endOfPaper}>End of Paper</Text>
-        <PdfPageWatermark watermarkSrc={watermarkSrc} />
-      </Page>
+      {oneQuestionPerPage ? (
+        <>
+          {paper.questions.map((question, index) => (
+            <Page key={question.id} size="A4" style={pdfStyles.page}>
+              <PdfHeader />
+              <PdfFooter />
+              {renderQuestionContent(question, index)}
+              <PdfPageWatermark watermarkSrc={watermarkSrc} />
+            </Page>
+          ))}
+          <Page size="A4" style={pdfStyles.page}>
+            <PdfHeader />
+            <PdfFooter />
+            <Text style={pdfStyles.endOfPaper}>End of Paper</Text>
+            <PdfPageWatermark watermarkSrc={watermarkSrc} />
+          </Page>
+        </>
+      ) : (
+        <Page size="A4" style={pdfStyles.page} wrap>
+          <PdfHeader />
+          <PdfFooter />
+          {paper.questions.map((question, index) =>
+            renderQuestionContent(question, index),
+          )}
+          <Text style={pdfStyles.endOfPaper}>End of Paper</Text>
+          <PdfPageWatermark watermarkSrc={watermarkSrc} />
+        </Page>
+      )}
     </Document>
   );
 }
@@ -345,6 +370,7 @@ export function PaperViewClient({ paper }: PaperViewClientProps) {
   const [pdfWatermarkError, setPdfWatermarkError] = useState<string | null>(
     null,
   );
+  const [oneQuestionPerPage, setOneQuestionPerPage] = useState(false);
 
   const pdfImageSources = useMemo(() => {
     const sources: PdfImageSource[] = [];
@@ -518,6 +544,7 @@ export function PaperViewClient({ paper }: PaperViewClientProps) {
           paper={paper}
           imageData={pdfImages}
           watermarkSrc={pdfWatermark}
+          oneQuestionPerPage={oneQuestionPerPage}
         />,
       ).toBlob();
       const url = URL.createObjectURL(blob);
@@ -548,28 +575,39 @@ export function PaperViewClient({ paper }: PaperViewClientProps) {
                 ← Back
               </button>
             </div>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={handleDelete}
-                className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
-              >
-                Delete
-              </button>
-              <button
-                type="button"
-                onClick={handleDownloadPdf}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-300 transition-colors"
-                disabled={!pdfReady || pdfIsGenerating}
-              >
-                {!pdfImagesReady
-                  ? "Loading images..."
-                  : !pdfWatermarkReady
-                    ? "Loading watermark..."
-                    : pdfIsGenerating
-                      ? "Preparing PDF..."
-                      : "Download PDF"}
-              </button>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={oneQuestionPerPage}
+                  onChange={(e) => setOneQuestionPerPage(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                />
+                One question per page
+              </label>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                >
+                  Delete
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadPdf}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-300 transition-colors"
+                  disabled={!pdfReady || pdfIsGenerating}
+                >
+                  {!pdfImagesReady
+                    ? "Loading images..."
+                    : !pdfWatermarkReady
+                      ? "Loading watermark..."
+                      : pdfIsGenerating
+                        ? "Preparing PDF..."
+                        : "Download PDF"}
+                </button>
+              </div>
             </div>
           </div>
           {pdfImagesError || pdfWatermarkError ? (
