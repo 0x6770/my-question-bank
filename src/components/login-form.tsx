@@ -55,7 +55,7 @@ export function LoginForm({
             Login
           </CardTitle>
           <CardDescription className="text-base text-slate-500">
-            Enter your email below to login to your account
+            Start your MyWay journey
           </CardDescription>
         </CardHeader>
         <CardContent className="px-8 pb-8 pt-2">
@@ -100,11 +100,14 @@ export function LoginForm({
               {error && <p className="text-sm text-red-500">{error}</p>}
               <Button
                 type="submit"
-                className="h-12 w-full rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 text-base font-semibold text-white shadow-sm transition-shadow hover:shadow-md"
+                className="h-12 w-full rounded-xl bg-[#5860F4] text-base font-semibold text-white shadow-sm transition-shadow hover:shadow-md"
                 disabled={isLoading}
               >
                 {isLoading ? "Logging in..." : "Login"}
               </Button>
+              <span className="justify-center text-center text-sm text-slate-500">
+                Start your MyWay journey
+              </span>
             </div>
           </form>
         </CardContent>
