@@ -90,6 +90,7 @@ def create_progress() -> Progress:
 # 默认题库类型（可通过命令行参数覆盖）
 DEFAULT_QUESTION_BANK = "questionbank"
 LEGACY_QUESTION_BANK_FOR_QUESTIONS = 0
+TAG_SKIP_NAMES = {"chapter", "mark"}
 
 
 # === Error Reporting System ===
@@ -810,6 +811,7 @@ def build_output_item(
     subject_name: str | None = None,
 ) -> tuple[Optional[dict[str, Any]], list[str]]:
     properties = obj.get("properties", {}) or {}
+    tag_values = extract_tag_values_from_properties(properties)
     raw_chapter_name = properties.get("chapter")
 
     # 解析 chapter@sub-chapter 格式
@@ -911,6 +913,7 @@ def build_output_item(
         "calculator": bool(obj.get("calculator", True)),
         "questionImages": question_images or [],  # 确保是列表
         "answerImages": answer_images or [],  # 确保是列表
+        "tagValues": tag_values,
         "meta": {
             "year": properties.get("year"),
             "paper": properties.get("paper"),
@@ -1191,6 +1194,456 @@ def insert_images(supabase, table: str, rows: list[dict[str, Any]]):
     supabase.table(table).insert(rows).execute()
 
 
+def apply_in_filter(query, column: str, values: list[Any]):
+    in_method = getattr(query, "in_", None)
+    if callable(in_method):
+        return in_method(column, values)
+    in_method = getattr(query, "in", None)
+    if callable(in_method):
+        return in_method(column, values)
+    filter_method = getattr(query, "filter", None)
+    if callable(filter_method):
+        return filter_method(column, "in", values)
+    raise AttributeError("Supabase query object does not support in_/in filters.")
+
+
+def normalize_tag_name(value: str) -> str:
+    return re.sub(r"[\s_-]+", "", value.strip().lower())
+
+
+def normalize_tag_value(value: Any) -> str:
+    return str(value).strip().lower()
+
+
+def dedupe_keep_order(values: Iterable[Any]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        normalized = normalize_tag_value(value)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(str(value).strip())
+    return result
+
+
+def extract_tag_values_from_properties(properties: dict[str, Any]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for key, raw_value in properties.items():
+        if raw_value is None or raw_value == "":
+            continue
+        normalized_key = normalize_tag_name(str(key))
+        if normalized_key in TAG_SKIP_NAMES:
+            continue
+        result[normalized_key] = str(raw_value).strip()
+    return result
+
+
+def group_tags_by_subject(
+    tags: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for tag in tags:
+        subject_id = tag.get("subject")
+        if not subject_id:
+            continue
+        grouped[str(subject_id)].append(tag)
+    return dict(grouped)
+
+
+def build_subject_tag_definitions(
+    subject_tags: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    tag_defs: dict[str, dict[str, Any]] = {}
+    for tag in subject_tags:
+        name = tag.get("name")
+        tag_type = tag.get("type")
+        if not name or tag_type == "integer":
+            continue
+        normalized_name = normalize_tag_name(str(name))
+        if normalized_name in TAG_SKIP_NAMES:
+            continue
+        options = tag.get("options") or []
+        values = flatten_options(options)
+        if not values:
+            continue
+        entry = tag_defs.setdefault(
+            normalized_name, {"name": str(name), "values": []}
+        )
+        entry["values"].extend(values)
+
+    for entry in tag_defs.values():
+        entry["values"] = dedupe_keep_order(entry["values"])
+
+    return list(tag_defs.values())
+
+
+def merge_tag_definitions(
+    tag_defs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    merged: dict[str, dict[str, Any]] = {}
+    for tag_def in tag_defs:
+        name = tag_def.get("name")
+        if not name:
+            continue
+        normalized_name = normalize_tag_name(str(name))
+        entry = merged.setdefault(
+            normalized_name, {"name": str(name), "values": []}
+        )
+        entry["values"].extend(tag_def.get("values") or [])
+    for entry in merged.values():
+        entry["values"] = dedupe_keep_order(entry["values"])
+    return list(merged.values())
+
+
+def load_subject_question_tags(
+    supabase,
+    subject_ids: list[int],
+) -> dict[int, dict[str, dict[str, Any]]]:
+    if not subject_ids:
+        return {}
+    query = (
+        supabase.table("subject_question_tags")
+        .select(
+            "id, subject_id, name, required, values:subject_question_tag_values(id, value)"
+        )
+    )
+    query = apply_in_filter(query, "subject_id", subject_ids)
+    resp = query.execute()
+    rows = getattr(resp, "data", [])
+    if not isinstance(rows, list):
+        rows = []
+
+    tag_lookup: dict[int, dict[str, dict[str, Any]]] = defaultdict(dict)
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        subject_id = row.get("subject_id")
+        name = row.get("name")
+        if subject_id is None or not name:
+            continue
+        normalized_name = normalize_tag_name(str(name))
+        values_map: dict[str, int] = {}
+        for value_row in row.get("values") or []:
+            if not isinstance(value_row, dict):
+                continue
+            value_id = value_row.get("id")
+            value_value = value_row.get("value")
+            if value_id is None or value_value is None:
+                continue
+            values_map[normalize_tag_value(value_value)] = int(value_id)
+
+        tag_lookup[int(subject_id)][normalized_name] = {
+            "id": int(row.get("id")),
+            "name": str(name),
+            "required": bool(row.get("required", False)),
+            "values": values_map,
+        }
+    return dict(tag_lookup)
+
+
+def build_tag_definitions_by_db_subject(
+    subject_configs: list[dict[str, Any]],
+    subject_db_mappings: dict[str, int],
+) -> dict[int, list[dict[str, Any]]]:
+    tag_defs_by_subject: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for config in subject_configs:
+        legacy_subject_id = config.get("subject_id")
+        if not legacy_subject_id:
+            continue
+        db_subject_id = subject_db_mappings.get(str(legacy_subject_id))
+        if not db_subject_id:
+            if config.get("tag_definitions"):
+                logger.warning(
+                    "无法为 subject 创建标签，缺少数据库映射: %s",
+                    config.get("subject_name") or legacy_subject_id,
+                )
+            continue
+        tag_defs = config.get("tag_definitions") or []
+        if tag_defs:
+            tag_defs_by_subject[int(db_subject_id)].extend(tag_defs)
+
+    return {
+        subject_id: merge_tag_definitions(tag_defs)
+        for subject_id, tag_defs in tag_defs_by_subject.items()
+    }
+
+
+def resolve_subject_db_mappings(
+    supabase,
+    subject_configs: list[dict[str, Any]],
+    subject_db_mappings: dict[str, int],
+    question_bank_type: str,
+) -> dict[str, int]:
+    unresolved = [
+        config
+        for config in subject_configs
+        if str(config.get("subject_id")) not in subject_db_mappings
+    ]
+    if not unresolved:
+        return subject_db_mappings
+
+    question_bank_value = resolve_question_bank_value(
+        supabase,
+        question_bank_type,
+        LEGACY_QUESTION_BANK_FOR_QUESTIONS,
+    )
+
+    exam_names = sorted(
+        {config.get("exam_name") for config in unresolved if config.get("exam_name")}
+    )
+    if not exam_names:
+        return subject_db_mappings
+
+    exam_query = (
+        supabase.table("exam_boards")
+        .select("id, name")
+        .eq("question_bank", question_bank_value)
+    )
+    exam_query = apply_in_filter(exam_query, "name", exam_names)
+    exam_resp = exam_query.execute()
+    exam_rows = getattr(exam_resp, "data", [])
+    if not isinstance(exam_rows, list):
+        exam_rows = []
+
+    exam_id_by_name: dict[str, int] = {}
+    for row in exam_rows:
+        if not isinstance(row, dict):
+            continue
+        exam_name = row.get("name")
+        exam_id = row.get("id")
+        if exam_name and exam_id is not None:
+            exam_id_by_name[str(exam_name)] = int(exam_id)
+
+    if not exam_id_by_name:
+        logger.warning("未找到匹配的 exam_boards，无法补全 subject 映射。")
+        return subject_db_mappings
+
+    exam_ids = list(exam_id_by_name.values())
+    subject_query = supabase.table("subjects").select("id, name, exam_board_id")
+    subject_query = apply_in_filter(subject_query, "exam_board_id", exam_ids)
+    subject_resp = subject_query.execute()
+    subject_rows = getattr(subject_resp, "data", [])
+    if not isinstance(subject_rows, list):
+        subject_rows = []
+
+    subject_map: dict[tuple[int, str], int] = {}
+    for row in subject_rows:
+        if not isinstance(row, dict):
+            continue
+        subject_id = row.get("id")
+        subject_name = row.get("name")
+        exam_board_id = row.get("exam_board_id")
+        if subject_id is None or subject_name is None or exam_board_id is None:
+            continue
+        subject_map[(int(exam_board_id), str(subject_name))] = int(subject_id)
+
+    for config in unresolved:
+        legacy_subject_id = str(config.get("subject_id"))
+        exam_name = config.get("exam_name")
+        subject_name = config.get("subject_name")
+        if not exam_name or not subject_name:
+            continue
+        exam_id = exam_id_by_name.get(str(exam_name))
+        if not exam_id:
+            logger.warning("未找到 exam_board: %s", exam_name)
+            continue
+        db_subject_id = subject_map.get((exam_id, str(subject_name)))
+        if not db_subject_id:
+            logger.warning(
+                "未找到 subject: %s (exam=%s)", subject_name, exam_name
+            )
+            continue
+        subject_db_mappings[legacy_subject_id] = db_subject_id
+
+    return subject_db_mappings
+
+
+def ensure_subject_question_tags(
+    supabase,
+    subject_tag_definitions: dict[int, list[dict[str, Any]]],
+):
+    if not subject_tag_definitions:
+        return
+
+    subject_ids = sorted(subject_tag_definitions.keys())
+    tag_query = supabase.table("subject_question_tags").select("id, subject_id, name")
+    tag_query = apply_in_filter(tag_query, "subject_id", subject_ids)
+    tag_resp = tag_query.execute()
+    tag_rows = getattr(tag_resp, "data", [])
+    if not isinstance(tag_rows, list):
+        tag_rows = []
+
+    existing_tags: dict[int, dict[str, int]] = defaultdict(dict)
+    for row in tag_rows:
+        if not isinstance(row, dict):
+            continue
+        subject_id = row.get("subject_id")
+        name = row.get("name")
+        tag_id = row.get("id")
+        if subject_id is None or name is None or tag_id is None:
+            continue
+        normalized_name = normalize_tag_name(str(name))
+        existing_tags[int(subject_id)][normalized_name] = int(tag_id)
+
+    tags_to_insert: list[dict[str, Any]] = []
+    for subject_id, tag_defs in subject_tag_definitions.items():
+        merged_defs = merge_tag_definitions(tag_defs)
+        for position, tag_def in enumerate(merged_defs):
+            name = tag_def.get("name")
+            if not name:
+                continue
+            normalized_name = normalize_tag_name(str(name))
+            if normalized_name in TAG_SKIP_NAMES:
+                continue
+            if normalized_name in existing_tags.get(subject_id, {}):
+                continue
+            tags_to_insert.append(
+                {
+                    "subject_id": subject_id,
+                    "name": str(name),
+                    "required": False,
+                    "position": position,
+                }
+            )
+
+    if tags_to_insert:
+        supabase.table("subject_question_tags").insert(tags_to_insert).execute()
+
+    tag_query = supabase.table("subject_question_tags").select("id, subject_id, name")
+    tag_query = apply_in_filter(tag_query, "subject_id", subject_ids)
+    tag_resp = tag_query.execute()
+    tag_rows = getattr(tag_resp, "data", [])
+    if not isinstance(tag_rows, list):
+        tag_rows = []
+
+    tag_id_by_subject: dict[int, dict[str, int]] = defaultdict(dict)
+    for row in tag_rows:
+        if not isinstance(row, dict):
+            continue
+        subject_id = row.get("subject_id")
+        name = row.get("name")
+        tag_id = row.get("id")
+        if subject_id is None or name is None or tag_id is None:
+            continue
+        normalized_name = normalize_tag_name(str(name))
+        tag_id_by_subject[int(subject_id)][normalized_name] = int(tag_id)
+
+    tag_ids = sorted(
+        {tag_id for tags in tag_id_by_subject.values() for tag_id in tags.values()}
+    )
+    existing_values: dict[int, set[str]] = defaultdict(set)
+    if tag_ids:
+        value_query = (
+            supabase.table("subject_question_tag_values")
+            .select("tag_id, value")
+        )
+        value_query = apply_in_filter(value_query, "tag_id", tag_ids)
+        value_resp = value_query.execute()
+        value_rows = getattr(value_resp, "data", [])
+        if not isinstance(value_rows, list):
+            value_rows = []
+        for row in value_rows:
+            if not isinstance(row, dict):
+                continue
+            tag_id = row.get("tag_id")
+            value = row.get("value")
+            if tag_id is None or value is None:
+                continue
+            existing_values[int(tag_id)].add(normalize_tag_value(value))
+
+    values_to_insert: list[dict[str, Any]] = []
+    for subject_id, tag_defs in subject_tag_definitions.items():
+        merged_defs = merge_tag_definitions(tag_defs)
+        for tag_def in merged_defs:
+            name = tag_def.get("name")
+            if not name:
+                continue
+            normalized_name = normalize_tag_name(str(name))
+            tag_id = tag_id_by_subject.get(subject_id, {}).get(normalized_name)
+            if not tag_id:
+                continue
+            values = dedupe_keep_order(tag_def.get("values") or [])
+            for position, value in enumerate(values):
+                normalized_value = normalize_tag_value(value)
+                if normalized_value in existing_values.get(tag_id, set()):
+                    continue
+                values_to_insert.append(
+                    {
+                        "tag_id": tag_id,
+                        "value": str(value),
+                        "position": position,
+                    }
+                )
+
+    if values_to_insert:
+        supabase.table("subject_question_tag_values").insert(values_to_insert).execute()
+
+
+def resolve_subject_ids_for_item(
+    item: dict[str, Any],
+    chapter_subject_map: dict[int, int],
+) -> list[int]:
+    chapter_ids = item.get("chapterIds") or []
+    subject_ids = {
+        chapter_subject_map.get(chapter_id)
+        for chapter_id in chapter_ids
+        if chapter_id in chapter_subject_map
+    }
+    meta_subject_id = (item.get("meta") or {}).get("db_subject_id")
+    if meta_subject_id is not None:
+        try:
+            subject_ids.add(int(meta_subject_id))
+        except (TypeError, ValueError):
+            pass
+    return sorted(sid for sid in subject_ids if sid is not None)
+
+
+def build_tags_payload_for_item(
+    item: dict[str, Any],
+    subject_ids: list[int],
+    subject_tag_lookup: dict[int, dict[str, dict[str, Any]]],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    tag_values = item.get("tagValues") or {}
+    errors: list[str] = []
+    payload: list[dict[str, Any]] = []
+
+    if not subject_ids:
+        if tag_values:
+            errors.append("Unable to resolve subject IDs for tag assignment")
+        return payload, errors
+
+    for subject_id in subject_ids:
+        tag_defs = subject_tag_lookup.get(subject_id)
+        if not tag_defs:
+            continue
+
+        tag_value_ids: list[int] = []
+        for normalized_name, tag_def in tag_defs.items():
+            raw_value = tag_values.get(normalized_name)
+            if raw_value is None or raw_value == "":
+                if tag_def["required"]:
+                    errors.append(
+                        f"Missing required tag '{tag_def['name']}' for subject {subject_id}"
+                    )
+                continue
+
+            value_id = tag_def["values"].get(normalize_tag_value(raw_value))
+            if value_id is None:
+                errors.append(
+                    f"Tag value '{raw_value}' not found for tag '{tag_def['name']}' (subject {subject_id})"
+                )
+                continue
+            tag_value_ids.append(value_id)
+
+        if tag_value_ids:
+            payload.append(
+                {"subject_id": subject_id, "tag_value_ids": tag_value_ids}
+            )
+
+    return payload, errors
+
+
 def upload_items(
     supabase,
     items: list[dict[str, Any]],
@@ -1206,6 +1659,48 @@ def upload_items(
     failed = 0
     # 使用线程锁保护计数器
     lock = threading.Lock()
+
+    chapter_subject_map: dict[int, int] = {}
+    subject_tag_lookup: dict[int, dict[str, dict[str, Any]]] = {}
+
+    if items:
+        all_chapter_ids = sorted(
+            {
+                chapter_id
+                for item in items
+                for chapter_id in (item.get("chapterIds") or [])
+                if chapter_id is not None
+            }
+        )
+        if all_chapter_ids:
+            chapter_query = supabase.table("chapters").select("id, subject_id")
+            chapter_query = apply_in_filter(chapter_query, "id", all_chapter_ids)
+            chapter_resp = chapter_query.execute()
+            chapter_rows = getattr(chapter_resp, "data", [])
+            if not isinstance(chapter_rows, list):
+                chapter_rows = []
+            for row in chapter_rows:
+                if not isinstance(row, dict):
+                    continue
+                chapter_id = row.get("id")
+                subject_id = row.get("subject_id")
+                if chapter_id is None or subject_id is None:
+                    continue
+                chapter_subject_map[int(chapter_id)] = int(subject_id)
+
+        all_subject_ids: set[int] = set(chapter_subject_map.values())
+        for item in items:
+            meta_subject_id = (item.get("meta") or {}).get("db_subject_id")
+            if meta_subject_id is None:
+                continue
+            try:
+                all_subject_ids.add(int(meta_subject_id))
+            except (TypeError, ValueError):
+                continue
+
+        subject_tag_lookup = load_subject_question_tags(
+            supabase, sorted(all_subject_ids)
+        )
 
     def upload_single_item(item_idx: int, item: dict[str, Any]) -> bool:
         """Upload a single item. Returns True if successful."""
@@ -1239,15 +1734,43 @@ def upload_items(
         q_imgs = item.get("questionImages") or []
         a_imgs = item.get("answerImages") or []
 
+        subject_ids = resolve_subject_ids_for_item(item, chapter_subject_map)
+        tags_payload, tag_errors = build_tags_payload_for_item(
+            item, subject_ids, subject_tag_lookup
+        )
+        if tag_errors:
+            error_msg = "; ".join(tag_errors)
+            if error_report:
+                error_report.add_error(
+                    ConversionError(
+                        source_id=item.get("meta", {}).get(
+                            "sourceId", f"item_{item_idx}"
+                        ),
+                        error_type=ErrorType.VALIDATION_ERROR,
+                        message=error_msg,
+                        context={
+                            "item_index": item_idx,
+                            "subject_ids": subject_ids,
+                            "chapter_ids": chapter_ids,
+                            "tag_errors": tag_errors,
+                        },
+                    )
+                )
+                with lock:
+                    failed += 1
+                return False
+            raise ValueError(error_msg)
+
         try:
             # 使用 RPC 函数创建题目并关联章节（原子性操作）
             q_resp = supabase.rpc(
-                "create_question_with_chapters",
+                "create_question_with_chapters_and_tags",
                 {
                     "p_marks": marks,
                     "p_difficulty": difficulty,
                     "p_calculator": calculator,
                     "p_chapter_ids": chapter_ids,
+                    "p_tags": tags_payload,
                 },
             ).execute()
 
@@ -1606,6 +2129,7 @@ def main():
     exams = load_ndjson(exams_path)
     subjects = load_ndjson(subjects_path)
     tags = load_ndjson(tags_path)
+    tags_by_subject = group_tags_by_subject(tags)
     chapter_map = load_chapter_map(args.chapter_map)
 
     stats = summarize_questions(questions_path)
@@ -1675,9 +2199,8 @@ def main():
         tag_chapters: list[str] = []
         tag_years: list[str] = []
         chapter_hierarchy: dict[str, list[str]] = {}  # parent -> [children]
-        for tag in tags:
-            if tag.get("subject") != subject_id:
-                continue
+        subject_tags = tags_by_subject.get(subject_id, [])
+        for tag in subject_tags:
             if tag.get("name") == "chapter":
                 opts = tag.get("options") or []
                 tag_chapters = flatten_options(opts)
@@ -1685,6 +2208,8 @@ def main():
             if tag.get("name") == "year":
                 opts = tag.get("options") or []
                 tag_years = flatten_options(opts)
+
+        tag_definitions = build_subject_tag_definitions(subject_tags)
 
         subject_configs.append(
             {
@@ -1694,6 +2219,7 @@ def main():
                 "tag_chapters": tag_chapters,
                 "tag_years": tag_years,
                 "chapter_hierarchy": chapter_hierarchy,  # 新增：章节层级关系
+                "tag_definitions": tag_definitions,
                 "total_questions": chosen["total"],
                 "chapters": chosen["chapters"],
                 "years": chosen["years"],
@@ -2118,6 +2644,14 @@ def main():
             f"数据库同步完成: {len(subject_db_mappings)}/{len(subject_configs)} 个subject同步成功"
         )
 
+    if supabase_client is not None:
+        subject_db_mappings = resolve_subject_db_mappings(
+            supabase_client,
+            subject_configs,
+            subject_db_mappings,
+            question_bank_type,
+        )
+
     # 转换所有选中的subject
     logger.info("\n开始转换题目（仅保留图片齐全的题目）...")
     all_converted = []
@@ -2178,6 +2712,13 @@ def main():
                 "Error: Upload requires Supabase configuration, please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY."
             )
             return
+
+        tag_definitions_by_subject = build_tag_definitions_by_db_subject(
+            subject_configs, subject_db_mappings
+        )
+        if tag_definitions_by_subject:
+            logger.info("开始同步题目标签定义与选项...")
+            ensure_subject_question_tags(supabase_client, tag_definitions_by_subject)
 
         # 检查是否有缺少 chapterIds 的题目
         missing_chapter_items = [
