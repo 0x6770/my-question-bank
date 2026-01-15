@@ -158,20 +158,21 @@ const pdfStyles = StyleSheet.create({
   image: {
     width: "100%",
   },
-  imageWatermark: {
+  pageWatermark: {
     position: "absolute",
-    top: "25%",
-    left: "20%",
-    width: "60%",
-    opacity: 0.08,
-  },
-  imageWatermarkText: {
-    position: "absolute",
-    top: "45%",
+    top: 0,
     left: 0,
     right: 0,
-    textAlign: "center",
-    fontSize: 40,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  pageWatermarkImage: {
+    width: "50%",
+    opacity: 0.06,
+  },
+  pageWatermarkText: {
+    fontSize: 48,
     color: "#111827",
     opacity: 0.06,
   },
@@ -227,22 +228,19 @@ function PdfFooter() {
   );
 }
 
-function PdfWatermarkedImage({
-  src,
+function PdfPageWatermark({
   watermarkSrc,
   watermarkText = "MyQuestionBank",
 }: {
-  src: string;
   watermarkSrc: string | null;
   watermarkText?: string;
 }) {
   return (
-    <View style={pdfStyles.imageWrapper}>
-      <PdfImage style={pdfStyles.image} src={src} />
+    <View style={pdfStyles.pageWatermark} fixed>
       {watermarkSrc ? (
-        <PdfImage style={pdfStyles.imageWatermark} src={watermarkSrc} />
+        <PdfImage style={pdfStyles.pageWatermarkImage} src={watermarkSrc} />
       ) : (
-        <Text style={pdfStyles.imageWatermarkText}>{watermarkText}</Text>
+        <Text style={pdfStyles.pageWatermarkText}>{watermarkText}</Text>
       )}
     </View>
   );
@@ -278,6 +276,7 @@ function PaperPdfDocument({
           <Text style={pdfStyles.coverMeta}>Created: {formattedDate}</Text>
           <View style={pdfStyles.sectionDivider} />
         </View>
+        <PdfPageWatermark watermarkSrc={watermarkSrc} />
       </Page>
       <Page size="A4" style={pdfStyles.page} wrap>
         <PdfHeader />
@@ -296,35 +295,38 @@ function PaperPdfDocument({
               ) : null}
             </View>
             {question.images.map((image) => (
-              <PdfWatermarkedImage
-                key={image.id}
-                src={
-                  imageData[image.storage_path] ??
-                  image.signedUrl ??
-                  image.storage_path
-                }
-                watermarkSrc={watermarkSrc}
-              />
+              <View key={image.id} style={pdfStyles.imageWrapper}>
+                <PdfImage
+                  style={pdfStyles.image}
+                  src={
+                    imageData[image.storage_path] ??
+                    image.signedUrl ??
+                    image.storage_path
+                  }
+                />
+              </View>
             ))}
             {paper.show_answers && question.answerImages.length > 0 ? (
               <View style={pdfStyles.answerSection}>
                 <Text style={pdfStyles.answerTitle}>Answer:</Text>
                 {question.answerImages.map((image) => (
-                  <PdfWatermarkedImage
-                    key={image.id}
-                    src={
-                      imageData[image.storage_path] ??
-                      image.signedUrl ??
-                      image.storage_path
-                    }
-                    watermarkSrc={watermarkSrc}
-                  />
+                  <View key={image.id} style={pdfStyles.imageWrapper}>
+                    <PdfImage
+                      style={pdfStyles.image}
+                      src={
+                        imageData[image.storage_path] ??
+                        image.signedUrl ??
+                        image.storage_path
+                      }
+                    />
+                  </View>
                 ))}
               </View>
             ) : null}
           </View>
         ))}
         <Text style={pdfStyles.endOfPaper}>End of Paper</Text>
+        <PdfPageWatermark watermarkSrc={watermarkSrc} />
       </Page>
     </Document>
   );
