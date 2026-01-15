@@ -1,7 +1,7 @@
 /* eslint-disable react/jsx-no-useless-fragment */
 "use client";
 
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { QuestionCard } from "@/components/question-card";
 import { Button } from "@/components/ui/button";
@@ -90,6 +90,9 @@ const difficultyOptions = [
   { value: 4, label: "Challenge" },
 ];
 
+const capitalize = (str: string) =>
+  str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+
 export function QuestionBrowser({
   examBoards,
   subjects,
@@ -130,6 +133,7 @@ export function QuestionBrowser({
   const [statusFilter, setStatusFilter] = useState<
     "all" | "completed" | "incompleted" | "bookmarked"
   >("all");
+  const [tagsExpanded, setTagsExpanded] = useState(false);
   const hierarchyRef = useRef<HTMLDivElement>(null);
 
   const toggleDifficulty = (value: number) => {
@@ -642,60 +646,85 @@ export function QuestionBrowser({
             </div>
           </div>
 
-          {/* Row 3: Tags */}
+          {/* Row 3: Tags (Collapsible) */}
           {customTags.length > 0 && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {customTags.map((tag) => {
-                const selectId = `tag-filter-${tag.id}`;
-                return (
-                  <div key={tag.id} className="space-y-2">
-                    <label
-                      htmlFor={selectId}
-                      className="text-sm font-semibold text-slate-700"
-                    >
-                      {tag.name}
-                      {tag.required && (
-                        <span className="ml-1 text-red-500">*</span>
-                      )}
-                    </label>
-                    <Select
-                      value={
-                        tagFilters[tag.name]
-                          ? String(tagFilters[tag.name])
-                          : "all"
-                      }
-                      onValueChange={(value) => {
-                        const valueId =
-                          value === "all" ? null : parseInt(value, 10);
-                        setTagFilters((prev) => ({
-                          ...prev,
-                          [tag.name]: valueId,
-                        }));
-                        setPage(1);
-                      }}
-                    >
-                      <SelectTrigger
-                        id={selectId}
-                        className="h-11 w-full rounded-xl border-slate-200 shadow-sm"
-                      >
-                        <SelectValue placeholder={`All ${tag.name}`} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All {tag.name}</SelectItem>
-                        {tag.values
-                          ?.sort(
-                            (a, b) => (a.position || 0) - (b.position || 0),
-                          )
-                          .map((val) => (
-                            <SelectItem key={val.id} value={String(val.id)}>
-                              {val.value}
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => setTagsExpanded((prev) => !prev)}
+                className="flex items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-slate-900"
+              >
+                {tagsExpanded ? (
+                  <ChevronDown className="size-4" />
+                ) : (
+                  <ChevronRight className="size-4" />
+                )}
+                <span>More Filters</span>
+                {Object.values(tagFilters).some((v) => v !== null) && (
+                  <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700">
+                    Active
+                  </span>
+                )}
+              </button>
+              {tagsExpanded && (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {customTags.map((tag) => {
+                    const selectId = `tag-filter-${tag.id}`;
+                    return (
+                      <div key={tag.id} className="space-y-2">
+                        <label
+                          htmlFor={selectId}
+                          className="text-sm font-semibold text-slate-700"
+                        >
+                          {capitalize(tag.name)}
+                          {tag.required && (
+                            <span className="ml-1 text-red-500">*</span>
+                          )}
+                        </label>
+                        <Select
+                          value={
+                            tagFilters[tag.name]
+                              ? String(tagFilters[tag.name])
+                              : "all"
+                          }
+                          onValueChange={(value) => {
+                            const valueId =
+                              value === "all" ? null : parseInt(value, 10);
+                            setTagFilters((prev) => ({
+                              ...prev,
+                              [tag.name]: valueId,
+                            }));
+                            setPage(1);
+                          }}
+                        >
+                          <SelectTrigger
+                            id={selectId}
+                            className="h-11 w-full rounded-xl border-slate-200 shadow-sm"
+                          >
+                            <SelectValue
+                              placeholder={`All ${capitalize(tag.name)}`}
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">
+                              All {capitalize(tag.name)}
                             </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                );
-              })}
+                            {tag.values
+                              ?.sort(
+                                (a, b) => (a.position || 0) - (b.position || 0),
+                              )
+                              .map((val) => (
+                                <SelectItem key={val.id} value={String(val.id)}>
+                                  {val.value}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
