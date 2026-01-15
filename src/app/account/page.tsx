@@ -78,7 +78,6 @@ export default async function AccountPage() {
         id,
         marks,
         difficulty,
-        calculator,
         created_at,
         question_images ( id, storage_path, position ),
         answer_images ( id, storage_path, position )
@@ -191,7 +190,7 @@ export default async function AccountPage() {
 
       questions = data.map((row) => {
         const chapter = questionChapterMap.get(row.id) ?? null;
-        // Get subject-specific calculator, fall back to question's global value
+        // Get subject-specific calculator from question_subjects
         const subjectCalcMap = questionSubjectCalcMap.get(row.id);
         const subjectSpecificCalc =
           chapter?.subjectId && subjectCalcMap
@@ -201,7 +200,7 @@ export default async function AccountPage() {
           id: row.id,
           marks: row.marks ?? 0,
           difficulty: row.difficulty ?? 1,
-          calculator: subjectSpecificCalc ?? row.calculator ?? false,
+          calculator: subjectSpecificCalc ?? false,
           createdAt: row.created_at,
           bookmarkedAt: bookmarkedAtMap.get(row.id) ?? null,
           chapterId: chapter?.id ?? null,
