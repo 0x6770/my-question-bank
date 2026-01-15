@@ -97,6 +97,10 @@ export function AppNavbarClient({
     [],
   );
 
+  if (pathname?.startsWith("/auth")) {
+    return null;
+  }
+
   return (
     <>
       <header className="sticky top-0 z-50 border-b bg-background px-4 sm:px-6 lg:px-8 print:hidden">
