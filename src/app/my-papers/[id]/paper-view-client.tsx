@@ -133,20 +133,23 @@ const pdfStyles = StyleSheet.create({
   questionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "baseline",
     marginBottom: 6,
   },
   questionTitle: {
     fontSize: 12,
     fontWeight: 600,
   },
+  questionMeta: {
+    fontSize: 11,
+    fontWeight: 400,
+  },
   calculatorTag: {
     fontSize: 10,
-    color: "#6b7280",
-  },
-  marks: {
-    fontSize: 10,
-    color: "#4b5563",
+    fontWeight: 600,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    color: "#111827",
   },
   imageWrapper: {
     position: "relative",
@@ -282,13 +285,15 @@ function PaperPdfDocument({
         {paper.questions.map((question, index) => (
           <View key={question.id} style={pdfStyles.questionBlock}>
             <View style={pdfStyles.questionHeader}>
-              <Text style={pdfStyles.questionTitle}>Question {index + 1}</Text>
+              <Text style={pdfStyles.questionTitle}>
+                {index + 1}.{" "}
+                <Text style={pdfStyles.questionMeta}>
+                  [Maximum mark: {question.marks}]
+                </Text>
+              </Text>
               {!question.calculator ? (
                 <Text style={pdfStyles.calculatorTag}>[No calculator]</Text>
               ) : null}
-              <Text style={pdfStyles.marks}>
-                [{question.marks} mark{question.marks !== 1 ? "s" : ""}]
-              </Text>
             </View>
             {question.images.map((image) => (
               <PdfWatermarkedImage
@@ -604,17 +609,19 @@ export function PaperViewClient({ paper }: PaperViewClientProps) {
               {/* Question Header */}
               <div className="mb-4">
                 <div className="mb-2 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-baseline gap-2">
-                  <h2 className="text-lg font-semibold col-start-1">
-                    Question {index + 1}
-                  </h2>
+                  <span>
+                    <h2 className="text-lg font-semibold col-start-1 -ml-5">
+                      {index + 1}.{" "}
+                      <span className="font-normal">
+                        [Maximum mark: {question.marks}]
+                      </span>
+                    </h2>
+                  </span>
                   {!question.calculator ? (
-                    <span className="col-start-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <span className="col-start-3 font-bold uppercase tracking-wide justify-self-end">
                       [No calculator]
                     </span>
                   ) : null}
-                  <span className="col-start-3 justify-self-end text-sm text-gray-600">
-                    [{question.marks} mark{question.marks !== 1 ? "s" : ""}]
-                  </span>
                 </div>
               </div>
 
