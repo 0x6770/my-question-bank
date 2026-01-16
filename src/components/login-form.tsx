@@ -57,7 +57,7 @@ export function LoginForm({
                   className="text-sm font-semibold text-slate-600"
                   htmlFor="email"
                 >
-                  Email
+                  Account
                 </Label>
                 <div className="relative">
                   <Mail className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-slate-400" />
@@ -96,7 +96,7 @@ export function LoginForm({
               >
                 {isLoading ? "Logging in..." : "Login"}
               </Button>
-              <span className="justify-center text-center text-sm text-slate-500">
+              <span className="justify-center text-center text-sm font-bold text-slate-500">
                 Start your MyWay journey
               </span>
             </div>
