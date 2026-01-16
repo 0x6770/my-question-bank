@@ -54,9 +54,6 @@ export function LoginForm({
           <CardTitle className="text-3xl font-semibold tracking-tight text-slate-800">
             Login
           </CardTitle>
-          <CardDescription className="text-base text-slate-500">
-            Start your MyWay journey
-          </CardDescription>
         </CardHeader>
         <CardContent className="px-8 pb-8 pt-2">
           <form onSubmit={handleLogin}>
