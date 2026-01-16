@@ -19,6 +19,7 @@ export async function POST(request: Request) {
     title?: string;
     question_bank: string;
     show_answers?: boolean;
+    one_question_per_page?: boolean;
     question_ids: number[];
   };
 
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
     title = "Worksheet",
     question_bank,
     show_answers = false,
+    one_question_per_page = false,
     question_ids,
   } = body;
 
@@ -115,6 +117,7 @@ export async function POST(request: Request) {
       title,
       question_bank,
       show_answers,
+      one_question_per_page,
     })
     .select("id")
     .single();

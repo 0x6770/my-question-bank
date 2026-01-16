@@ -7,6 +7,7 @@ type Paper = {
   title: string;
   question_bank: string;
   show_answers: boolean;
+  one_question_per_page: boolean | null;
   created_at: string;
   updated_at: string;
   question_count: number;
@@ -43,7 +44,9 @@ export default async function PapersListPage() {
 
   const { data: papersData, error } = await supabase
     .from("generated_papers")
-    .select("id, title, question_bank, show_answers, created_at, updated_at")
+    .select(
+      "id, title, question_bank, show_answers, one_question_per_page, created_at, updated_at",
+    )
     .order("created_at", { ascending: false })
     .range(0, fetchLimit - 1);
 

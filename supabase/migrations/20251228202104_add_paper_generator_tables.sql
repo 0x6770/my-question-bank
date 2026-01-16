@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS generated_papers (
   title TEXT NOT NULL DEFAULT 'Worksheet',
   question_bank TEXT NOT NULL,
   show_answers BOOLEAN DEFAULT false,
+  one_question_per_page BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -178,6 +179,7 @@ COMMENT ON COLUMN generated_papers.user_id IS 'User who created the paper';
 COMMENT ON COLUMN generated_papers.title IS 'Paper title, default "Worksheet"';
 COMMENT ON COLUMN generated_papers.question_bank IS 'Question bank used: "past paper questions", "topical questions", or "exam paper"';
 COMMENT ON COLUMN generated_papers.show_answers IS 'Whether to show answers in PDF';
+COMMENT ON COLUMN generated_papers.one_question_per_page IS 'Whether to render one question per page in PDF';
 
 COMMENT ON TABLE generated_paper_questions IS 'Junction table linking generated papers to questions with ordering';
 COMMENT ON COLUMN generated_paper_questions.position IS 'Display order of question in paper (1-indexed)';

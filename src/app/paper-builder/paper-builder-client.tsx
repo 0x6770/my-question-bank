@@ -266,6 +266,7 @@ export function PaperBuilderClient({
   const [questions, setQuestions] = useState<PaperQuestion[]>([]);
   const [title, setTitle] = useState<string>("Worksheet");
   const [showAnswers, setShowAnswers] = useState<boolean>(false);
+  const [oneQuestionPerPage, setOneQuestionPerPage] = useState<boolean>(false);
   const [positionInputs, setPositionInputs] = useState<Record<number, string>>(
     {},
   );
@@ -707,6 +708,7 @@ export function PaperBuilderClient({
           title,
           question_bank: selectedQuestionBank,
           show_answers: showAnswers,
+          one_question_per_page: oneQuestionPerPage,
           question_ids: questions.map((q) => q.id),
         }),
       });
@@ -1092,21 +1094,40 @@ export function PaperBuilderClient({
                     />
                   </div>
 
-                  {/* Show Answers */}
-                  <div className="flex items-center">
-                    <input
-                      id="showAnswers"
-                      type="checkbox"
-                      checked={showAnswers}
-                      onChange={(e) => setShowAnswers(e.target.checked)}
-                      className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                    />
-                    <label
-                      htmlFor="showAnswers"
-                      className="ml-2 block text-sm text-gray-700"
-                    >
-                      Include answers in PDF
-                    </label>
+                  {/* PDF Options */}
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex items-center">
+                      <input
+                        id="showAnswers"
+                        type="checkbox"
+                        checked={showAnswers}
+                        onChange={(e) => setShowAnswers(e.target.checked)}
+                        className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <label
+                        htmlFor="showAnswers"
+                        className="ml-2 block text-sm text-gray-700"
+                      >
+                        Include answers in PDF
+                      </label>
+                    </div>
+                    <div className="flex items-center">
+                      <input
+                        id="oneQuestionPerPage"
+                        type="checkbox"
+                        checked={oneQuestionPerPage}
+                        onChange={(e) =>
+                          setOneQuestionPerPage(e.target.checked)
+                        }
+                        className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <label
+                        htmlFor="oneQuestionPerPage"
+                        className="ml-2 block text-sm text-gray-700"
+                      >
+                        One question per page
+                      </label>
+                    </div>
                   </div>
 
                   {/* Generate Paper Button */}

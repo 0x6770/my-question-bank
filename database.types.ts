@@ -291,6 +291,7 @@ export type Database = {
         Row: {
           created_at: string | null;
           id: number;
+          one_question_per_page: boolean | null;
           question_bank: string;
           show_answers: boolean | null;
           title: string;
@@ -300,6 +301,7 @@ export type Database = {
         Insert: {
           created_at?: string | null;
           id?: number;
+          one_question_per_page?: boolean | null;
           question_bank: string;
           show_answers?: boolean | null;
           title?: string;
@@ -309,6 +311,7 @@ export type Database = {
         Update: {
           created_at?: string | null;
           id?: number;
+          one_question_per_page?: boolean | null;
           question_bank?: string;
           show_answers?: boolean | null;
           title?: string;

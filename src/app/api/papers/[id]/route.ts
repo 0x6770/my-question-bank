@@ -28,7 +28,9 @@ export async function GET(
   // Step 1: Fetch paper record (RLS ensures user owns it)
   const { data: paper, error: paperError } = await supabase
     .from("generated_papers")
-    .select("id, title, question_bank, show_answers, created_at, updated_at")
+    .select(
+      "id, title, question_bank, show_answers, one_question_per_page, created_at, updated_at",
+    )
     .eq("id", paperId)
     .single();
 

@@ -29,6 +29,7 @@ type Paper = {
   title: string;
   question_bank: string;
   show_answers: boolean;
+  one_question_per_page: boolean | null;
   created_at: string;
   updated_at: string;
   questions: Question[];
@@ -93,7 +94,9 @@ export default async function PaperViewPage(props: PageProps) {
   // Fetch paper record directly from database (RLS ensures user owns it)
   const { data: paperData, error: paperError } = await supabase
     .from("generated_papers")
-    .select("id, title, question_bank, show_answers, created_at, updated_at")
+    .select(
+      "id, title, question_bank, show_answers, one_question_per_page, created_at, updated_at",
+    )
     .eq("id", paperId)
     .single();
 

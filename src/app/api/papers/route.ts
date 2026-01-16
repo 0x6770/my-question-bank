@@ -25,7 +25,9 @@ export async function GET(request: Request) {
   // Fetch user's papers (RLS automatically filters by user_id)
   const { data: papers, error } = await supabase
     .from("generated_papers")
-    .select("id, title, question_bank, show_answers, created_at, updated_at")
+    .select(
+      "id, title, question_bank, show_answers, one_question_per_page, created_at, updated_at",
+    )
     .order("created_at", { ascending: false })
     .range(offset, offset + fetchLimit - 1);
 

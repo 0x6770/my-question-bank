@@ -39,6 +39,7 @@ type Paper = {
   title: string;
   question_bank: string;
   show_answers: boolean;
+  one_question_per_page: boolean | null;
   created_at: string;
   updated_at: string;
   questions: Question[];
@@ -361,6 +362,7 @@ export function PaperViewClient({ paper }: PaperViewClientProps) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const pdfFileName = `paper-${paper.id}.pdf`;
+  const oneQuestionPerPage = paper.one_question_per_page ?? false;
   const [pdfImagesReady, setPdfImagesReady] = useState(false);
   const [pdfImages, setPdfImages] = useState<Record<string, string>>({});
   const [pdfImagesError, setPdfImagesError] = useState<string | null>(null);
@@ -370,7 +372,6 @@ export function PaperViewClient({ paper }: PaperViewClientProps) {
   const [pdfWatermarkError, setPdfWatermarkError] = useState<string | null>(
     null,
   );
-  const [oneQuestionPerPage, setOneQuestionPerPage] = useState(false);
 
   const pdfImageSources = useMemo(() => {
     const sources: PdfImageSource[] = [];
@@ -576,15 +577,6 @@ export function PaperViewClient({ paper }: PaperViewClientProps) {
               </button>
             </div>
             <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={oneQuestionPerPage}
-                  onChange={(e) => setOneQuestionPerPage(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                />
-                One question per page
-              </label>
               <div className="flex gap-3">
                 <button
                   type="button"
